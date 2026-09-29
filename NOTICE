@@ -1,0 +1,11 @@
+FeiFeiCMS 8.5 Beta 1
+Copyright 2026 FeiFeiCMS contributors
+
+This distribution contains a modernized implementation based on the public
+FeiFeiCMS project and retains the FeiFeiCMS 4.3.201206 source under legacy/
+for compatibility reference. Upstream project:
+https://github.com/daicuo/feifeicms
+
+The ThinkPHP framework and related dependencies retain their respective
+copyright notices and licenses. See LICENSE.txt and installed Composer
+package metadata for details.

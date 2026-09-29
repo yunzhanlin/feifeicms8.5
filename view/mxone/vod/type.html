@@ -1,0 +1,47 @@
+{assign name="pageTitle" value="$type.type_name" /}
+{assign name="pageActive" value="type" /}
+{include file="mxone/common/head" /}
+{include file="mxone/common/header" /}
+<main class="mx-wrap mx-main">
+    <section>
+        <div class="mx-title">
+            <h1>{$type.type_name}</h1>
+            <span>共 {$vodTotal} 部影片</span>
+        </div>
+        <div class="mx-filter">
+            <div>
+                <b>排序</b>
+                <a class="{if $filters.order=='addtime'}active{/if}" href="{:ff_url('type',$type.list_id)}?order=addtime&type={$filters.type|urlencode}&area={$filters.area|urlencode}&year={$filters.year|urlencode}">最新</a>
+                <a class="{if $filters.order=='hits'}active{/if}" href="{:ff_url('type',$type.list_id)}?order=hits&type={$filters.type|urlencode}&area={$filters.area|urlencode}&year={$filters.year|urlencode}">人气</a>
+                <a class="{if $filters.order=='gold'}active{/if}" href="{:ff_url('type',$type.list_id)}?order=gold&type={$filters.type|urlencode}&area={$filters.area|urlencode}&year={$filters.year|urlencode}">评分</a>
+            </div>
+            {notempty name="filterOptions.type"}
+            <div>
+                <b>类型</b>
+                <a class="{if $filters.type==''}active{/if}" href="{:ff_url('type',$type.list_id)}?order={$filters.order}&area={$filters.area|urlencode}&year={$filters.year|urlencode}">全部</a>
+                {volist name="filterOptions.type" id="opt"}<a class="{if $filters.type==$opt}active{/if}" href="{:ff_url('type',$type.list_id)}?order={$filters.order}&type={$opt|urlencode}&area={$filters.area|urlencode}&year={$filters.year|urlencode}">{$opt}</a>{/volist}
+            </div>
+            {/notempty}
+            {notempty name="filterOptions.area"}
+            <div>
+                <b>地区</b>
+                <a class="{if $filters.area==''}active{/if}" href="{:ff_url('type',$type.list_id)}?order={$filters.order}&type={$filters.type|urlencode}&year={$filters.year|urlencode}">全部</a>
+                {volist name="filterOptions.area" id="opt"}<a class="{if $filters.area==$opt}active{/if}" href="{:ff_url('type',$type.list_id)}?order={$filters.order}&type={$filters.type|urlencode}&area={$opt|urlencode}&year={$filters.year|urlencode}">{$opt}</a>{/volist}
+            </div>
+            {/notempty}
+            {notempty name="filterOptions.year"}
+            <div>
+                <b>年份</b>
+                <a class="{if $filters.year==''}active{/if}" href="{:ff_url('type',$type.list_id)}?order={$filters.order}&type={$filters.type|urlencode}&area={$filters.area|urlencode}">全部</a>
+                {volist name="filterOptions.year" id="opt"}<a class="{if $filters.year==$opt}active{/if}" href="{:ff_url('type',$type.list_id)}?order={$filters.order}&type={$filters.type|urlencode}&area={$filters.area|urlencode}&year={$opt|urlencode}">{$opt}</a>{/volist}
+            </div>
+            {/notempty}
+        </div>
+        <div class="mx-grid">
+            {volist name="vods" id="item"}{include file="mxone/module/vod_card" /}{/volist}
+        </div>
+        <div class="mx-pager">{$pager|raw}</div>
+    </section>
+</main>
+{assign name="footerText" value="MXOne · 分类" /}
+{include file="mxone/common/footer" /}

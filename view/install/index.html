@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>FeiFeiCMS {$version|htmlspecialchars|raw} 安装</title>
+    <link rel="stylesheet" href="/static/install.css?v=1">
+</head>
+<body>
+<main class="installer">
+    <header class="installer-header"><h1>FeiFeiCMS {$version|htmlspecialchars|raw}</h1><p>系统安装</p></header>
+    <nav class="steps" aria-label="安装步骤"><span class="active">1 环境检查</span><span class="active">2 参数配置</span><span>3 完成安装</span></nav>
+
+    {if $error !== ''}<div class="install-error" role="alert">{$error|htmlspecialchars|raw}</div>{/if}
+
+    <section class="install-panel">
+        <h2>环境检查</h2>
+        <table class="check-table"><thead><tr><th>检查项</th><th>当前值</th><th>状态</th></tr></thead><tbody>
+        {volist name="checks" id="check"}
+        <tr><td>{$check.label|htmlspecialchars|raw}</td><td>{$check.value|htmlspecialchars|raw}</td><td class="{if $check.ok}ok{else}fail{/if}">{if $check.ok}通过{else}未通过{/if}</td></tr>
+        {/volist}
+        </tbody></table>
+    </section>
+
+    <form method="post" action="/install.php" class="install-panel install-form" autocomplete="off">
+        <input type="hidden" name="_token" value="{$csrf|htmlspecialchars|raw}">
+        <h2>站点信息</h2>
+        <div class="form-row"><label for="site_name">站点名称</label><input id="site_name" name="site_name" value="{$values.site_name|htmlspecialchars|raw}" maxlength="100" required></div>
+        <div class="form-row"><label for="app_url">站点地址</label><input id="app_url" name="app_url" type="url" value="{$values.app_url|htmlspecialchars|raw}" placeholder="https://example.com"></div>
+
+        <h2>MySQL 8</h2>
+        <div class="form-grid">
+            <div class="form-row"><label for="db_host">主机</label><input id="db_host" name="db_host" value="{$values.db_host|htmlspecialchars|raw}" required></div>
+            <div class="form-row"><label for="db_port">端口</label><input id="db_port" name="db_port" inputmode="numeric" value="{$values.db_port|htmlspecialchars|raw}" required></div>
+            <div class="form-row"><label for="db_name">数据库名</label><input id="db_name" name="db_name" value="{$values.db_name|htmlspecialchars|raw}" required></div>
+            <div class="form-row"><label for="db_user">用户名</label><input id="db_user" name="db_user" value="{$values.db_user|htmlspecialchars|raw}" required></div>
+            <div class="form-row full"><label for="db_pass">密码</label><input id="db_pass" name="db_pass" type="password" value="" autocomplete="new-password"></div>
+        </div>
+
+        <h2>管理员</h2>
+        <div class="form-grid">
+            <div class="form-row"><label for="admin_username">用户名</label><input id="admin_username" name="admin_username" value="{$values.admin_username|htmlspecialchars|raw}" maxlength="80" required></div>
+            <div class="form-row"><label for="admin_email">邮箱</label><input id="admin_email" name="admin_email" type="email" value="{$values.admin_email|htmlspecialchars|raw}"></div>
+            <div class="form-row"><label for="admin_password">密码</label><input id="admin_password" name="admin_password" type="password" minlength="12" autocomplete="new-password" required><small>至少 12 位</small></div>
+            <div class="form-row"><label for="admin_password_confirm">确认密码</label><input id="admin_password_confirm" name="admin_password_confirm" type="password" minlength="12" autocomplete="new-password" required></div>
+        </div>
+
+        <h2>缓存与搜索</h2>
+        <div class="form-grid">
+            <div class="form-row"><label for="cache_driver">缓存驱动</label><select id="cache_driver" name="cache_driver"><option value="file" {if $values.cache_driver === 'file'}selected{/if}>文件</option><option value="redis" {if $values.cache_driver === 'redis'}selected{/if}>Redis</option></select></div>
+            <div class="form-row"><label for="search_driver">搜索驱动</label><select id="search_driver" name="search_driver"><option value="mysql" {if $values.search_driver === 'mysql'}selected{/if}>MySQL</option><option value="meilisearch" {if $values.search_driver === 'meilisearch'}selected{/if}>Meilisearch</option></select></div>
+            <div class="form-row"><label for="redis_host">Redis 主机</label><input id="redis_host" name="redis_host" value="{$values.redis_host|htmlspecialchars|raw}"></div>
+            <div class="form-row"><label for="redis_port">Redis 端口</label><input id="redis_port" name="redis_port" value="{$values.redis_port|htmlspecialchars|raw}" inputmode="numeric"></div>
+            <div class="form-row"><label for="redis_password">Redis 密码</label><input id="redis_password" name="redis_password" type="password" value="" autocomplete="new-password"></div>
+            <div class="form-row"><label for="redis_db">Redis 库</label><input id="redis_db" name="redis_db" value="{$values.redis_db|htmlspecialchars|raw}" inputmode="numeric"></div>
+            <div class="form-row"><label for="meilisearch_host">Meilisearch 地址</label><input id="meilisearch_host" name="meilisearch_host" value="{$values.meilisearch_host|htmlspecialchars|raw}"></div>
+            <div class="form-row"><label for="meilisearch_key">Meilisearch Key</label><input id="meilisearch_key" name="meilisearch_key" type="password" value="" autocomplete="new-password"></div>
+        </div>
+        <p class="install-note">安装器只接受空的目标库；检测到任何 ffx_ 数据表都会停止，不会覆盖。</p>
+        <div class="install-actions"><button type="submit" {if !$ready}disabled{/if}>开始安装</button></div>
+    </form>
+</main>
+</body>
+</html>

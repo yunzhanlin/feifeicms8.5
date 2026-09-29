@@ -1,0 +1,22 @@
+{assign name="pageTitle" value="充值中心 - MXOne" /}
+{assign name="pageActive" value="payment" /}
+{include file="mxone/common/head" /}
+{include file="mxone/common/header" /}
+<main class="mx-wrap mx-main">
+    <article class="mx-article">
+        <p class="mx-eyebrow">PAYMENT</p>
+        <h1>充值中心</h1>
+        <p class="mx-summary">{$config.pay_name|default='站內充值'}</p>
+        <div class="mx-content">{$config.pay_notice|htmlentities}</div>
+        {notempty name="message"}<p class="mx-panel">{$message|htmlentities}</p>{/notempty}
+        {if $isLoggedIn}
+        <form class="mx-auth-form" method="post" action="/user/redeem">
+            <input type="hidden" name="_token" value="{$csrf|htmlentities}">
+            <label>充值卡密<input name="card_number" maxlength="64" autocomplete="off" required></label>
+            <button class="mx-btn" type="submit">兑换积分</button>
+        </form>
+        {else /}<p><a class="mx-btn" href="/user/login?redirect=%2Fpayment">登录后充值</a></p>{/if}
+    </article>
+</main>
+{assign name="footerText" value="MXOne · 支付中心" /}
+{include file="mxone/common/footer" /}

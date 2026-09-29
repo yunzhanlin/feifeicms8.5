@@ -1,0 +1,8 @@
+<a class="mx-card" href="{:ff_url('person',$item.person_id)}">
+    <span class="mx-pic">
+        <img src="{$item.person_pic|default='/static/images/no-poster.svg'}" alt="{$item.person_name}">
+        <i>{$item.subtitle|default='STAR'}</i>
+    </span>
+    <strong>{$item.person_name}</strong>
+    <small>{$item.person_profession|default='資料整理中'}</small>
+</a>

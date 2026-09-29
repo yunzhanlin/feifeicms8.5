@@ -1,0 +1,21 @@
+{assign name="pageTitle" value="搜索 - MXOne" /}
+{assign name="pageActive" value="search" /}
+{include file="mxone/common/head" /}
+{include file="mxone/common/header" /}
+<main class="mx-wrap mx-main">
+    <section>
+        <div class="mx-title">
+            <h1>搜索结果</h1>
+            <span>{notempty name="keyword"}{$keyword} · 共 {$total} 部{else /}请输入关键词{/notempty}</span>
+        </div>
+        {notempty name="message"}<section class="mx-block"><p class="empty-note">{$message}</p></section>{/notempty}
+        {notempty name="vods"}
+        <div class="mx-grid">
+            {volist name="vods" id="item"}{include file="mxone/module/vod_card" /}{/volist}
+        </div>
+        {if $pages > 1}<div class="mx-pager">{if $page > 1}<a href="?wd={$keyword|urlencode}&pg={$page-1}">上一页</a>{/if}<span>第 {$page} / {$pages} 页</span>{if $page < $pages}<a href="?wd={$keyword|urlencode}&pg={$page+1}">下一页</a>{/if}</div>{/if}
+        {/notempty}
+    </section>
+</main>
+{assign name="footerText" value="MXOne · 搜索" /}
+{include file="mxone/common/footer" /}

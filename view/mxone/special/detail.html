@@ -1,0 +1,15 @@
+{assign name="pageTitle" value="$item.special_name" /}
+{assign name="pageActive" value="special" /}
+{include file="mxone/common/head" /}
+{include file="mxone/common/header" /}
+<main class="mx-wrap mx-main">
+    <article class="mx-article">
+        <p class="mx-eyebrow">SPECIAL</p>
+        <h1>{$item.special_name}</h1>
+        <p class="mx-summary">{$item.special_description}</p>
+        <p class="mx-meta">標籤：{$item.special_tag_name|default='暂无'} · 閱讀 {$item.special_hits}</p>
+        <div class="mx-content">{$item.safe_content|raw}</div>
+    </article>
+</main>
+{assign name="footerText" value="MXOne · 专题详情" /}
+{include file="mxone/common/footer" /}

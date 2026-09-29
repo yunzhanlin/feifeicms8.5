@@ -1,0 +1,21 @@
+{include file="admin/layout/header" /}
+<div class="title"><div class="tabs"><a class="active" href="/admin/tools/cache">缓存状态统计</a><a href="/admin/tools/cache">刷新统计</a></div></div>
+{if !empty($message)}<div class="notice success">{$message|htmlspecialchars|raw}</div>{/if}
+<div class="table-wrap"><table class="data-table legacy-tool-table"><tbody>
+<tr><th>数据缓存：</th><td>{if $cache.ok}<strong class="text-success">正常</strong>{else /}<strong class="text-danger">异常</strong>{/if} &nbsp; 驱动：{$cache.driver|htmlspecialchars|raw}{if $cache.keys !== null}，键数量：{$cache.keys}，占用内存：{$cache.memory|htmlspecialchars|raw}，峰值：{$cache.peak|htmlspecialchars|raw}{/if}{if !empty($cache.error)}<br><span class="text-danger">{$cache.error|htmlspecialchars|raw}</span>{/if}</td></tr>
+<tr><th>编译与模板缓存：</th><td>{$templateStats.files} 个文件，{$templateStats.size}</td></tr>
+<tr><th>数据文件缓存：</th><td>{$dataStats.files} 个文件，{$dataStats.size}</td></tr>
+<tr><th>页面生成文件：</th><td>{$pageStats.files} 个文件，{$pageStats.size}</td></tr>
+</tbody></table></div>
+
+<div class="title"><div class="tabs"><span>数据缓存管理</span></div></div>
+<div class="table-wrap"><table class="data-table legacy-tool-table"><tbody>
+<tr><th>系统编译与模板缓存：</th><td><form class="inline-action" method="post" action="/admin/tools/cache/clear" data-confirm="确定清理系统编译与模板缓存？"><input type="hidden" name="_token" value="{$csrf|htmlspecialchars|raw}"><input type="hidden" name="scope" value="templates"><button class="link-button tool-action-link" type="submit">点此清除</button></form></td></tr>
+<tr><th>全站所有数据缓存：</th><td><form class="inline-action" method="post" action="/admin/tools/cache/clear" data-confirm="确定清空全站数据缓存？"><input type="hidden" name="_token" value="{$csrf|htmlspecialchars|raw}"><input type="hidden" name="scope" value="data"><button class="link-button tool-action-link" type="submit">一键清空</button></form></td></tr>
+<tr><th>静态生成文件：</th><td><form class="inline-action" method="post" action="/admin/tools/cache/clear" data-confirm="确定清理静态生成文件？"><input type="hidden" name="_token" value="{$csrf|htmlspecialchars|raw}"><input type="hidden" name="scope" value="page"><button class="link-button tool-action-link" type="submit">点此清除</button></form></td></tr>
+<tr><th>今日更新的视频数据：</th><td><form class="inline-action" method="post" action="/admin/tools/cache/clear" data-confirm="确定清理今日视频数据缓存？"><input type="hidden" name="_token" value="{$csrf|htmlspecialchars|raw}"><input type="hidden" name="scope" value="today_video"><button class="link-button tool-action-link" type="submit">点此清除</button></form></td></tr>
+<tr><th>今日更新的文章数据：</th><td><form class="inline-action" method="post" action="/admin/tools/cache/clear" data-confirm="确定清理今日文章数据缓存？"><input type="hidden" name="_token" value="{$csrf|htmlspecialchars|raw}"><input type="hidden" name="scope" value="today_article"><button class="link-button tool-action-link" type="submit">点此清除</button></form></td></tr>
+<tr><th>今日更新的专题数据：</th><td><form class="inline-action" method="post" action="/admin/tools/cache/clear" data-confirm="确定清理今日专题数据缓存？"><input type="hidden" name="_token" value="{$csrf|htmlspecialchars|raw}"><input type="hidden" name="scope" value="today_topic"><button class="link-button tool-action-link" type="submit">点此清除</button></form></td></tr>
+<tr><th>系统所有缓存：</th><td><form class="inline-action" method="post" action="/admin/tools/cache/clear" data-confirm="确定清理系统所有缓存？"><input type="hidden" name="_token" value="{$csrf|htmlspecialchars|raw}"><input type="hidden" name="scope" value="all"><button class="link-button tool-action-link" type="submit">全部清理</button></form></td></tr>
+</tbody></table></div>
+{include file="admin/layout/footer" /}

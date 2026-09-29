@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 88" role="img" aria-labelledby="title desc">
+  <title id="title">闪看影视</title>
+  <desc id="desc">闪看影视桌面端横版标志</desc>
+  <defs>
+    <linearGradient id="flash" x1="0" y1="0" x2="54" y2="36" gradientUnits="userSpaceOnUse"><stop stop-color="#ff3d2e"/><stop offset="1" stop-color="#ff8617"/></linearGradient>
+    <linearGradient id="ink" x1="0" y1="28" x2="55" y2="55" gradientUnits="userSpaceOnUse"><stop stop-color="#111521"/><stop offset="1" stop-color="#343b4c"/></linearGradient>
+  </defs>
+  <g transform="translate(8 12)">
+    <path fill="url(#flash)" d="M6 8h52L45 21H25l9 8H16L6 20z"/>
+    <path fill="url(#ink)" stroke="#fff" stroke-opacity=".14" d="M58 56H6l13-13h20l-9-8h18l10 9z"/>
+    <path fill="#fff" d="m26 25 14 7-14 7z"/>
+  </g>
+  <text x="88" y="51" fill="#151925" font-family="PingFang SC,Microsoft YaHei,Noto Sans SC,sans-serif" font-size="35" font-weight="800" letter-spacing="1">闪看影视</text>
+  <text x="90" y="72" fill="#ff6b21" font-family="Inter,Arial,sans-serif" font-size="10" font-weight="700" letter-spacing="3.2">SHANKANKAN.CC</text>
+</svg>

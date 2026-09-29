@@ -1,0 +1,25 @@
+{assign name="pageTitle" value="VIP - MXOne" /}
+{assign name="pageActive" value="vip" /}
+{include file="mxone/common/head" /}
+{include file="mxone/common/header" /}
+<main class="mx-wrap mx-main">
+    <section class="mx-block">
+        <div class="mx-detail">
+            <span class="mx-detail-poster"><img src="/static/images/no-poster.svg" alt="VIP"></span>
+            <div class="mx-detail-info">
+                <p class="mx-eyebrow">VIP</p>
+                <h1>VIP 会员服务</h1>
+                <p>有效期内可观看 VIP 影片；积分影片首次解锁后可重复播放，不会重复扣分。</p>
+                <p class="mx-sub">{$config.pay_notice|htmlentities}</p>
+                <a class="mx-btn mx-play-btn" href="{:ff_url('payment')}">開通 / 續費</a>
+            </div>
+        </div>
+        <div class="mx-special-grid">
+            <div class="mx-special-card"><strong>VIP 影片</strong><p>播放前实时检查会员有效期，到期后自动停止授权。</p></div>
+            <div class="mx-special-card"><strong>积分点播</strong><p>扣除当前用户积分并记录影片授权，数据库事务防止重复扣分。</p></div>
+            <div class="mx-special-card"><strong>卡密充值</strong><p>后台批量发放卡密，用户前台兑换后立即增加积分。</p></div>
+        </div>
+    </section>
+</main>
+{assign name="footerText" value="MXOne · VIP" /}
+{include file="mxone/common/footer" /}

@@ -1,0 +1,6 @@
+{include file="admin/layout/header" /}
+<div class="title"><div class="tabs"><a class="active" href="/admin/tools/version">版本升级</a></div></div>
+{if !empty($message)}<div class="notice success">{$message|htmlspecialchars|raw}</div>{/if}
+<div class="table-wrap"><table class="data-table legacy-tool-table"><tbody><tr><th>程序版本：</th><td><strong>FeiFeiCMS {$versions.app|htmlspecialchars|raw}</strong></td></tr><tr><th>ThinkPHP 框架：</th><td>{$versions.thinkphp|htmlspecialchars|raw}</td></tr><tr><th>PHP 运行版本：</th><td>{$versions.php|htmlspecialchars|raw}</td></tr><tr><th>MySQL 服务器：</th><td>{$versions.mysql|htmlspecialchars|raw}</td></tr><tr><th>数据库结构版本：</th><td>{$versions.schema}</td></tr><tr><th>Composer 依赖状态：</th><td>{if $versions.composer}<span class="text-success">正常</span>{else /}<span class="text-danger">异常</span>{/if}</td></tr></tbody></table></div>
+<div class="tool-action-panel"><form method="post" action="/admin/tools/version/check"><input type="hidden" name="_token" value="{$csrf|htmlspecialchars|raw}"><button type="submit">重新检查版本与环境</button><p>升级已改为 Composer 锁定依赖 + SQL 版本迁移，不再使用旧版网页覆盖核心文件的方式。</p></form></div>
+{include file="admin/layout/footer" /}

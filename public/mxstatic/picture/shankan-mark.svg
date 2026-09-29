@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title desc">
+  <title id="title">闪看影视</title>
+  <desc id="desc">由闪电、播放与双向快进构成的几何标志</desc>
+  <defs>
+    <linearGradient id="flash" x1="5" y1="7" x2="55" y2="35" gradientUnits="userSpaceOnUse"><stop stop-color="#ff3d2e"/><stop offset="1" stop-color="#ff8617"/></linearGradient>
+    <linearGradient id="ink" x1="9" y1="31" x2="58" y2="57" gradientUnits="userSpaceOnUse"><stop stop-color="#111521"/><stop offset="1" stop-color="#343b4c"/></linearGradient>
+  </defs>
+  <path fill="url(#flash)" d="M6 8h52L45 21H25l9 8H16L6 20z"/>
+  <path fill="url(#ink)" stroke="#fff" stroke-opacity=".14" stroke-width="1" d="M58 56H6l13-13h20l-9-8h18l10 9z"/>
+  <path fill="#fff" fill-opacity=".96" d="m26 25 14 7-14 7z"/>
+</svg>
