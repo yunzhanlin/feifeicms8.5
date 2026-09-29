@@ -1,0 +1,32 @@
+{assign name="pageTitle" value="网站地图 - MXOne" /}
+{assign name="pageActive" value="map" /}
+{include file="mxone/common/head" /}
+{include file="mxone/common/header" /}
+<main class="mx-wrap mx-main">
+    <section class="mx-block">
+        <div class="mx-title">
+            <h1>网站地图</h1>
+            <span>Site Map</span>
+        </div>
+        <div class="mx-map-grid">
+            <div class="mx-special-card">
+                <strong>栏目</strong>
+                {volist name="types" id="type"}<p><a href="{:ff_url('type',$type.type_id)}">{$type.type_name}</a></p>{/volist}
+            </div>
+            <div class="mx-special-card">
+                <strong>最新影片</strong>
+                {volist name="vods" id="vod"}<p><a href="{:ff_url('vod',$vod.vod_id)}">{$vod.vod_name}</a></p>{/volist}
+            </div>
+            <div class="mx-special-card">
+                <strong>资讯</strong>
+                {volist name="news" id="item"}<p><a href="{:ff_url('news',$item.news_id)}">{$item.news_name}</a></p>{/volist}
+            </div>
+            <div class="mx-special-card">
+                <strong>专题</strong>
+                {volist name="specials" id="item"}<p><a href="{:ff_url('special',$item.special_id)}">{$item.special_name}</a></p>{/volist}
+            </div>
+        </div>
+    </section>
+</main>
+{assign name="footerText" value="MXOne · FeiFeiCMS 网站地图" /}
+{include file="mxone/common/footer" /}

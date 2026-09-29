@@ -1,0 +1,9 @@
+.git
+.env
+docker/data
+legacy/Runtime/Cache
+legacy/Runtime/Logs
+legacy/Runtime/Temp
+runtime/*
+public/uploads/*
+vendor

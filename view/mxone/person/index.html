@@ -1,0 +1,25 @@
+{assign name="pageTitle" value="明星角色 - MXOne" /}
+{assign name="pageActive" value="person" /}
+{include file="mxone/common/head" /}
+{include file="mxone/common/header" /}
+<main class="mx-wrap mx-main">
+    <section class="mx-block">
+        <div class="mx-title">
+            <h1>明星角色</h1>
+            <span>People</span>
+        </div>
+        <div class="mx-tabs">
+            <a href="/person" {if $sid==0}class="active"{/if}>全部</a>
+            <a href="/person?sid=8" {if $sid==8}class="active"{/if}>明星</a>
+            <a href="/person?sid=9" {if $sid==9}class="active"{/if}>角色</a>
+        </div>
+        <div class="mx-grid mx-grid-channel">
+            {volist name="people" id="item"}
+            {include file="mxone/module/person_card" /}
+            {/volist}
+        </div>
+        <div class="mx-pager">{$pager|raw}</div>
+    </section>
+</main>
+{assign name="footerText" value="MXOne · 明星角色" /}
+{include file="mxone/common/footer" /}

@@ -1,0 +1,64 @@
+{
+    "name": "yunzhanlin/feifeicms8.5",
+    "description": "FeiFeiCMS 8.5 Beta 1 upgraded to ThinkPHP 8 with PHP 8.x, MySQL 8, Redis and Meilisearch support",
+    "type": "project",
+    "keywords": [
+        "framework",
+        "thinkphp",
+        "ORM"
+    ],
+    "homepage": "https://github.com/yunzhanlin/feifeicms8.5",
+    "license": "Apache-2.0",
+    "authors": [
+        {
+            "name": "liu21st",
+            "email": "liu21st@gmail.com"
+        },
+        {
+            "name": "yunwuxin",
+            "email": "448901948@qq.com"
+        }
+    ],
+    "require": {
+        "php": ">=8.2 <8.6",
+        "ext-curl": "*",
+        "ext-json": "*",
+        "ext-mbstring": "*",
+        "ext-pdo": "*",
+        "guzzlehttp/guzzle": "^7.10",
+        "http-interop/http-factory-guzzle": "^1.2",
+        "meilisearch/meilisearch-php": "^1.16",
+        "predis/predis": "^3.4",
+        "topthink/framework": "^8.1.4",
+        "topthink/think-filesystem": "^3.0",
+        "topthink/think-orm": "^4.0",
+        "topthink/think-view": "^2.0.5"
+    },
+    "require-dev": {
+        "topthink/think-dumper": "^1.0",
+        "topthink/think-trace": "^2.0",
+        "phpunit/phpunit": "^11.5"
+    },
+    "autoload": {
+        "psr-4": {
+            "app\\": "app"
+        }
+    },
+    "config": {
+        "preferred-install": "dist",
+        "sort-packages": true,
+        "allow-plugins": {
+            "topthink/think-installer": true
+        },
+        "platform": {
+            "php": "8.2.0"
+        }
+    },
+    "scripts": {
+        "post-autoload-dump": [
+            "@php think service:discover",
+            "@php think vendor:publish"
+        ],
+        "test": "phpunit"
+    }
+}

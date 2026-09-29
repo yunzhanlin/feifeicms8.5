@@ -1,0 +1,3 @@
+{include file="layout/header" /}
+<section class="section-block"><div class="section-heading"><div><p class="eyebrow">社区</p><h1>{$category.name|htmlspecialchars|raw}</h1></div></div>{if !empty($items)}<div class="content-list">{volist name="items" id="item"}<article><h2>{$item.title|default='留言'|htmlspecialchars|raw}</h2><p>{$item.content|htmlspecialchars|raw}</p><small>{$item.author_name|default='访客'|htmlspecialchars|raw} · {$item.created_at|htmlspecialchars|raw}</small></article>{/volist}</div><div class="pagination">{$pagination|raw}</div>{else /}<div class="empty-state">暂时没有内容。</div>{/if}</section>
+{include file="layout/footer" /}

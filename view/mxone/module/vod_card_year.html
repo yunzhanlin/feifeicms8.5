@@ -1,0 +1,8 @@
+<a class="mx-card" href="{:ff_url('vod',$item.vod_id)}">
+    <span class="mx-pic">
+        <img src="{$item.vod_pic|default='/static/images/no-poster.svg'}" alt="{$item.vod_name}" data-fallback-poster="/static/images/no-poster.svg">
+        <i>{$item.remark_text|default='更新'}</i>
+    </span>
+    <strong>{$item.vod_name}</strong>
+    <small>{$item.vod_year} / {$item.area_text}</small>
+</a>

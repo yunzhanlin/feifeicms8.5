@@ -1,0 +1,47 @@
+{assign name="pageTitle" value="会员中心 - MXOne" /}
+{assign name="pageActive" value="user" /}
+{include file="mxone/common/head" /}
+{include file="mxone/common/header" /}
+<main class="mx-wrap mx-main">
+    <section class="mx-block">
+        <div class="mx-title">
+            <h1>会员中心</h1>
+            <span>User Center</span>
+        </div>
+        {empty name="user"}
+        <div class="mx-panel mx-list-card">
+            <strong>你还没有登录</strong>
+            <p>登录后可保存播放记录、收藏和查看积分。</p>
+            <a class="mx-btn" href="/user/login">登录</a>
+            <a class="mx-btn" href="/user/register">注册</a>
+        </div>
+        {else /}
+        <div class="mx-user-row">
+            <div class="mx-stat"><b>{$user.user_score}</b><span>当前积分</span></div>
+            <div class="mx-stat"><b>{$user.user_lognum}</b><span>登录次数</span></div>
+            <div class="mx-stat"><b>{$user.user_deadtime|date='Y-m-d'}</b><span>VIP 到期</span></div>
+        </div>
+        <div class="mx-list-card">
+            <strong>{$user.user_name}</strong>
+            <p>注册 IP：{$user.user_joinip} · 最后登录 IP：{$user.user_logip}</p>
+            <form method="post" action="/user/logout"><input type="hidden" name="_token" value="{$csrf|htmlentities}"><button class="mx-btn" type="submit">退出登录</button></form>
+        </div>
+        <div class="mx-title">
+            <h2>播放记录</h2>
+            <span>History</span>
+        </div>
+        <div class="mx-list">
+            {volist name="records" id="record"}
+            <a class="mx-list-card" href="{$record.record_url|htmlentities}">
+                <strong>{$record.record_name|htmlentities}</strong>
+                <small>{$record.record_time|date='Y-m-d H:i'} · 线路 {$record.record_did_sid+1} · 第 {$record.record_did_pid+1} 集</small>
+            </a>
+            {/volist}
+        </div>
+        <div class="mx-title"><h2>我的收藏</h2><span>Favorites</span></div>
+        <div class="mx-grid">{volist name="favorites" id="item"}{include file="mxone/module/vod_card" /}{/volist}</div>
+        {/empty}
+    </section>
+</main>
+{assign name="footerText" value="MXOne · 会员中心" /}
+{include file="mxone/common/footer" /}

@@ -1,0 +1,25 @@
+{assign name="pageTitle" value="$vod.vod_name" /}
+{assign name="pageActive" value="" /}
+{include file="mxone/common/head" /}
+{include file="mxone/common/header" /}
+<main class="mx-wrap mx-main">
+    <section class="mx-block mx-comments mx-comments-full" id="comments">
+        <div class="mx-title">
+            <h1>{$vod.vod_name} 评论</h1>
+            <span>共 {$commentCount} 条</span>
+        </div>
+        <p class="mx-comment-back"><a href="{:ff_url('vod',$vod.vod_id)}">返回影片详情</a></p>
+        <form class="mx-comment-editor" method="post" action="/forum/post" data-comment-login-required="{$commentLoginRequired}" data-user-logged="{$isLoggedIn}">
+            <input type="hidden" name="_token" value="{$csrf|htmlentities}">
+            <input type="hidden" name="cid" value="{$vod.vod_id}">
+            <input type="hidden" name="pid" value="0">
+            <textarea name="content" rows="4" maxlength="1000" placeholder="说说你的看法，文明发言。"></textarea>
+            <div><button class="mx-btn" type="submit">发表评论</button></div>
+        </form>
+        <div class="mx-comment-list">{$commentHtml|raw}</div>
+    </section>
+</main>
+{assign name="fullComments" value="1" /}
+{include file="mxone/common/comment_login_modal" /}
+{assign name="footerText" value="MXOne · 评论" /}
+{include file="mxone/common/footer" /}

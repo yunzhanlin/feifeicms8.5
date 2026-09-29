@@ -1,0 +1,15 @@
+{
+  "baseUrl": "http://feifeicms-modern.localhost:19101",
+  "screenshots": 9,
+  "desktopViewport": "1440x900 @1x",
+  "mobileViewport": "390x844 @1x",
+  "consoleErrors": [],
+  "failedResponses": [],
+  "playerState": {
+    "readyState": 4,
+    "networkState": 2,
+    "duration": 2749.9199999999987,
+    "currentSrc": "blob:http://feifeicms-modern.localhost:19101/7a0d522b-a3ba-4d02-ad8c-ce2d35977413",
+    "error": null
+  }
+}

@@ -1,0 +1,29 @@
+<header class="mx-header">
+    <div class="mx-wrap mx-head-inner">
+        <a class="mx-logo" href="{:ff_url('home')}">
+            <img src="/mxstatic/picture/logo.png" alt="MXOne">
+            <span>{$siteName|default='MXOne'}</span>
+        </a>
+        <nav class="mx-nav">
+            {notempty name="siteNavigation"}
+            {volist name="siteNavigation" id="menu"}<a href="{$menu.url|htmlentities}" target="{$menu.target|default='_self'|htmlentities}">{$menu.title|htmlentities}</a>{/volist}
+            {else /}<a {if $pageActive=='home'}class="active"{/if} href="{:ff_url('home')}">首页</a>
+            {volist name="types" id="nav" offset="0" length="8"}
+            {if $pageActive=='type'}
+            <a {if $type.list_id==$nav.list_id}class="active"{/if} href="{:ff_url('type',$nav.type_id)}">{$nav.type_name}</a>
+            {else /}
+            <a href="{:ff_url('type',$nav.type_id)}">{$nav.type_name}</a>
+            {/if}
+            {/volist}
+            <a {if $pageActive=='news'}class="active"{/if} href="/news">资讯</a>
+            <a {if $pageActive=='special'}class="active"{/if} href="/special">专题</a>
+            <a {if $pageActive=='person'}class="active"{/if} href="/person">明星</a>
+            <a {if $pageActive=='guestbook'}class="active"{/if} href="{:ff_url('guestbook')}">留言</a>
+            {/notempty}
+        </nav>
+        <form class="mx-search" action="/search" method="get">
+            <input name="wd" value="{$keyword|default=''|htmlentities}" placeholder="搜索片名、演员、导演">
+            <button type="submit" title="搜索" aria-label="搜索"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m16.5 16.5 4 4"></path></svg></button>
+        </form>
+    </div>
+</header>

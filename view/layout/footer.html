@@ -1,0 +1,6 @@
+</main>
+<footer class="site-footer">
+    <div class="shell footer-inner"><div>{$siteName|htmlspecialchars|raw} · FeiFeiCMS</div>{if !empty($friendLinks)}<nav aria-label="友情链接">{volist name="friendLinks" id="link"}<a href="{$link.url|htmlspecialchars|raw}" target="_blank" rel="noopener nofollow">{$link.name|htmlspecialchars|raw}</a>{/volist}</nav>{/if}</div>
+</footer>
+</body>
+</html>

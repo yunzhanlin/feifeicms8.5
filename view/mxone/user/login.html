@@ -1,0 +1,19 @@
+{assign name="pageTitle" value="会员登录 - MXOne" /}
+{assign name="pageActive" value="user" /}
+{include file="mxone/common/head" /}
+{include file="mxone/common/header" /}
+<main class="mx-wrap mx-main">
+    <form class="mx-form-card" method="post">
+        <input type="hidden" name="_token" value="{$csrf|htmlentities}">
+        <input type="hidden" name="redirect" value="{$redirect|htmlentities}">
+        <p class="mx-eyebrow">LOGIN</p>
+        <h1>会员登录</h1>
+        {notempty name="message"}<p class="mx-meta">{$message}</p>{/notempty}
+        <label>用戶名<input name="user_name" autocomplete="username"></label>
+        <label>密碼<input type="password" name="user_pwd" autocomplete="current-password"></label>
+        <button class="mx-btn" type="submit">登录</button>
+        <p><a href="/user/register?redirect={$redirect|urlencode}">没有账号？立即注册</a></p>
+    </form>
+</main>
+{assign name="footerText" value="MXOne · 会员登录" /}
+{include file="mxone/common/footer" /}

@@ -1,0 +1,15 @@
+[Unit]
+Description=FeiFeiCMS scheduled collection dispatcher and worker
+After=network-online.target mariadb.service redis.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=ps959582eda0bd3a67e99e9320
+Group=ps959582eda0bd3a67e99e9320
+WorkingDirectory=/srv/panel/sites/959582eda0bd3a67e99e93204e9fa436/public/app
+ExecStart=/opt/panel/runtimes/php/8.5.10/bin/php think feifei:collection:schedule
+ExecStart=/opt/panel/runtimes/php/8.5.10/bin/php think feifei:collection:work --max=20
+
+[Install]
+WantedBy=multi-user.target

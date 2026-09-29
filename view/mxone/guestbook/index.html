@@ -1,0 +1,39 @@
+{assign name="pageTitle" value="留言板 - MXOne" /}
+{assign name="pageActive" value="guestbook" /}
+{include file="mxone/common/head" /}
+{include file="mxone/common/header" /}
+<main class="mx-wrap mx-main">
+    <section class="mx-block">
+        <div class="mx-title">
+            <h1>留言板</h1>
+            <span>Guestbook</span>
+        </div>
+        {notempty name="message"}<div class="mx-list-card">{$message}</div>{/notempty}
+        <form class="mx-list-card" method="post">
+            <input type="hidden" name="_token" value="{$csrf|htmlentities}">
+            <div class="mx-field">
+                <label>留言內容<textarea name="content" rows="5" placeholder="寫點什麼，最多 500 字"></textarea></label>
+            </div>
+            <button class="mx-btn" type="submit">提交留言</button>
+        </form>
+        <div class="mx-list">
+            {volist name="items" id="item"}
+            <div class="mx-list-card">
+                <strong>{$item.forum_title}</strong>
+                <p>{$item.forum_content|htmlentities}</p>
+                <small>{$item.forum_addtime|date='Y-m-d H:i'} · IP {$item.forum_ip}</small>
+                {notempty name="item.guestbook_replies"}
+                <div class="mx-guestbook-replies">
+                    {volist name="item.guestbook_replies" id="reply"}
+                    <p><b>管理员回复：</b>{$reply.forum_content|htmlentities}<small>{$reply.forum_addtime|date='Y-m-d H:i'}</small></p>
+                    {/volist}
+                </div>
+                {/notempty}
+            </div>
+            {/volist}
+        </div>
+        <div class="mx-pager">{$pager|raw}</div>
+    </section>
+</main>
+{assign name="footerText" value="MXOne · 留言板" /}
+{include file="mxone/common/footer" /}

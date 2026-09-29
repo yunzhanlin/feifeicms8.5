@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0"><channel><title>{$siteName|htmlentities} 最新视频</title><link>/</link><description>FeiFeiCMS ThinkPHP 8 RSS</description>{volist name="vods" id="vod"}<item><title>{$vod.vod_name|htmlentities}</title><link>{:ff_url('vod',$vod.vod_id)}</link><description>{$vod.vod_content|strip_tags|htmlentities}</description><pubDate>{$vod.vod_addtime|date='r'}</pubDate></item>{/volist}</channel></rss>

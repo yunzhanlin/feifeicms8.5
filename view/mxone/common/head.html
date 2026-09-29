@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    {notempty name="csrf"}<meta name="csrf-token" content="{$csrf|htmlentities}">{/notempty}
+    <title>{notempty name="seo.title"}{$seo.title|htmlentities}{else /}{notempty name="pageTitle"}{$pageTitle}{else /}MXOne{/notempty}{/notempty}</title>
+    {notempty name="seo.keywords"}<meta name="keywords" content="{$seo.keywords|htmlentities}">{/notempty}
+    {notempty name="seo.description"}<meta name="description" content="{$seo.description|htmlentities}">{/notempty}
+    <link rel="icon" href="/mxstatic/picture/logo.png">
+    <link rel="stylesheet" href="/mxstatic/css/mxone.css">
+    <link rel="stylesheet" href="/mxstatic/css/style.css">
+    <link rel="stylesheet" href="/mxstatic/css/swiper-bundle.min.css">
+    <link rel="stylesheet" href="/static/css/system.css?v=202609290010">
+    {notempty name="playerJs"}
+    <script src="/player/vendor/artplayer.js" defer></script>
+    <script src="/player/vendor/hls.min.js" defer></script>
+    <script src="/player/vendor/artplayer-plugin-danmuku.js" defer></script>
+    <script src="/static/js/player.js?v=202609290005" defer></script>
+    {/notempty}
+    <script src="/static/js/mxone.js?v=202609290005" defer></script>
+</head>
+<body{notempty name="bodyClass"} class="{$bodyClass}"{/notempty}>

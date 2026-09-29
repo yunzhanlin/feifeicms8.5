@@ -1,0 +1,4 @@
+{include file="layout/header" /}
+<article class="article-page"><p class="eyebrow">专题</p><h1>{$item.title|htmlspecialchars|raw}</h1><p class="subtitle">{$item.summary|default=''|htmlspecialchars|raw}</p>{if !empty($item.banner_url)}<img class="article-cover" src="{$item.banner_url|htmlspecialchars|raw}" alt="">{/if}<div class="article-body">{$item.content|default=''|raw}</div></article>
+<section class="section-block"><div class="section-heading"><h2>专题片单</h2></div>{if !empty($vod)}<div class="poster-grid">{volist name="vod" id="media"}<article class="poster-card"><a href="/vod/{$media.id}"><div class="poster-frame">{if !empty($media.poster_url)}<img src="{$media.poster_url|htmlspecialchars|raw}" alt="{$media.title|htmlspecialchars|raw}">{else /}<span class="poster-placeholder">暂无海报</span>{/if}</div><h3>{$media.title|htmlspecialchars|raw}</h3></a></article>{/volist}</div>{else /}<div class="empty-state">专题还没有关联影片。</div>{/if}</section>
+{include file="layout/footer" /}

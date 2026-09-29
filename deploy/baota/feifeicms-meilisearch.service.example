@@ -1,0 +1,30 @@
+[Unit]
+Description=FeiFeiCMS local Meilisearch
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=__SITE_USER__
+Group=__SITE_USER__
+WorkingDirectory=/srv/panel/sites/__SITE_ID__/private/meilisearch
+Environment=MEILI_HTTP_ADDR=127.0.0.1:7700
+Environment=MEILI_DB_PATH=/srv/panel/sites/__SITE_ID__/private/meilisearch/data.ms
+Environment=MEILI_DUMP_DIR=/srv/panel/sites/__SITE_ID__/private/meilisearch/dumps
+Environment=MEILI_ENV=production
+Environment=MEILI_NO_ANALYTICS=true
+EnvironmentFile=/etc/feifeicms-meilisearch.env
+ExecStart=/opt/feifeicms/meilisearch/ld-musl-aarch64.so.1 --library-path /opt/feifeicms/meilisearch /opt/feifeicms/meilisearch/meilisearch
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=65535
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/srv/panel/sites/__SITE_ID__/private/meilisearch
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+
+[Install]
+WantedBy=multi-user.target

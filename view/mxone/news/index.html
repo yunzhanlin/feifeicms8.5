@@ -1,0 +1,24 @@
+{assign name="pageTitle" value="资讯 - MXOne" /}
+{assign name="pageActive" value="news" /}
+{include file="mxone/common/head" /}
+{include file="mxone/common/header" /}
+<main class="mx-wrap mx-main">
+    <section class="mx-block">
+        <div class="mx-title">
+            <h1>最新资讯</h1>
+            <span>站內公告、影視快訊、专题導讀</span>
+        </div>
+        <div class="mx-list">
+            {volist name="news" id="item"}
+            <a class="mx-list-card" href="{:ff_url('news',$item.news_id)}">
+                <strong>{$item.news_name}</strong>
+                <p>{$item.summary_text}</p>
+                <small>{$item.news_addtime|date='Y-m-d H:i'} · 閱讀 {$item.news_hits}</small>
+            </a>
+            {/volist}
+        </div>
+        <div class="mx-pager">{$pager|raw}</div>
+    </section>
+</main>
+{assign name="footerText" value="MXOne · 资讯" /}
+{include file="mxone/common/footer" /}
