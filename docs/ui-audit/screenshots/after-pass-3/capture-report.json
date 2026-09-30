@@ -1,8 +1,0 @@
-{
-  "baseUrl": "http://feifeicms-modern.localhost:19101",
-  "outputDir": "/Users/guobinlin/Documents/ChatGPT/feifeicms4.3升级php8.x/docs/ui-audit/screenshots/after-pass-3",
-  "desktopViewport": "1440x900 @1x",
-  "mobileViewport": "390x844 @1x",
-  "screenshots": 26,
-  "consoleErrors": []
-}

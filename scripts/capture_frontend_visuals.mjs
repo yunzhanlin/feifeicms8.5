@@ -2,7 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 
 const baseUrl = (process.env.FRONTEND_BASE_URL || 'http://feifeicms-modern.localhost:19101').replace(/\/$/, '');
-const outputDir = path.resolve(process.env.FRONTEND_AUDIT_OUTPUT || 'docs/ui-audit/screenshots/frontend-final');
+const outputDir = path.resolve(process.env.FRONTEND_AUDIT_OUTPUT || 'runtime/visual-audit/frontend');
 const debugPort = process.env.CHROME_DEBUG_PORT || '9223';
 await fs.mkdir(outputDir, { recursive: true });
 

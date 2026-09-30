@@ -4,7 +4,7 @@ import path from 'node:path';
 const baseUrl = (process.env.ADMIN_BASE_URL || 'http://feifeicms-modern.localhost:19101').replace(/\/$/, '');
 const username = process.env.ADMIN_AUDIT_USERNAME || '';
 const password = process.env.ADMIN_AUDIT_PASSWORD || '';
-const outputDir = path.resolve(process.env.ADMIN_AUDIT_OUTPUT || 'docs/ui-audit/screenshots/current');
+const outputDir = path.resolve(process.env.ADMIN_AUDIT_OUTPUT || 'runtime/visual-audit/admin');
 const debugPort = process.env.CHROME_DEBUG_PORT || '9223';
 const auditMediaId = Number.parseInt(process.env.ADMIN_AUDIT_MEDIA_ID || '', 10);
 const auditEditMediaId = Number.parseInt(process.env.ADMIN_AUDIT_EDIT_MEDIA_ID || '', 10);
