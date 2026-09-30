@@ -23,7 +23,15 @@ final class SearchManager
         }
 
         try {
-            return $this->meilisearch->search($keyword, $page, $pageSize);
+            $result = $this->meilisearch->search($keyword, $page, $pageSize);
+            // A healthy but stale/empty external index must not hide records that
+            // are already published in MySQL. This also keeps search usable before
+            // the first index rebuild on a newly installed or upgraded site.
+            if ($result->total > 0 || $this->settings->string('admin.cache.search_fallback', (string) config('feifei.search.fallback', 'mysql')) !== 'mysql') {
+                return $result;
+            }
+            $fallback = $this->mysql->search($keyword, $page, $pageSize);
+            return $fallback->total > 0 ? $fallback : $result;
         } catch (Throwable $exception) {
             if ($this->settings->string('admin.cache.search_fallback', (string) config('feifei.search.fallback', 'mysql')) !== 'mysql') {
                 throw $exception;

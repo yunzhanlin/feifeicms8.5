@@ -18,7 +18,7 @@ final class AdminCoverageTest extends TestCase
         }
 
         foreach ([
-            'categories/index.html', 'categories/edit.html', 'vod/playback.html', 'scenarios/index.html', 'scenarios/edit.html',
+            'categories/index.html', 'categories/edit.html', 'vod/playback.html', 'scenarios/index.html', 'scenarios/edit.html', 'scenarios/manage.html',
             'content/index.html', 'content/edit.html', 'users/index.html', 'users/edit.html',
             'comments/index.html', 'collections/index.html', 'collections/edit.html', 'collections/jobs.html',
             'operations/index.html', 'operations/edit.html', 'billing/index.html', 'system/index.html',
@@ -66,8 +66,8 @@ final class AdminCoverageTest extends TestCase
         self::assertStringContainsString('scrollbar-gutter: stable', $css);
         self::assertStringContainsString('.editor-form { display: flow-root;', $css);
         self::assertStringContainsString('overflow: visible', $css);
-        self::assertStringContainsString('/static/admin.css?v=39', $header);
-        self::assertStringContainsString('/static/admin.js?v=31', $header);
+        self::assertStringContainsString('/static/admin.css?v=40', $header);
+        self::assertStringContainsString('/static/admin.js?v=32', $header);
         self::assertStringContainsString("cell.textContent = '暂无数据'", $script);
         self::assertStringContainsString("已发布", $script);
         self::assertStringContainsString('data-editor-tabs', (string) file_get_contents(dirname(__DIR__) . '/view/admin/vod/edit.html'));
@@ -131,7 +131,44 @@ final class AdminCoverageTest extends TestCase
         self::assertStringContainsString('vod/upload', $routes);
         self::assertStringContainsString("requestJson('/admin/vod/metadata/douban'", $script);
         self::assertStringContainsString("requestJson('/admin/vod/upload'", $script);
-        self::assertStringContainsString('/admin/scenarios?media_id={$media.id}', $editor);
+        self::assertStringContainsString('/admin/scenarios/media/{$media.id}', $editor);
+    }
+
+    public function testScenarioManagementGroupsEpisodesByMediaAndSupportsOnePageEditing(): void
+    {
+        $routes = (string) file_get_contents(dirname(__DIR__) . '/route/app.php');
+        $list = (string) file_get_contents(dirname(__DIR__) . '/view/admin/scenarios/index.html');
+        $manage = (string) file_get_contents(dirname(__DIR__) . '/view/admin/scenarios/manage.html');
+        $controller = (string) file_get_contents(dirname(__DIR__) . '/app/controller/admin/Scenarios.php');
+        $script = (string) file_get_contents(dirname(__DIR__) . '/public/static/admin.js');
+
+        foreach (["get('scenarios/media/:mediaId'", "post('scenarios/media/:mediaId'"] as $route) {
+            self::assertStringContainsString($route, $routes);
+        }
+        foreach (['剧情集数', '集数范围', '管理全部剧情', 'scenario-media-list'] as $marker) {
+            self::assertStringContainsString($marker, $list);
+        }
+        foreach (['data-scenario-batch-form', 'data-scenario-row', '添加一集', '全部显示', '全部隐藏', '保存全部剧情'] as $marker) {
+            self::assertStringContainsString($marker, $manage);
+        }
+        foreach (['scenario.batch_update', 'scenarioRowsPayload', '1000000 + $id'] as $marker) {
+            self::assertStringContainsString($marker, $controller);
+        }
+        self::assertStringContainsString("document.querySelectorAll('[data-scenario-batch-form]')", $script);
+    }
+
+    public function testSearchIndexCanBeRebuiltFromClassicCacheManagement(): void
+    {
+        $routes = (string) file_get_contents(dirname(__DIR__) . '/route/app.php');
+        $cache = (string) file_get_contents(dirname(__DIR__) . '/view/admin/tools/cache.html');
+        $manager = (string) file_get_contents(dirname(__DIR__) . '/app/service/search/SearchManager.php');
+        $indexer = (string) file_get_contents(dirname(__DIR__) . '/app/service/SearchIndexer.php');
+        self::assertStringContainsString("post('tools/search/rebuild'", $routes);
+        foreach (['前台搜索索引', '已审核视频', '索引文档', '立即全量同步'] as $label) {
+            self::assertStringContainsString($label, $cache);
+        }
+        self::assertStringContainsString('$fallback->total > 0 ? $fallback : $result', $manager);
+        self::assertStringContainsString('array_values($rows->toArray())', $indexer);
     }
 
     public function testLegacyTemplateContractRemainsAvailable(): void

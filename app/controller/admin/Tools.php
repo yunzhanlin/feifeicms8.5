@@ -6,10 +6,12 @@ namespace app\controller\admin;
 use app\BaseController;
 use app\service\AuditLogger;
 use app\service\CsrfToken;
+use app\service\SearchIndexer;
 use app\service\SiteSettings;
 use app\service\SafeRemoteUrl;
 use app\service\ThemeRegistry;
 use GuzzleHttp\Client;
+use Meilisearch\Client as MeilisearchClient;
 use think\exception\HttpException;
 use think\facade\Cache;
 use think\facade\Db;
@@ -18,7 +20,7 @@ use Throwable;
 
 final class Tools extends BaseController
 {
-    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly SiteSettings $settings, private readonly SafeRemoteUrl $safeUrl, private readonly ThemeRegistry $themes) { parent::__construct($app); }
+    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly SiteSettings $settings, private readonly SafeRemoteUrl $safeUrl, private readonly ThemeRegistry $themes, private readonly SearchIndexer $searchIndexer) { parent::__construct($app); }
 
     public function cache(): Response
     {
@@ -47,12 +49,42 @@ final class Tools extends BaseController
 
         return view('/admin/tools/cache', [
             'cache' => $cache,
+            'search' => $this->searchStats(),
             'templateStats' => $this->directoryStats(runtime_path() . 'temp'),
             'dataStats' => $this->directoryStats(runtime_path() . 'cache'),
             'pageStats' => $this->directoryStats(public_path() . 'generated'),
             'message' => mb_substr((string) $this->request->get('message', ''), 0, 200),
+            'messageType' => $this->request->get('error', '') === '1' ? 'danger' : 'success',
             'csrf' => $this->csrf->get(),
         ]);
+    }
+
+    public function rebuildSearch(): Response
+    {
+        $this->guardCsrf();
+        $driver = $this->settings->string('admin.cache.search_driver', (string) config('feifei.search.driver', 'mysql'));
+        if ($driver !== 'meilisearch') {
+            return redirect('/admin/tools/cache?message=' . rawurlencode('当前使用 MySQL 搜索，无需同步外部索引'));
+        }
+        try {
+            $count = $this->searchIndexer->sync();
+            $indexName = $this->settings->string('admin.cache.search_index', (string) config('feifei.search.meilisearch.index'));
+            $now = gmdate('Y-m-d H:i:s');
+            Db::transaction(function () use ($indexName, $count, $now): void {
+                Db::table('ffx_search_state')->where('index_name', $indexName)->delete();
+                Db::table('ffx_search_state')->insert([
+                    'index_name' => $indexName, 'last_indexed_id' => (int) Db::table('ffx_media')->where('status', 'published')->whereNull('deleted_at')->max('id'),
+                    'indexed_count' => $count, 'pending_count' => 0, 'last_success_at' => $now,
+                    'last_error_at' => null, 'last_error' => null, 'updated_at' => $now,
+                ]);
+            });
+            $this->audit->record('tools.search_rebuild', 'search', $indexName, null, ['count' => $count]);
+            return redirect('/admin/tools/cache?message=' . rawurlencode('搜索索引同步完成，共写入 ' . $count . ' 部已审核视频'));
+        } catch (Throwable $exception) {
+            $message = mb_substr($exception->getMessage(), 0, 160);
+            $this->audit->record('tools.search_rebuild_failed', 'search', 'meilisearch', null, ['error' => $message]);
+            return redirect('/admin/tools/cache?error=1&message=' . rawurlencode('搜索索引同步失败：' . $message));
+        }
     }
 
     public function version(): Response
@@ -785,6 +817,40 @@ final class Tools extends BaseController
         $path = $root === false ? false : realpath($root . DIRECTORY_SEPARATOR . $name);
         if ($root === false || $path === false || !str_starts_with($path, $root . DIRECTORY_SEPARATOR) || !is_file($path)) throw new HttpException(404, '附件不存在');
         return $path;
+    }
+
+    /** @return array<string, mixed> */
+    private function searchStats(): array
+    {
+        $driver = $this->settings->string('admin.cache.search_driver', (string) config('feifei.search.driver', 'mysql'));
+        $defaults = (array) config('feifei.search.meilisearch');
+        $indexName = $this->settings->string('admin.cache.search_index', (string) ($defaults['index'] ?? 'feifeicms_media'));
+        $published = (int) Db::table('ffx_media')->where('status', 'published')->whereNull('deleted_at')->count();
+        $state = Db::table('ffx_search_state')->where('index_name', $indexName)->find();
+        $search = [
+            'driver' => $driver, 'index' => $indexName, 'ok' => $driver !== 'meilisearch',
+            'published' => $published, 'indexed' => $driver === 'mysql' ? $published : null,
+            'pending' => $state === null ? null : (int) ($state['pending_count'] ?? 0),
+            'last_success_at' => (string) ($state['last_success_at'] ?? ''), 'error' => '',
+        ];
+        if ($driver !== 'meilisearch') {
+            return $search;
+        }
+        try {
+            $client = new MeilisearchClient(
+                $this->settings->string('admin.cache.search_host', (string) ($defaults['host'] ?? 'http://127.0.0.1:7700')),
+                $this->settings->string('admin.cache.search_key', (string) ($defaults['key'] ?? ''))
+            );
+            $health = $client->health();
+            $stats = $client->index($indexName)->stats();
+            $search['ok'] = ($health['status'] ?? null) === 'available';
+            $search['indexed'] = (int) ($stats['numberOfDocuments'] ?? 0);
+        } catch (Throwable $exception) {
+            $search['ok'] = false;
+            $search['indexed'] = 0;
+            $search['error'] = mb_substr($exception->getMessage(), 0, 180);
+        }
+        return $search;
     }
 
     /** @return array{files:int,bytes:int,size:string} */
