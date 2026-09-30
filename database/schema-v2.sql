@@ -33,6 +33,7 @@ CREATE TABLE IF NOT EXISTS ffx_categories (
   deleted_at DATETIME(6) NULL,
   UNIQUE KEY uk_ffx_categories_slug (content_type, slug),
   KEY idx_ffx_categories_tree (parent_id, sort_order, status),
+  KEY idx_ffx_categories_frontend (content_type, status, deleted_at, sort_order, id),
   CONSTRAINT fk_ffx_categories_parent FOREIGN KEY (parent_id) REFERENCES ffx_categories(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -87,6 +88,8 @@ CREATE TABLE IF NOT EXISTS ffx_media (
   KEY idx_ffx_media_admin_state (admin_state, status, updated_at),
   KEY idx_ffx_media_admin_inputer (admin_inputer, status, updated_at),
   KEY idx_ffx_media_updated (status, updated_at, id),
+  KEY idx_ffx_media_frontend_popular (status, deleted_at, view_count, id),
+  KEY idx_ffx_media_frontend_category (category_id, status, deleted_at, published_at, id),
   CONSTRAINT fk_ffx_media_category FOREIGN KEY (category_id) REFERENCES ffx_categories(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -695,6 +698,10 @@ CREATE TABLE IF NOT EXISTS ffx_legacy_map (
 
 INSERT INTO ffx_schema_versions (version, description)
 VALUES (13, 'independent scenario collection sources')
+ON DUPLICATE KEY UPDATE description = VALUES(description);
+
+INSERT INTO ffx_schema_versions (version, description)
+VALUES (14, 'indexed cached frontend queries')
 ON DUPLICATE KEY UPDATE description = VALUES(description);
 
 INSERT INTO ffx_roles (role_key, name, description)

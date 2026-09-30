@@ -145,6 +145,7 @@ final class Settings extends BaseController
             }
         }
         $this->audit->record('settings.update', 'settings', $section, $before, $after);
+        $this->siteSettings->forget();
         return redirect('/admin/settings/' . $section . '?saved=1');
     }
 

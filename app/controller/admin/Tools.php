@@ -6,6 +6,7 @@ namespace app\controller\admin;
 use app\BaseController;
 use app\service\AuditLogger;
 use app\service\CsrfToken;
+use app\service\FrontendCache;
 use app\service\SearchIndexer;
 use app\service\SiteSettings;
 use app\service\SafeRemoteUrl;
@@ -20,7 +21,7 @@ use Throwable;
 
 final class Tools extends BaseController
 {
-    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly SiteSettings $settings, private readonly SafeRemoteUrl $safeUrl, private readonly ThemeRegistry $themes, private readonly SearchIndexer $searchIndexer) { parent::__construct($app); }
+    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly SiteSettings $settings, private readonly SafeRemoteUrl $safeUrl, private readonly ThemeRegistry $themes, private readonly SearchIndexer $searchIndexer, private readonly FrontendCache $frontendCache) { parent::__construct($app); }
 
     public function cache(): Response
     {
@@ -446,6 +447,7 @@ final class Tools extends BaseController
             $updated++;
         }
         $this->audit->record('tools.slug_generate', $type, 'batch', null, ['updated' => $updated]);
+        if ($updated > 0) $this->frontendCache->invalidateHome();
         return redirect('/admin/tools/batch?message=' . rawurlencode('链接别名生成完成，更新 ' . $updated . ' 条'));
     }
 
@@ -581,6 +583,7 @@ final class Tools extends BaseController
                 'matched' => count($rows), 'changed' => $changed,
                 'search_sha256' => hash('sha256', $search), 'replacement_sha256' => hash('sha256', $replacement),
             ]);
+            if ($changed > 0) $this->frontendCache->invalidateHome();
         }
         $message = $preview ? '预览完成：匹配 ' . count($rows) . ' 条，不会修改数据' : '替换完成：匹配 ' . count($rows) . ' 条，实际更新 ' . $changed . ' 条';
         return redirect('/admin/tools/replace?message=' . rawurlencode($message));

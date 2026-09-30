@@ -6,6 +6,7 @@ namespace app\controller\admin;
 use app\BaseController;
 use app\service\AuditLogger;
 use app\service\CsrfToken;
+use app\service\FrontendCache;
 use app\service\Slugger;
 use think\exception\HttpException;
 use think\facade\Db;
@@ -15,7 +16,7 @@ final class Categories extends BaseController
 {
     private const TYPES = ['media', 'article', 'topic', 'person', 'comment', 'page'];
 
-    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly Slugger $slugger)
+    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly Slugger $slugger, private readonly FrontendCache $frontendCache)
     {
         parent::__construct($app);
     }
@@ -58,6 +59,7 @@ final class Categories extends BaseController
         $data['updated_at'] = $data['created_at'];
         $id = Db::table('ffx_categories')->insertGetId($data);
         $this->audit->record('category.create', 'category', $id, null, $data);
+        $this->frontendCache->invalidateCategories();
         return redirect('/admin/categories/' . $id . '/edit');
     }
 
@@ -76,6 +78,7 @@ final class Categories extends BaseController
         $data['updated_at'] = gmdate('Y-m-d H:i:s');
         Db::table('ffx_categories')->where('id', $id)->update($data);
         $this->audit->record('category.update', 'category', $id, $before, $data);
+        $this->frontendCache->invalidateCategories();
         return redirect('/admin/categories/' . $id . '/edit');
     }
 
@@ -95,6 +98,8 @@ final class Categories extends BaseController
         $data = ['status' => 'archived', 'deleted_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s')];
         Db::table('ffx_categories')->where('id', $id)->update($data);
         $this->audit->record('category.archive', 'category', $id, $before, $data);
+        $this->frontendCache->invalidateCategories();
+        $this->frontendCache->invalidateCategories();
         return redirect('/admin/categories');
     }
 

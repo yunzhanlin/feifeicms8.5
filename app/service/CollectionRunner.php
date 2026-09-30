@@ -8,7 +8,7 @@ use Throwable;
 
 final class CollectionRunner
 {
-    public function __construct(private readonly CollectionHttpClient $http, private readonly EpisodeParser $episodeParser, private readonly CollectionCategoryMap $categoryMap, private readonly CollectionPayloadNormalizer $normalizer, private readonly CollectionSourceIdentity $sourceIdentity, private readonly SiteSettings $settings)
+    public function __construct(private readonly CollectionHttpClient $http, private readonly EpisodeParser $episodeParser, private readonly CollectionCategoryMap $categoryMap, private readonly CollectionPayloadNormalizer $normalizer, private readonly CollectionSourceIdentity $sourceIdentity, private readonly SiteSettings $settings, private readonly FrontendCache $frontendCache)
     {
     }
 
@@ -118,6 +118,7 @@ final class CollectionRunner
                 'error_count' => $totalErrors, 'finished_at' => $hasMore ? null : gmdate('Y-m-d H:i:s'),
                 'error_message' => $errorMessages === [] ? null : implode("\n", $errorMessages),
             ]);
+            if ($created + $updated > 0) $this->frontendCache->invalidateHome();
             return $result;
         } catch (Throwable $exception) {
             Db::table('ffx_collection_jobs')->where('id', $jobId)->update([
@@ -125,6 +126,7 @@ final class CollectionRunner
                 'updated_count' => $updated, 'error_count' => $errors + 1,
                 'error_message' => mb_substr($exception->getMessage(), 0, 2000), 'finished_at' => gmdate('Y-m-d H:i:s'),
             ]);
+            if ($created + $updated > 0) $this->frontendCache->invalidateHome();
             throw $exception;
         }
     }

@@ -12,6 +12,7 @@ use app\service\CollectionRunner;
 use app\service\CsrfToken;
 use app\service\CollectionSourceIdentity;
 use app\service\DoubanMetadata;
+use app\service\FrontendCache;
 use app\service\MediaMerge;
 use app\service\Slugger;
 use app\service\SiteSettings;
@@ -33,6 +34,7 @@ final class Vod extends BaseController
         private readonly CollectionRunner $collectionRunner,
         private readonly MediaMerge $mediaMerge,
         private readonly AdminVodQuery $vodQuery,
+        private readonly FrontendCache $frontendCache,
     )
     {
         parent::__construct($app);
@@ -147,6 +149,7 @@ final class Vod extends BaseController
             return $media;
         });
         $this->audit->record('media.create', 'media', (int) $media->id, null, $media->toArray());
+        $this->frontendCache->invalidateHome();
         return redirect('/admin/vod/' . $media->id . '/edit');
     }
 
@@ -210,6 +213,7 @@ final class Vod extends BaseController
             $this->syncLegacyPlayback($id);
         });
         $this->audit->record('media.update', 'media', $id, $before, $media->toArray());
+        $this->frontendCache->invalidateHome();
         return redirect('/admin/vod/' . $id . '/edit');
     }
 
@@ -225,6 +229,7 @@ final class Vod extends BaseController
         $before = $media->toArray();
         $media->save(['status' => 'archived', 'deleted_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s')]);
         $this->audit->record('media.archive', 'media', $id, $before, $media->toArray());
+        $this->frontendCache->invalidateHome();
         return redirect('/admin/vod');
     }
 
@@ -287,6 +292,7 @@ final class Vod extends BaseController
                 return response($exception->getMessage(), 422);
             }
             $this->audit->record('media.batch_merge', 'media', (int) $result['primary_id'], null, $result);
+            $this->frontendCache->invalidateHome();
             return redirect('/admin/vod?notice=' . rawurlencode('影片合并完成：主影片 #' . $result['primary_id'] . '，合并 ' . count($result['merged_ids']) . ' 条记录'));
         }
         $targetCategory = max(0, (int) $this->request->post('target_category_id', 0));
@@ -326,6 +332,7 @@ final class Vod extends BaseController
             $this->audit->record('media.batch_' . $action, 'media', $id, $before, $data);
         }
         $messages = ['publish' => '批量审核完成', 'draft' => '已取消审核', 'archive' => '批量归档完成', 'move' => '批量移动完成', 'series' => '系列设置完成', 'lock' => '批量锁定完成', 'unlock' => '批量解锁完成'];
+        $this->frontendCache->invalidateHome();
         return redirect('/admin/vod?notice=' . rawurlencode($messages[$action] ?? '批量操作完成'));
     }
 
@@ -351,6 +358,7 @@ final class Vod extends BaseController
         }
         $media->save($data);
         $this->audit->record('media.quick_' . $action, 'media', $id, $before, $data);
+        $this->frontendCache->invalidateHome();
         return json(['ok' => true, 'message' => '操作完成']);
     }
 
@@ -363,6 +371,7 @@ final class Vod extends BaseController
         $before = ['weight' => (int) $media->weight];
         $media->save(['weight' => $weight, 'updated_at' => gmdate('Y-m-d H:i:s')]);
         $this->audit->record('media.weight', 'media', $id, $before, ['weight' => $weight]);
+        $this->frontendCache->invalidateHome();
         return json(['ok' => true, 'message' => '权重已更新', 'data' => ['weight' => $weight]]);
     }
 

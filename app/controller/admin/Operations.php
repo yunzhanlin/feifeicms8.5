@@ -6,6 +6,7 @@ namespace app\controller\admin;
 use app\BaseController;
 use app\service\AuditLogger;
 use app\service\CsrfToken;
+use app\service\FrontendCache;
 use think\exception\HttpException;
 use think\facade\Db;
 use think\Response;
@@ -20,7 +21,7 @@ final class Operations extends BaseController
         'ads' => ['table' => 'ffx_ads', 'label' => '广告位', 'title' => 'name'],
     ];
 
-    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit)
+    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly FrontendCache $frontendCache)
     {
         parent::__construct($app);
     }
@@ -62,6 +63,7 @@ final class Operations extends BaseController
         }
         $id = Db::table($def['table'])->insertGetId($data);
         $this->audit->record('operations.create', $type, $id, null, $data);
+        $this->invalidateFrontend($type);
         return redirect('/admin/operations/' . $type . '/' . $id . '/edit');
     }
 
@@ -82,6 +84,7 @@ final class Operations extends BaseController
         }
         Db::table($def['table'])->where('id', $id)->update($data);
         $this->audit->record('operations.update', $type, $id, $before, $data);
+        $this->invalidateFrontend($type);
         return redirect('/admin/operations/' . $type . '/' . $id . '/edit');
     }
 
@@ -92,6 +95,7 @@ final class Operations extends BaseController
         $before = $this->requireItem($def['table'], $id);
         Db::table($def['table'])->where('id', $id)->delete();
         $this->audit->record('operations.delete', $type, $id, $before, null);
+        $this->invalidateFrontend($type);
         return redirect('/admin/operations/' . $type);
     }
 
@@ -108,6 +112,7 @@ final class Operations extends BaseController
                 if ((int) $id > 0 && $type !== 'ads') Db::table($def['table'])->where('id', (int) $id)->update(['sort_order' => (int) $order]);
             }
             $this->audit->record('operations.sort', $type, '', null, ['sort' => $sort]);
+            $this->invalidateFrontend($type);
             return redirect('/admin/operations/' . $type);
         }
         if ($ids === []) return response('请选择记录', 422);
@@ -123,7 +128,15 @@ final class Operations extends BaseController
             Db::table($def['table'])->whereIn('id', $ids)->update($after);
         }
         $this->audit->record('operations.batch.' . $action, $type, implode(',', $ids), $before, $after);
+        $this->invalidateFrontend($type);
         return redirect('/admin/operations/' . $type);
+    }
+
+    private function invalidateFrontend(string $type): void
+    {
+        if (in_array($type, ['slides', 'links', 'navigation', 'ads'], true)) {
+            $this->frontendCache->invalidateShared();
+        }
     }
 
     private function form(string $type, ?array $item): Response
