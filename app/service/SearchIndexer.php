@@ -8,17 +8,14 @@ use Meilisearch\Client;
 
 final class SearchIndexer
 {
-    public function __construct(private readonly SiteSettings $siteSettings)
+    public function __construct(private readonly MeilisearchClientFactory $searchClient)
     {
     }
 
     public function sync(int $batchSize = 500): int
     {
-        $defaults = (array) config('feifei.search.meilisearch');
-        $host = $this->siteSettings->string('admin.cache.search_host', (string) ($defaults['host'] ?? 'http://127.0.0.1:7700'));
-        $key = $this->siteSettings->string('admin.cache.search_key', (string) ($defaults['key'] ?? ''));
-        $indexName = $this->siteSettings->string('admin.cache.search_index', (string) ($defaults['index'] ?? 'vod'));
-        $client = new Client($host, $key);
+        $client = $this->searchClient->client();
+        $indexName = $this->searchClient->index();
         $index = $client->index($indexName);
         $this->waitForTask($client, $index->updateSearchableAttributes(['title', 'original_title', 'subtitle', 'summary', 'content', 'area', 'language']));
         $this->waitForTask($client, $index->updateFilterableAttributes(['status', 'category_id', 'release_year', 'media_type']));

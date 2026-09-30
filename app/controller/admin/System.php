@@ -6,9 +6,9 @@ namespace app\controller\admin;
 use app\BaseController;
 use app\service\AuditLogger;
 use app\service\CsrfToken;
+use app\service\MeilisearchClientFactory;
 use app\service\SearchIndexer;
 use app\service\SiteSettings;
-use Meilisearch\Client;
 use think\exception\HttpException;
 use think\facade\Cache;
 use think\facade\Db;
@@ -17,7 +17,7 @@ use Throwable;
 
 final class System extends BaseController
 {
-    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly SearchIndexer $indexer, private readonly SiteSettings $settings)
+    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly SearchIndexer $indexer, private readonly SiteSettings $settings, private readonly MeilisearchClientFactory $searchClient)
     {
         parent::__construct($app);
     }
@@ -35,11 +35,7 @@ final class System extends BaseController
         $search = ['ok' => true, 'driver' => $this->settings->string('admin.cache.search_driver', (string) config('feifei.search.driver'))];
         if ($search['driver'] === 'meilisearch') {
             try {
-                $defaults = (array) config('feifei.search.meilisearch');
-                $health = (new Client(
-                    $this->settings->string('admin.cache.search_host', (string) ($defaults['host'] ?? 'http://127.0.0.1:7700')),
-                    $this->settings->string('admin.cache.search_key', (string) ($defaults['key'] ?? ''))
-                ))->health();
+                $health = $this->searchClient->client()->health();
                 $search['ok'] = ($health['status'] ?? null) === 'available';
             } catch (Throwable $exception) {
                 $search = ['ok' => false, 'driver' => 'meilisearch', 'error' => $exception->getMessage()];
@@ -67,7 +63,7 @@ final class System extends BaseController
     {
         $this->guardCsrf();
         $count = $this->indexer->sync();
-        $indexName = $this->settings->string('admin.cache.search_index', (string) config('feifei.search.meilisearch.index'));
+        $indexName = $this->searchClient->index();
         Db::table('ffx_search_state')->where('index_name', $indexName)->delete();
         Db::table('ffx_search_state')->insert([
             'index_name' => $indexName, 'indexed_count' => $count,

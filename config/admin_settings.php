@@ -248,9 +248,9 @@ return [
             '搜索' => [
                 'search_driver' => $field('搜索驱动', 'select', 'mysql', ['mysql' => 'MySQL', 'meilisearch' => 'Meilisearch（推荐，替代 Xunsearch）']),
                 'search_fallback' => $field('搜索故障回退', 'select', 'mysql', ['mysql' => 'MySQL', 'none' => '不回退']),
-                'search_host' => $field('搜索服务地址', 'url', ''),
-                'search_index' => $field('索引名称', 'text', 'vod'),
-                'search_key' => $field('搜索服务密钥', 'password', '', secret: true),
+                'search_host' => $field('搜索服务地址', 'url', (string) config('feifei.search.meilisearch.host', 'http://127.0.0.1:7700')),
+                'search_index' => $field('索引名称', 'text', (string) config('feifei.search.meilisearch.index', 'feifeicms_media')),
+                'search_key' => $field('搜索服务密钥', 'password', (string) config('feifei.search.meilisearch.key', ''), secret: true),
             ],
         ],
     ],

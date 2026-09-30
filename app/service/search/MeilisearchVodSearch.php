@@ -4,22 +4,18 @@ declare(strict_types=1);
 namespace app\service\search;
 
 use app\model\Media;
-use app\service\SiteSettings;
-use Meilisearch\Client;
+use app\service\MeilisearchClientFactory;
 
 final class MeilisearchVodSearch implements VodSearchDriver
 {
-    public function __construct(private readonly SiteSettings $settings)
+    public function __construct(private readonly MeilisearchClientFactory $searchClient)
     {
     }
 
     public function search(string $keyword, int $page, int $pageSize): SearchResult
     {
-        $defaults = (array) config('feifei.search.meilisearch');
-        $host = $this->settings->string('admin.cache.search_host', (string) ($defaults['host'] ?? 'http://127.0.0.1:7700'));
-        $key = $this->settings->string('admin.cache.search_key', (string) ($defaults['key'] ?? ''));
-        $indexName = $this->settings->string('admin.cache.search_index', (string) ($defaults['index'] ?? 'vod'));
-        $client = new Client($host, $key);
+        $client = $this->searchClient->client();
+        $indexName = $this->searchClient->index();
         $raw = $client->index($indexName)->search($keyword, [
             'offset' => ($page - 1) * $pageSize,
             'limit' => $pageSize,

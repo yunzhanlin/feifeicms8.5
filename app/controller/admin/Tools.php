@@ -7,12 +7,12 @@ use app\BaseController;
 use app\service\AuditLogger;
 use app\service\CsrfToken;
 use app\service\FrontendCache;
+use app\service\MeilisearchClientFactory;
 use app\service\SearchIndexer;
 use app\service\SiteSettings;
 use app\service\SafeRemoteUrl;
 use app\service\ThemeRegistry;
 use GuzzleHttp\Client;
-use Meilisearch\Client as MeilisearchClient;
 use think\exception\HttpException;
 use think\facade\Cache;
 use think\facade\Db;
@@ -21,7 +21,7 @@ use Throwable;
 
 final class Tools extends BaseController
 {
-    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly SiteSettings $settings, private readonly SafeRemoteUrl $safeUrl, private readonly ThemeRegistry $themes, private readonly SearchIndexer $searchIndexer, private readonly FrontendCache $frontendCache) { parent::__construct($app); }
+    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly SiteSettings $settings, private readonly SafeRemoteUrl $safeUrl, private readonly ThemeRegistry $themes, private readonly SearchIndexer $searchIndexer, private readonly FrontendCache $frontendCache, private readonly MeilisearchClientFactory $searchClient) { parent::__construct($app); }
 
     public function cache(): Response
     {
@@ -69,7 +69,7 @@ final class Tools extends BaseController
         }
         try {
             $count = $this->searchIndexer->sync();
-            $indexName = $this->settings->string('admin.cache.search_index', (string) config('feifei.search.meilisearch.index'));
+            $indexName = $this->searchClient->index();
             $now = gmdate('Y-m-d H:i:s');
             Db::transaction(function () use ($indexName, $count, $now): void {
                 Db::table('ffx_search_state')->where('index_name', $indexName)->delete();
@@ -826,8 +826,7 @@ final class Tools extends BaseController
     private function searchStats(): array
     {
         $driver = $this->settings->string('admin.cache.search_driver', (string) config('feifei.search.driver', 'mysql'));
-        $defaults = (array) config('feifei.search.meilisearch');
-        $indexName = $this->settings->string('admin.cache.search_index', (string) ($defaults['index'] ?? 'feifeicms_media'));
+        $indexName = $this->searchClient->index();
         $published = (int) Db::table('ffx_media')->where('status', 'published')->whereNull('deleted_at')->count();
         $state = Db::table('ffx_search_state')->where('index_name', $indexName)->find();
         $search = [
@@ -840,10 +839,7 @@ final class Tools extends BaseController
             return $search;
         }
         try {
-            $client = new MeilisearchClient(
-                $this->settings->string('admin.cache.search_host', (string) ($defaults['host'] ?? 'http://127.0.0.1:7700')),
-                $this->settings->string('admin.cache.search_key', (string) ($defaults['key'] ?? ''))
-            );
+            $client = $this->searchClient->client();
             $health = $client->health();
             $stats = $client->index($indexName)->stats();
             $search['ok'] = ($health['status'] ?? null) === 'available';

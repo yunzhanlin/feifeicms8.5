@@ -5,8 +5,8 @@ namespace app\controller;
 
 use app\BaseController;
 use app\service\ResilientCache;
+use app\service\MeilisearchClientFactory;
 use app\service\SiteSettings;
-use Meilisearch\Client;
 use think\facade\Cache;
 use think\facade\Db;
 use think\facade\Log;
@@ -15,7 +15,7 @@ use Throwable;
 
 final class Health extends BaseController
 {
-    public function __construct(\think\App $app, private readonly SiteSettings $settings, private readonly ResilientCache $cache)
+    public function __construct(\think\App $app, private readonly SiteSettings $settings, private readonly ResilientCache $cache, private readonly MeilisearchClientFactory $searchClient)
     {
         parent::__construct($app);
     }
@@ -64,11 +64,7 @@ final class Health extends BaseController
             return ['ok' => true, 'driver' => 'mysql', 'optional' => true];
         }
         try {
-            $defaults = (array) config('feifei.search.meilisearch');
-            $health = (new Client(
-                $this->settings->string('admin.cache.search_host', (string) ($defaults['host'] ?? 'http://127.0.0.1:7700')),
-                $this->settings->string('admin.cache.search_key', (string) ($defaults['key'] ?? ''))
-            ))->health();
+            $health = $this->searchClient->client()->health();
             return ['ok' => ($health['status'] ?? null) === 'available', 'driver' => $driver, 'optional' => true];
         } catch (Throwable $exception) {
             Log::warning('健康检查搜索服务失败', ['driver' => $driver, 'exception' => $exception->getMessage()]);

@@ -41,6 +41,12 @@ final class Settings extends BaseController
                 }
                 $decoded = is_string($stored) ? json_decode($stored, true) : $stored;
                 $value = is_scalar($decoded) ? (string) $decoded : (string) $field['default'];
+                // An empty search endpoint means "use the .env/config value";
+                // show that effective value in the panel instead of presenting
+                // a blank field that later becomes an invalid SDK URI.
+                if ($section === 'cache' && $key === 'search_host' && trim($value) === '') {
+                    $value = (string) $field['default'];
+                }
                 if ($section === 'rewrite' && $key === 'url_html_suffix' && $value !== '' && !str_starts_with($value, '.')) $value = '.' . $value;
                 $values[$key] = !empty($field['secret']) && $value !== '' ? '••••••••' : $value;
             }

@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace app\command;
 
-use Meilisearch\Client;
+use app\service\MeilisearchClientFactory;
 use think\console\Command;
 use think\console\Input;
 use think\console\Output;
@@ -72,8 +72,9 @@ final class Doctor extends Command
             $output->writeln('[OK] search ' . $searchDriver);
         } else {
             try {
-                $settings = config('feifei.search.meilisearch');
-                $health = (new Client((string) $settings['host'], (string) $settings['key']))->health();
+                /** @var MeilisearchClientFactory $factory */
+                $factory = $this->app->make(MeilisearchClientFactory::class);
+                $health = $factory->client()->health();
                 $output->writeln(($health['status'] ?? null) === 'available' ? '[OK] search meilisearch' : '[WARN] search unavailable');
             } catch (Throwable $exception) {
                 $output->writeln('[WARN] search unavailable; MySQL fallback remains active: ' . $exception->getMessage());
