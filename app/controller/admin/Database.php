@@ -6,13 +6,14 @@ namespace app\controller\admin;
 use app\BaseController;
 use app\service\AuditLogger;
 use app\service\CsrfToken;
+use app\service\SqlStatementStream;
 use think\exception\HttpException;
 use think\facade\Db;
 use think\Response;
 
 final class Database extends BaseController
 {
-    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit)
+    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly SqlStatementStream $sql)
     {
         parent::__construct($app);
     }
@@ -42,24 +43,42 @@ final class Database extends BaseController
         $path = $this->backupDir() . '/' . $filename;
         $handle = fopen($path, 'wb');
         if ($handle === false) throw new HttpException(500, '无法创建备份文件');
-        fwrite($handle, "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n\n");
-        $pdo = Db::connect()->getPdo();
-        foreach ($tables as $table) {
-            $createRows = Db::query('SHOW CREATE TABLE `' . $table . '`');
-            $create = (string) ($createRows[0]['Create Table'] ?? '');
-            fwrite($handle, 'DROP TABLE IF EXISTS `' . $table . "`;\n" . $create . ";\n\n");
-            foreach (Db::query('SELECT * FROM `' . $table . '`') as $row) {
-                $columns = array_map(static fn (string $column): string => '`' . str_replace('`', '``', $column) . '`', array_keys($row));
-                $values = array_map(static function (mixed $value) use ($pdo): string {
-                    if ($value === null) return 'NULL';
-                    return $pdo->quote((string) $value);
-                }, array_values($row));
-                fwrite($handle, 'INSERT INTO `' . $table . '` (' . implode(',', $columns) . ') VALUES (' . implode(',', $values) . ");\n");
+        $complete = false;
+        try {
+            $this->writeAll($handle, "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n\n");
+            $pdo = Db::connect()->getPdo();
+            $bufferedQueryAttribute = $this->mysqlBufferedQueryAttribute();
+            $pdo->setAttribute($bufferedQueryAttribute, false);
+            try {
+                foreach ($tables as $table) {
+                    $createStatement = $pdo->query('SHOW CREATE TABLE `' . $table . '`');
+                    $createRow = $createStatement !== false ? ($createStatement->fetch(\PDO::FETCH_ASSOC) ?: []) : [];
+                    if ($createStatement !== false) $createStatement->closeCursor();
+                    $create = (string) ($createRow['Create Table'] ?? '');
+                    if ($create === '') throw new HttpException(500, '无法读取数据表结构：' . $table);
+                    $this->writeAll($handle, 'DROP TABLE IF EXISTS `' . $table . "`;\n" . $create . ";\n\n");
+                    $rows = $pdo->query('SELECT * FROM `' . $table . '`', \PDO::FETCH_ASSOC);
+                    while ($rows !== false && ($row = $rows->fetch(\PDO::FETCH_ASSOC)) !== false) {
+                        $columns = array_map(static fn (string $column): string => '`' . str_replace('`', '``', $column) . '`', array_keys($row));
+                        $values = array_map(static function (mixed $value) use ($pdo): string {
+                            if ($value === null) return 'NULL';
+                            return $pdo->quote((string) $value);
+                        }, array_values($row));
+                        $this->writeAll($handle, 'INSERT INTO `' . $table . '` (' . implode(',', $columns) . ') VALUES (' . implode(',', $values) . ");\n");
+                    }
+                    if ($rows !== false) $rows->closeCursor();
+                    $this->writeAll($handle, "\n");
+                }
+            } finally {
+                $pdo->setAttribute($bufferedQueryAttribute, true);
             }
-            fwrite($handle, "\n");
+            $this->writeAll($handle, "SET FOREIGN_KEY_CHECKS=1;\n");
+            if (!fflush($handle)) throw new HttpException(500, '无法写完备份文件');
+            $complete = true;
+        } finally {
+            fclose($handle);
+            if (!$complete) @unlink($path);
         }
-        fwrite($handle, "SET FOREIGN_KEY_CHECKS=1;\n");
-        fclose($handle);
         chmod($path, 0600);
         $this->audit->record('database.backup', 'database', $filename, null, ['tables' => $tables, 'bytes' => filesize($path)]);
         return redirect('/admin/database#backups');
@@ -121,15 +140,14 @@ final class Database extends BaseController
         $path = $this->backupPath($name);
         $size = filesize($path);
         if ($size === false || $size < 1 || $size > 134_217_728) throw new HttpException(422, '备份文件大小异常');
-        $sql = file_get_contents($path);
-        if ($sql === false) throw new HttpException(500, '无法读取备份文件');
-        $statements = $this->splitSql($sql);
-        if ($statements === []) throw new HttpException(422, '备份文件为空');
-        foreach ($statements as $statement) {
+        $statementCount = 0;
+        foreach ($this->sql->fromFile($path, true) as $statement) {
             if (!$this->isAllowedBackupStatement($statement)) throw new HttpException(422, '备份包含不允许执行的语句');
+            $statementCount++;
         }
-        foreach ($statements as $statement) Db::execute($statement);
-        $this->audit->record('database.restore', 'database', $name, null, ['statements' => count($statements), 'bytes' => $size]);
+        if ($statementCount === 0) throw new HttpException(422, '备份文件为空');
+        foreach ($this->sql->fromFile($path, true) as $statement) Db::execute($statement);
+        $this->audit->record('database.restore', 'database', $name, null, ['statements' => $statementCount, 'bytes' => $size]);
         return redirect('/admin/database#backups');
     }
 
@@ -171,47 +189,6 @@ final class Database extends BaseController
         return $path;
     }
 
-    /** @return list<string> */
-    private function splitSql(string $sql): array
-    {
-        $statements = [];
-        $buffer = '';
-        $quote = null;
-        $escaped = false;
-        $length = strlen($sql);
-        for ($index = 0; $index < $length; $index++) {
-            $character = $sql[$index];
-            $buffer .= $character;
-            if ($escaped) {
-                $escaped = false;
-                continue;
-            }
-            if ($quote !== null && $character === '\\') {
-                $escaped = true;
-                continue;
-            }
-            if ($quote !== null && $character === $quote) {
-                if ($index + 1 < $length && $sql[$index + 1] === $quote) {
-                    $buffer .= $sql[++$index];
-                    continue;
-                }
-                $quote = null;
-                continue;
-            }
-            if ($quote === null && ($character === "'" || $character === '"' || $character === '`')) {
-                $quote = $character;
-                continue;
-            }
-            if ($quote === null && $character === ';') {
-                $statement = trim(substr($buffer, 0, -1));
-                if ($statement !== '') $statements[] = $statement;
-                $buffer = '';
-            }
-        }
-        if (trim($buffer) !== '') throw new HttpException(422, '备份 SQL 不完整');
-        return $statements;
-    }
-
     private function isAllowedBackupStatement(string $statement): bool
     {
         return preg_match('/^SET\s+NAMES\s+utf8mb4$/i', $statement) === 1
@@ -219,6 +196,28 @@ final class Database extends BaseController
             || preg_match('/^DROP\s+TABLE\s+IF\s+EXISTS\s+`ffx_[a-z0-9_]+`$/i', $statement) === 1
             || preg_match('/^CREATE\s+TABLE\s+`ffx_[a-z0-9_]+`\s*\(/is', $statement) === 1
             || preg_match('/^INSERT\s+INTO\s+`ffx_[a-z0-9_]+`\s*\(/is', $statement) === 1;
+    }
+
+    /** @param resource $handle */
+    private function writeAll($handle, string $contents): void
+    {
+        $length = strlen($contents);
+        $written = 0;
+        while ($written < $length) {
+            $bytes = fwrite($handle, substr($contents, $written));
+            if ($bytes === false || $bytes === 0) throw new HttpException(500, '备份文件写入失败');
+            $written += $bytes;
+        }
+    }
+
+    private function mysqlBufferedQueryAttribute(): int
+    {
+        $constant = class_exists('Pdo\\Mysql')
+            ? 'Pdo\\Mysql::ATTR_USE_BUFFERED_QUERY'
+            : 'PDO::MYSQL_ATTR_USE_BUFFERED_QUERY';
+        $value = constant($constant);
+        if (!is_int($value)) throw new HttpException(500, '当前 PDO MySQL 驱动不支持流式备份');
+        return $value;
     }
 
     private function guardCsrf(): void
