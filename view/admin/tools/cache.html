@@ -1,11 +1,21 @@
 {include file="admin/layout/header" /}
 <div class="title"><div class="tabs"><a class="active" href="/admin/tools/cache">缓存状态统计</a><a href="/admin/tools/cache">刷新统计</a></div></div>
-{if !empty($message)}<div class="notice success">{$message|htmlspecialchars|raw}</div>{/if}
+{if !empty($message)}<div class="notice {$messageType|htmlspecialchars|raw}">{$message|htmlspecialchars|raw}</div>{/if}
 <div class="table-wrap"><table class="data-table legacy-tool-table"><tbody>
 <tr><th>数据缓存：</th><td>{if $cache.ok}<strong class="text-success">正常</strong>{else /}<strong class="text-danger">异常</strong>{/if} &nbsp; 驱动：{$cache.driver|htmlspecialchars|raw}{if $cache.keys !== null}，键数量：{$cache.keys}，占用内存：{$cache.memory|htmlspecialchars|raw}，峰值：{$cache.peak|htmlspecialchars|raw}{/if}{if !empty($cache.error)}<br><span class="text-danger">{$cache.error|htmlspecialchars|raw}</span>{/if}</td></tr>
 <tr><th>编译与模板缓存：</th><td>{$templateStats.files} 个文件，{$templateStats.size}</td></tr>
 <tr><th>数据文件缓存：</th><td>{$dataStats.files} 个文件，{$dataStats.size}</td></tr>
 <tr><th>页面生成文件：</th><td>{$pageStats.files} 个文件，{$pageStats.size}</td></tr>
+</tbody></table></div>
+
+<div class="title"><div class="tabs"><span>前台搜索索引</span></div></div>
+<div class="table-wrap"><table class="data-table legacy-tool-table"><tbody>
+<tr><th>搜索驱动：</th><td>{$search.driver|htmlspecialchars|raw}{if $search.driver == 'meilisearch'} · 索引 {$search.index|htmlspecialchars|raw}{/if}</td></tr>
+<tr><th>搜索状态：</th><td>{if $search.ok}<strong class="text-success">正常</strong>{else /}<strong class="text-danger">异常</strong>{/if}{if $search.error != ''} <span class="text-danger">{$search.error|htmlspecialchars|raw}</span>{/if}</td></tr>
+<tr><th>已审核视频：</th><td>{$search.published} 部</td></tr>
+<tr><th>索引文档：</th><td>{$search.indexed} 部{if $search.driver == 'meilisearch' && $search.indexed != $search.published} <strong class="text-danger">与数据库不一致，请同步</strong>{/if}</td></tr>
+<tr><th>上次同步：</th><td>{if $search.last_success_at != ''}{$search.last_success_at|htmlspecialchars|raw}{else /}尚未在后台执行过{/if}</td></tr>
+<tr><th>索引操作：</th><td>{if $search.driver == 'meilisearch'}<form class="inline-action" method="post" action="/admin/tools/search/rebuild" data-confirm="确定从已审核视频全量同步并重建前台搜索索引？"><input type="hidden" name="_token" value="{$csrf|htmlspecialchars|raw}"><button type="submit">立即全量同步</button></form> <span class="tool-inline-help">同步后前台搜索立即生效；索引未同步时程序会自动用 MySQL 兜底。</span>{else /}<span class="text-success">MySQL 搜索直接读取已审核视频，无需手动同步。</span>{/if}</td></tr>
 </tbody></table></div>
 
 <div class="title"><div class="tabs"><span>数据缓存管理</span></div></div>

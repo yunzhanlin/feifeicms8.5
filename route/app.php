@@ -128,6 +128,8 @@ Route::group('admin', function (): void {
     Route::get('scenarios', 'admin.Scenarios/index');
     Route::get('scenarios/create', 'admin.Scenarios/create');
     Route::post('scenarios', 'admin.Scenarios/store');
+    Route::get('scenarios/media/:mediaId', 'admin.Scenarios/manage')->pattern(['mediaId' => '\\d+']);
+    Route::post('scenarios/media/:mediaId', 'admin.Scenarios/saveMedia')->pattern(['mediaId' => '\\d+']);
     Route::get('scenarios/:id/edit', 'admin.Scenarios/edit')->pattern(['id' => '\\d+']);
     Route::post('scenarios/:id', 'admin.Scenarios/update')->pattern(['id' => '\\d+']);
     Route::post('scenarios/:id/delete', 'admin.Scenarios/delete')->pattern(['id' => '\\d+']);
@@ -193,6 +195,7 @@ Route::group('admin', function (): void {
 
     Route::get('tools/cache', 'admin.Tools/cache');
     Route::post('tools/cache/clear', 'admin.Tools/clearToolCache');
+    Route::post('tools/search/rebuild', 'admin.Tools/rebuildSearch');
     Route::get('tools/version', 'admin.Tools/version');
     Route::post('tools/version/check', 'admin.Tools/checkVersion');
     Route::get('tools/templates', 'admin.Tools/templates');

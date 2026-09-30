@@ -33,7 +33,11 @@ final class SearchIndexer
             ->where('status', 'published')->whereNull('deleted_at')
             ->order('id')
             ->chunk($batchSize, function ($rows) use ($client, $index, &$count): void {
-                $documents = $rows->toArray();
+                // Model collections preserve the database chunk's original numeric
+                // offsets. The second and later chunks would therefore JSON-encode
+                // as an object instead of a document list, which Meilisearch rejects
+                // as "missing_document_id". Always submit a dense JSON array.
+                $documents = array_values($rows->toArray());
                 if ($documents !== []) {
                     $this->waitForTask($client, $index->addDocuments($documents, 'id'));
                     $count += count($documents);

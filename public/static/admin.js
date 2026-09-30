@@ -606,6 +606,64 @@
         reset?.addEventListener('click', () => { setRunning(false); if (page instanceof HTMLInputElement) page.value = '1'; if (state) state.textContent = '页码已重置'; });
     });
 
+    document.querySelectorAll('[data-scenario-batch-form]').forEach((form) => {
+        const body = form.querySelector('[data-scenario-rows]');
+        const payload = form.querySelector('[data-scenario-rows-json]');
+        const status = form.querySelector('[data-scenario-batch-status]');
+        let newRowSequence = 0;
+        const rows = () => Array.from(form.querySelectorAll('[data-scenario-row]'));
+        const field = (row, name) => row.querySelector(`[data-scenario-field="${name}"]`);
+        const nextEpisode = () => Math.max(0, ...rows().map((row) => Number(field(row, 'episode_no')?.value || 0))) + 1;
+        const setStatus = (message) => { if (status) status.textContent = message; };
+        const syncDeletedState = (row) => {
+            const deleted = field(row, 'delete');
+            row.classList.toggle('scenario-row-deleted', deleted instanceof HTMLInputElement && deleted.checked);
+        };
+        const addRow = () => {
+            if (!body) return;
+            const episode = nextEpisode();
+            const key = `new-${Date.now()}-${newRowSequence++}`;
+            const row = document.createElement('tr');
+            row.setAttribute('data-scenario-row', '');
+            row.innerHTML = `<td><span>新</span><input type="hidden" name="rows[${key}][id]" value="0" data-scenario-field="id"></td><td><input class="scenario-episode-input" type="number" min="1" max="100000" name="rows[${key}][episode_no]" value="${episode}" data-scenario-field="episode_no" required></td><td><input class="scenario-title-input" type="text" maxlength="255" name="rows[${key}][title]" value="第${episode}集" data-scenario-field="title" placeholder="留空自动生成"></td><td><textarea class="scenario-inline-content" name="rows[${key}][content]" data-scenario-field="content" required></textarea></td><td><input class="scenario-source-input" type="text" maxlength="500" name="rows[${key}][source_ref]" value="" data-scenario-field="source_ref"></td><td><input class="scenario-sort-input" type="number" name="rows[${key}][sort_order]" value="0" data-scenario-field="sort_order"></td><td><select name="rows[${key}][status]" data-scenario-field="status"><option value="published">显示</option><option value="draft">隐藏</option></select></td><td><label class="scenario-delete-choice"><input type="checkbox" name="rows[${key}][delete]" value="1" data-scenario-field="delete"><span>删除</span></label></td>`;
+            body.appendChild(row);
+            field(row, 'content')?.focus();
+            setStatus(`已添加第${episode}集，保存后入库`);
+        };
+        form.querySelector('[data-scenario-add-row]')?.addEventListener('click', addRow);
+        form.querySelector('[data-scenario-publish-all]')?.addEventListener('click', () => {
+            rows().forEach((row) => { const control = field(row, 'status'); if (control instanceof HTMLSelectElement) control.value = 'published'; });
+            setStatus('已将全部剧情设为显示，请保存');
+        });
+        form.querySelector('[data-scenario-draft-all]')?.addEventListener('click', () => {
+            rows().forEach((row) => { const control = field(row, 'status'); if (control instanceof HTMLSelectElement) control.value = 'draft'; });
+            setStatus('已将全部剧情设为隐藏，请保存');
+        });
+        form.addEventListener('change', (event) => {
+            const target = event.target instanceof Element ? event.target.closest('[data-scenario-field="delete"]') : null;
+            if (target) syncDeletedState(target.closest('[data-scenario-row]'));
+        });
+        form.addEventListener('submit', (event) => {
+            const serialized = rows().map((row) => ({
+                id: Number(field(row, 'id')?.value || 0),
+                episode_no: Number(field(row, 'episode_no')?.value || 1),
+                title: field(row, 'title')?.value || '',
+                content: field(row, 'content')?.value || '',
+                source_ref: field(row, 'source_ref')?.value || '',
+                sort_order: Number(field(row, 'sort_order')?.value || 0),
+                status: field(row, 'status')?.value || 'draft',
+                delete: Boolean(field(row, 'delete')?.checked),
+            }));
+            if (serialized.some((row) => row.delete) && !window.confirm('已勾选的分集将被删除，确定保存？')) {
+                event.preventDefault();
+                return;
+            }
+            if (payload instanceof HTMLInputElement) payload.value = JSON.stringify(serialized);
+            setStatus('正在保存全部剧情…');
+        });
+        rows().forEach(syncDeletedState);
+    });
+
     document.querySelectorAll('[data-collection-resource-type]').forEach((group) => {
         const form = group.closest('form');
         if (!(form instanceof HTMLFormElement)) return;
