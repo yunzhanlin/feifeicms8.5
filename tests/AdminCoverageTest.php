@@ -66,8 +66,8 @@ final class AdminCoverageTest extends TestCase
         self::assertStringContainsString('scrollbar-gutter: stable', $css);
         self::assertStringContainsString('.editor-form { display: flow-root;', $css);
         self::assertStringContainsString('overflow: visible', $css);
-        self::assertStringContainsString('/static/admin.css?v=38', $header);
-        self::assertStringContainsString('/static/admin.js?v=30', $header);
+        self::assertStringContainsString('/static/admin.css?v=39', $header);
+        self::assertStringContainsString('/static/admin.js?v=31', $header);
         self::assertStringContainsString("cell.textContent = '暂无数据'", $script);
         self::assertStringContainsString("已发布", $script);
         self::assertStringContainsString('data-editor-tabs', (string) file_get_contents(dirname(__DIR__) . '/view/admin/vod/edit.html'));
@@ -84,7 +84,7 @@ final class AdminCoverageTest extends TestCase
     public function testCollectionConsoleKeepsTheFeifei74ListStructure(): void
     {
         $list = (string) file_get_contents(dirname(__DIR__) . '/view/admin/collections/index.html');
-        foreach (['API资源站（视频）列表', '添加资源库', '分类转换', '采集当天', '采集本周', '采集所有', '修改', '删除', '[新增显示]', '[新增隐藏]'] as $label) {
+        foreach (['API资源站（{$resourceLabel}）列表', '添加{$resourceLabel}资源库', '分类转换', '剧情采集', '采集当天', '采集本周', '采集所有', '修改', '删除', '[新增显示]', '[新增隐藏]'] as $label) {
             self::assertStringContainsString($label, $list);
         }
         foreach (['资源库管理', '资源库名称', '资源库地址', '最近采集记录', '类型</th>', '状态</th>'] as $modernLabel) {
@@ -101,9 +101,11 @@ final class AdminCoverageTest extends TestCase
         self::assertStringContainsString("post('partial', '') === '1'", (string) file_get_contents(dirname(__DIR__) . '/app/controller/admin/Collections.php'));
         self::assertStringContainsString("['t', 'h', 'wd', 'ids', 'play']", (string) file_get_contents(dirname(__DIR__) . '/app/service/CollectionPayloadNormalizer.php'));
         $sourceForm = (string) file_get_contents(dirname(__DIR__) . '/view/admin/collections/edit.html');
-        foreach (['视频新增数据', '新增并显示', '新增但隐藏（待审核）', '只更新，不新增', 'name="new_data_policy"'] as $marker) {
+        foreach (['name="resource_type" value="scenario"', '关联视频资源库', 'name="media_source_id"', '视频新增数据', '新增并显示', '新增但隐藏（待审核）', '只更新，不新增', 'name="new_data_policy"'] as $marker) {
             self::assertStringContainsString($marker, $sourceForm);
         }
+        self::assertStringContainsString('/admin/collections?type=scenario', (string) file_get_contents(dirname(__DIR__) . '/view/admin/layout/header.html'));
+        self::assertStringContainsString('data-collection-resource-type', (string) file_get_contents(dirname(__DIR__) . '/public/static/admin.js'));
         self::assertStringContainsString("newDataPolicy === 'update_only'", (string) file_get_contents(dirname(__DIR__) . '/app/service/CollectionRunner.php'));
         self::assertStringContainsString('new_data_policy VARCHAR(20)', (string) file_get_contents(dirname(__DIR__) . '/database/schema.sql'));
     }

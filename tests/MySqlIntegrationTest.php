@@ -63,4 +63,25 @@ final class MySqlIntegrationTest extends TestCase
             $this->pdo->prepare('DELETE FROM ffx_collection_sources WHERE id=?')->execute([$sourceId]);
         }
     }
+
+    public function testVideoAndScenarioSourcesCanShareEndpointAndStayLinked(): void
+    {
+        self::assertNotNull($this->pdo);
+        $suffix = bin2hex(random_bytes(8));
+        $endpoint = 'https://example.test/shared-' . $suffix;
+        $insert = $this->pdo->prepare('INSERT INTO ffx_collection_sources (name,endpoint,source_type,resource_type,media_source_id,status) VALUES (?,?,?,?,?,?)');
+        $videoId = $scenarioId = 0;
+        try {
+            $insert->execute(['video-' . $suffix, $endpoint, 'feifei_json', 'video', null, 'enabled']);
+            $videoId = (int) $this->pdo->lastInsertId();
+            $insert->execute(['scenario-' . $suffix, $endpoint, 'feifei_json', 'scenario', $videoId, 'enabled']);
+            $scenarioId = (int) $this->pdo->lastInsertId();
+            $source = $this->pdo->query('SELECT resource_type,media_source_id FROM ffx_collection_sources WHERE id=' . $scenarioId)->fetch(PDO::FETCH_ASSOC);
+            self::assertSame('scenario', $source['resource_type'] ?? null);
+            self::assertSame($videoId, (int) ($source['media_source_id'] ?? 0));
+        } finally {
+            if ($scenarioId > 0) $this->pdo->prepare('DELETE FROM ffx_collection_sources WHERE id=?')->execute([$scenarioId]);
+            if ($videoId > 0) $this->pdo->prepare('DELETE FROM ffx_collection_sources WHERE id=?')->execute([$videoId]);
+        }
+    }
 }
