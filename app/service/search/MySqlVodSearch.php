@@ -14,7 +14,9 @@ final class MySqlVodSearch implements VodSearchDriver
                 $query->whereLike('title', '%' . $keyword . '%')
                     ->whereLike('original_title', '%' . $keyword . '%', 'OR')
                     ->whereLike('subtitle', '%' . $keyword . '%', 'OR')
-                    ->whereLike('summary', '%' . $keyword . '%', 'OR');
+                    ->whereLike('summary', '%' . $keyword . '%', 'OR')
+                    ->whereLike('content', '%' . $keyword . '%', 'OR')
+                    ->whereLike('metadata', '%' . $keyword . '%', 'OR');
             });
 
         $total = (clone $query)->count();

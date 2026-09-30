@@ -2,7 +2,9 @@
     'use strict';
 
     var historyKey = 'ffcms_play_history';
-    var historyLimit = Math.max(0, parseInt(window.mxoneUiConfig && window.mxoneUiConfig.recordLimit, 10) || 0);
+    var rootConfig = document.documentElement.dataset || {};
+    var historyLimit = Math.max(0, parseInt(rootConfig.mxRecordLimit, 10) || 0);
+    var slideInterval = Math.max(1000, parseInt(rootConfig.mxSlideInterval, 10) || 3000);
     var themeKey = 'mxone_theme';
     var historyIcon = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v5h5"/><path d="M12 7v5l3 2"/></svg>';
     var sunIcon = '<svg class="mx-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2"/><path d="M12 20v2"/><path d="m4.9 4.9 1.4 1.4"/><path d="m17.7 17.7 1.4 1.4"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="m4.9 19.1 1.4-1.4"/><path d="m17.7 6.3 1.4-1.4"/></svg>';
@@ -812,7 +814,7 @@
             window.clearInterval(timer);
             timer = window.setInterval(function () {
                 show(index + 1);
-            }, 4200);
+            }, slideInterval);
         }
 
         dots.forEach(function (dot) {

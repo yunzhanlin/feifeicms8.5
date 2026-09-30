@@ -1,14 +1,12 @@
 <header class="mx-header">
     <div class="mx-wrap mx-head-inner">
         <a class="mx-logo" href="{:ff_url('home')}">
-            <img src="/mxstatic/picture/logo.png" alt="MXOne">
+            <img src="/mxstatic/picture/logo.png" alt="{$siteName|default='MXOne'|htmlentities}">
             <span>{$siteName|default='MXOne'}</span>
         </a>
-        <nav class="mx-nav">
-            {notempty name="siteNavigation"}
-            {volist name="siteNavigation" id="menu"}<a href="{$menu.url|htmlentities}" target="{$menu.target|default='_self'|htmlentities}">{$menu.title|htmlentities}</a>{/volist}
-            {else /}<a {if $pageActive=='home'}class="active"{/if} href="{:ff_url('home')}">首页</a>
-            {volist name="types" id="nav" offset="0" length="8"}
+        <nav class="mx-nav mx-nav-desktop" aria-label="主导航">
+            <a {if $pageActive=='home'}class="active"{/if} href="{:ff_url('home')}">首页</a>
+            {volist name="types" id="nav" offset="0" length="6"}
             {if $pageActive=='type'}
             <a {if $type.list_id==$nav.list_id}class="active"{/if} href="{:ff_url('type',$nav.type_id)}">{$nav.type_name}</a>
             {else /}
@@ -19,11 +17,24 @@
             <a {if $pageActive=='special'}class="active"{/if} href="/special">专题</a>
             <a {if $pageActive=='person'}class="active"{/if} href="/person">明星</a>
             <a {if $pageActive=='guestbook'}class="active"{/if} href="{:ff_url('guestbook')}">留言</a>
-            {/notempty}
+            <a {if $pageActive=='features'}class="active"{/if} href="/features">功能示例</a>
+            {volist name="siteNavigation" id="menu"}<a href="{$menu.url|htmlentities}" target="{$menu.target|default='_self'|htmlentities}" rel="{if $menu.target=='_blank'}noopener noreferrer{/if}">{$menu.title|htmlentities}</a>{/volist}
         </nav>
-        <form class="mx-search" action="/search" method="get">
+        <form class="mx-search" action="/search" method="get" data-search-url="/search?wd=FFWD">
             <input name="wd" value="{$keyword|default=''|htmlentities}" placeholder="搜索片名、演员、导演">
             <button type="submit" title="搜索" aria-label="搜索"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m16.5 16.5 4 4"></path></svg></button>
         </form>
+        <div class="mx-mobile-tools"><a class="mx-icon-btn" href="/search" title="搜索" aria-label="搜索"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><path d="m16.5 16.5 4 4"></path></svg></a></div>
+        <nav class="mx-mobile-nav" aria-label="移动导航">
+            <a {if $pageActive=='home'}class="active"{/if} href="/">首页</a>
+            {volist name="types" id="nav" offset="0" length="4"}<a {if isset($type) && $pageActive=='type' && $type.list_id==$nav.list_id}class="active"{/if} href="{:ff_url('type',$nav.type_id)}">{$nav.type_name}</a>{/volist}
+            <div class="mx-mobile-more"><button class="mx-icon-btn" type="button" data-mobile-more aria-expanded="false">更多</button><div class="mx-mobile-more-menu">
+                <a href="/latest">更新</a><a href="/hot">热播</a><a href="/news">资讯</a><a href="/special">专题</a><a href="/person">明星</a><a href="/guestbook">留言</a><a href="/vip">VIP</a><a href="/user/center">会员</a><a href="/features">功能示例</a>
+                {volist name="types" id="nav" offset="4"}<a href="{:ff_url('type',$nav.type_id)}">{$nav.type_name}</a>{/volist}
+                {volist name="siteNavigation" id="menu"}<a href="{$menu.url|htmlentities}" target="{$menu.target|default='_self'|htmlentities}">{$menu.title|htmlentities}</a>{/volist}
+            </div></div>
+        </nav>
     </div>
 </header>
+{notempty name="siteAds.header"}<aside class="mx-wrap mx-ad-slot mx-ad-header" aria-label="顶部广告">{$siteAds.header|raw}</aside>{/notempty}
+{notempty name="hotSearches"}<section class="mx-wrap mx-panel mx-search-landing"><form class="mx-search-main" action="/search" method="get" data-search-url="/search?wd=FFWD"><input name="wd" value="{$keyword|default=''|htmlentities}" placeholder="搜索片名、演员、导演"><button type="submit">搜索</button></form><div class="mx-search-hot"><h2>热门搜索</h2><div>{volist name="hotSearches" id="hot"}<a href="{$hot.url|htmlentities}" target="{$hot.target|htmlentities}">{$hot.title|htmlentities}</a>{/volist}</div></div></section>{/notempty}

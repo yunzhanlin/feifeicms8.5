@@ -2,7 +2,7 @@
 
 这是 FeiFeiCMS `4.3.201206` 向 ThinkPHP 8 的完整框架升级，不是另做一套 CMS。原始源码完整保存在 [`legacy/`](legacy/) 并作为功能、界面、模板标签和兼容路由的事实基线；新内核基于 ThinkPHP 8.1、PHP 8.2–8.5、MySQL 8.4 LTS、Redis 和 Meilisearch。当前发布版为 `8.5.0-beta1`，发布说明见 [`CHANGELOG.md`](CHANGELOG.md)。
 
-当前版本已经建立完整的新运行时、规范化 `ffx_*` 数据模型、FeiFei 模板标签兼容层、MXOne 前台、Redis/搜索抽象、原版结构管理后台和容器化运行环境。数据模型见 [`docs/DATA_MODEL_V2.md`](docs/DATA_MODEL_V2.md)，功能范围与迁移边界见 [`docs/FEIFEICMS-TP8-MIGRATION-BLUEPRINT.md`](docs/FEIFEICMS-TP8-MIGRATION-BLUEPRINT.md)。
+当前版本已经建立完整的新运行时、规范化 `ffx_*` 数据模型、FeiFei 模板标签兼容层、MXOne 前台、Redis/搜索抽象、原版结构管理后台和容器化运行环境。数据模型见 [`docs/DATA_MODEL_V2.md`](docs/DATA_MODEL_V2.md)，功能范围与迁移边界见 [`docs/FEIFEICMS-TP8-MIGRATION-BLUEPRINT.md`](docs/FEIFEICMS-TP8-MIGRATION-BLUEPRINT.md)，MXOne 页面、标签、URL、广告位和 API 调用见 [`docs/MXONE-TEMPLATE-GUIDE.md`](docs/MXONE-TEMPLATE-GUIDE.md)。安装后也可直接访问 `/features` 查看实时功能示例。
 
 不使用 Docker 也可部署；宝塔 Linux 的站点目录、PHP 扩展、伪静态、数据迁移和验收步骤见 [`deploy/baota/README.md`](deploy/baota/README.md)。
 

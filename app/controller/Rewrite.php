@@ -76,10 +76,10 @@ final class Rewrite extends BaseController
         }
         if ($module === 'scenario' && $operation === 'read') {
             $scenarioId = max(0, (int) ($params['id'] ?? 0));
-            $mediaId = (int) (Db::table('ffx_scenarios')->where('id', $scenarioId)->value('media_id') ?: $scenarioId);
-            return $this->app->make(Vod::class)->detail($mediaId);
+            return $this->app->make(Vod::class)->scenario($scenarioId);
         }
-        if ($module === 'vod' && in_array($operation, ['juqing', 'taici', 'zixun', 'yanyuan', 'pingfen', 'kandian', 'shoubo', 'jieju', 'rss', 'yugao', 'xiazai'], true)) {
+        if ($module === 'vod' && $operation === 'juqing') return $this->app->make(Vod::class)->scenarios(max(0, (int) ($params['id'] ?? 0)));
+        if ($module === 'vod' && in_array($operation, ['taici', 'zixun', 'yanyuan', 'pingfen', 'kandian', 'shoubo', 'jieju', 'rss', 'yugao', 'xiazai'], true)) {
             return $this->app->make(Vod::class)->detail(max(0, (int) ($params['id'] ?? 0)));
         }
         if ($module === 'vod' && $operation === 'forum') return $this->app->make(Interaction::class)->comments(max(0, (int) ($params['id'] ?? 0)));
