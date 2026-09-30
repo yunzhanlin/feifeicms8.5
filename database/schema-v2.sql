@@ -505,13 +505,17 @@ CREATE TABLE IF NOT EXISTS ffx_collection_sources (
   name VARCHAR(255) NOT NULL,
   endpoint VARCHAR(1000) NOT NULL,
   source_type VARCHAR(40) NOT NULL,
+  resource_type VARCHAR(20) NOT NULL DEFAULT 'video',
+  media_source_id BIGINT UNSIGNED NULL,
   credential_ref VARCHAR(255) NULL,
   category_mapping JSON NULL,
   new_data_policy VARCHAR(20) NOT NULL DEFAULT 'published',
   status VARCHAR(20) NOT NULL DEFAULT 'disabled',
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
-  UNIQUE KEY uk_ffx_collection_sources_endpoint (endpoint(255))
+  UNIQUE KEY uk_ffx_collection_sources_resource_endpoint (resource_type, endpoint(255)),
+  KEY idx_ffx_collection_sources_media_source (media_source_id, resource_type),
+  CONSTRAINT fk_ffx_collection_sources_media_source FOREIGN KEY (media_source_id) REFERENCES ffx_collection_sources(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_external_refs (
@@ -690,7 +694,7 @@ CREATE TABLE IF NOT EXISTS ffx_legacy_map (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 INSERT INTO ffx_schema_versions (version, description)
-VALUES (12, 'indexed media administration filters')
+VALUES (13, 'independent scenario collection sources')
 ON DUPLICATE KEY UPDATE description = VALUES(description);
 
 INSERT INTO ffx_roles (role_key, name, description)

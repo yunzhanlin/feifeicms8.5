@@ -605,4 +605,17 @@
         pause?.addEventListener('click', () => { setRunning(false); if (state) state.textContent = '已暂停'; });
         reset?.addEventListener('click', () => { setRunning(false); if (page instanceof HTMLInputElement) page.value = '1'; if (state) state.textContent = '页码已重置'; });
     });
+
+    document.querySelectorAll('[data-collection-resource-type]').forEach((group) => {
+        const form = group.closest('form');
+        if (!(form instanceof HTMLFormElement)) return;
+        const sync = () => {
+            const selected = form.querySelector('input[name="resource_type"]:checked');
+            const scenario = selected instanceof HTMLInputElement && selected.value === 'scenario';
+            form.querySelectorAll('[data-scenario-source-row]').forEach((row) => { row.hidden = !scenario; });
+            form.querySelectorAll('[data-video-source-row]').forEach((row) => { row.hidden = scenario; });
+        };
+        group.querySelectorAll('input[name="resource_type"]').forEach((radio) => radio.addEventListener('change', sync));
+        sync();
+    });
 })();

@@ -24,16 +24,21 @@
         </div>
         <div class="legacy-form-row">
             <div class="legacy-form-label">资源类型：</div>
-            <div class="legacy-form-field legacy-choice-list">
-                <label><input type="radio" checked disabled> 视频</label>
+            <div class="legacy-form-field legacy-choice-list" data-collection-resource-type>
+                <label><input type="radio" name="resource_type" value="video" {if $item.resource_type != 'scenario'}checked{/if}> 视频</label>
+                <label><input type="radio" name="resource_type" value="scenario" {if $item.resource_type == 'scenario'}checked{/if}> 剧情</label>
                 <label><input type="radio" disabled> 资讯</label>
                 <label><input type="radio" disabled> 用户</label>
                 <label><input type="radio" disabled> 评论</label>
                 <label><input type="radio" disabled> 人物/角色</label>
-                <span class="field-note">当前先开放视频资源，与原版操作位置一致。</span>
+                <span class="field-note">剧情源只采集独立分集剧情，不修改视频资料和播放线路。</span>
             </div>
         </div>
-        <div class="legacy-form-row">
+        <div class="legacy-form-row" data-scenario-source-row>
+            <div class="legacy-form-label">关联视频资源库：</div>
+            <div class="legacy-form-field"><select class="w300" name="media_source_id"><option value="0">自动按片名唯一匹配</option>{volist name="videoSources" id="videoSource"}<option value="{$videoSource.id}" {if $item.media_source_id == $videoSource.id}selected{/if}>{$videoSource.name|htmlspecialchars|raw}</option>{/volist}</select><span class="field-note">推荐选择对应的视频源，系统会优先按相同远程视频 ID 关联剧情与影片。</span></div>
+        </div>
+        <div class="legacy-form-row" data-video-source-row>
             <div class="legacy-form-label">视频新增数据：</div>
             <div class="legacy-form-field"><select class="w300" name="new_data_policy"><option value="published" {if $item.new_data_policy == 'published'}selected{/if}>新增并显示</option><option value="draft" {if $item.new_data_policy == 'draft'}selected{/if}>新增但隐藏（待审核）</option><option value="update_only" {if $item.new_data_policy == 'update_only'}selected{/if}>只更新，不新增</option></select><span class="field-note">仅对视频库生效；选择“只更新”后，该线路无法新增影片，只更新已匹配到的本地影片。</span></div>
         </div>
@@ -45,7 +50,7 @@
     </section>
 </form>
 {if !$isNew}
-<section class="editor-section legacy-notice"><p>保存后点击“进入资源库”，直接看资源、绑定分类和采集，不需要手写 JSON。</p><p><a class="button" href="/admin/collections/{$item.id}/resource">进入资源库</a></p></section>
+<section class="editor-section legacy-notice">{if $item.resource_type == 'scenario'}<p>保存后进入剧情采集控制台，可按页、指定远程 ID 或连续分页采集。</p><p><a class="button" href="/admin/vod-tools/scenario-collect?source_id={$item.id}">进入剧情采集</a></p>{else /}<p>保存后点击“进入资源库”，直接看资源、绑定分类和采集，不需要手写 JSON。</p><p><a class="button" href="/admin/collections/{$item.id}/resource">进入资源库</a></p>{/if}</section>
 <form class="editor-form editor-section danger-zone" method="post" action="/admin/collections/{$item.id}/delete" data-confirm="确定禁用这个资源库？"><input type="hidden" name="_token" value="{$csrf|htmlspecialchars|raw}"><div class="form-actions"><button class="button danger" type="submit">禁用资源库</button></div></form>
 {/if}
 {include file="admin/layout/footer" /}

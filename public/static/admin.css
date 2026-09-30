@@ -169,6 +169,7 @@ button, .button, .submit, .editor-form > button, .stack-form button, .inline-for
 .check-label input { width: auto !important; height: 13px; }
 
 .legacy-form-row { display: grid; grid-template-columns: 200px minmax(0, 1fr); min-height: 39px; border-bottom: 1px solid var(--ff-border); }
+.legacy-form-row[hidden] { display: none !important; }
 .legacy-form-label { padding: 8px 5px; color: #333; border-right: 1px solid var(--ff-border); text-align: right; }
 .legacy-form-field { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; min-width: 0; padding: 6px 10px; color: #333; }
 .legacy-form-field > input, .legacy-form-field > select { flex: 0 1 auto; }

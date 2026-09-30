@@ -23,9 +23,12 @@ final class Collections extends BaseController
 
     public function index(): Response
     {
+        $resourceType = $this->resourceType((string) $this->request->get('type', 'video'));
         return view('/admin/collections/index', [
-            'sources' => Db::table('ffx_collection_sources')->order('id', 'desc')->select()->toArray(),
+            'sources' => Db::table('ffx_collection_sources')->where('resource_type', $resourceType)->order('id', 'desc')->select()->toArray(),
             'resumeJob' => Db::table('ffx_collection_jobs')->whereIn('state', ['queued', 'running'])->order('id', 'desc')->find(),
+            'resourceType' => $resourceType,
+            'resourceLabel' => $resourceType === 'scenario' ? '剧情' : '视频',
             'csrf' => $this->csrf->get(),
         ]);
     }
@@ -41,17 +44,21 @@ final class Collections extends BaseController
 
     public function create(): Response
     {
-        return $this->form(null);
+        return $this->form(null, $this->resourceType((string) $this->request->get('type', 'video')));
     }
 
     public function edit(int $id): Response
     {
-        return $this->form($this->requireSource($id));
+        $item = $this->requireSource($id);
+        return $this->form($item, $this->resourceType((string) ($item['resource_type'] ?? 'video')));
     }
 
     public function resource(int $id): Response
     {
         $source = $this->requireSource($id);
+        if (($source['resource_type'] ?? 'video') === 'scenario') {
+            return redirect('/admin/vod-tools/scenario-collect?source_id=' . $id);
+        }
         $filters = [
             'page' => max(1, (int) $this->request->get('pg', 1)),
             't' => max(0, (int) $this->request->get('t', 0)),
@@ -202,10 +209,11 @@ final class Collections extends BaseController
         return redirect('/admin/collections');
     }
 
-    private function form(?array $item): Response
+    private function form(?array $item, string $resourceType): Response
     {
         return view('/admin/collections/edit', [
-            'item' => $item ?? ['id' => 0, 'name' => '', 'endpoint' => '', 'source_type' => 'auto_json', 'credential_ref' => '', 'category_mapping' => '{}', 'new_data_policy' => 'published', 'status' => 'disabled'],
+            'item' => $item ?? ['id' => 0, 'name' => '', 'endpoint' => '', 'source_type' => $resourceType === 'scenario' ? 'feifei_json' : 'auto_json', 'resource_type' => $resourceType, 'media_source_id' => null, 'credential_ref' => '', 'category_mapping' => '{}', 'new_data_policy' => 'published', 'status' => 'disabled'],
+            'videoSources' => Db::table('ffx_collection_sources')->where('resource_type', 'video')->order('name')->select()->toArray(),
             'csrf' => $this->csrf->get(), 'isNew' => $item === null,
         ]);
     }
@@ -221,9 +229,21 @@ final class Collections extends BaseController
         if ($name === '') {
             throw new HttpException(422, '采集源名称不能为空');
         }
+        $resourceType = $this->resourceType((string) $this->request->post('resource_type', 'video'));
+        $mediaSourceId = null;
+        if ($resourceType === 'scenario') {
+            $candidate = max(0, (int) $this->request->post('media_source_id', 0));
+            if ($candidate > 0) {
+                $exists = Db::table('ffx_collection_sources')->where('id', $candidate)->where('resource_type', 'video')->count();
+                if ($exists !== 1) throw new HttpException(422, '关联的视频资源库不存在');
+                $mediaSourceId = $candidate;
+            }
+        }
         return [
             'name' => $name, 'endpoint' => $endpoint,
             'source_type' => in_array((string) $this->request->post('source_type', ''), ['auto_json', 'feifei_json', 'maccms_json'], true) ? (string) $this->request->post('source_type') : 'auto_json',
+            'resource_type' => $resourceType,
+            'media_source_id' => $mediaSourceId,
             'credential_ref' => (($ref = trim((string) $this->request->post('credential_ref', ''))) !== '') ? mb_substr($ref, 0, 255) : null,
             'category_mapping' => '{}',
             'new_data_policy' => in_array((string) $this->request->post('new_data_policy', ''), ['published', 'draft', 'update_only'], true)
@@ -282,6 +302,11 @@ final class Collections extends BaseController
             throw new HttpException(404, '采集源不存在');
         }
         return $row;
+    }
+
+    private function resourceType(string $value): string
+    {
+        return $value === 'scenario' ? 'scenario' : 'video';
     }
 
     private function guardCsrf(): void
