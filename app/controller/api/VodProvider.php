@@ -6,12 +6,18 @@ namespace app\controller\api;
 use app\BaseController;
 use app\model\Category;
 use app\model\Media;
+use app\service\ResilientCache;
 use think\facade\Db;
 use think\Response;
 
 /** Delimiter fields are assembled at the HTTP boundary only. */
 final class VodProvider extends BaseController
 {
+    public function __construct(\think\App $app, private readonly ResilientCache $cache)
+    {
+        parent::__construct($app);
+    }
+
     public function index(): Response
     {
         $action = strtolower((string) $this->request->param('ac', 'list'));
@@ -30,7 +36,7 @@ final class VodProvider extends BaseController
         $rows = $query->field('id,category_id,title,original_title,douban_id,imdb_id,poster_url,release_year,area,language,published_at,view_count,episode_label,is_completed')
             ->order('published_at', 'desc')->order('id', 'desc')->page($page, $limit)->select()->toArray();
 
-        return json($this->envelope(array_map([$this, 'mapBase'], $rows), $total, $page, $limit));
+        return $this->jsonEnvelope($this->envelope(array_map([$this, 'mapBase'], $rows), $total, $page, $limit));
     }
 
     private function details(int $page, int $limit): Response
@@ -53,7 +59,7 @@ final class VodProvider extends BaseController
             $result[] = $mapped;
         }
 
-        return json($this->envelope($result, $total, $page, $limit));
+        return $this->jsonEnvelope($this->envelope($result, $total, $page, $limit));
     }
 
     private function filteredQuery()
@@ -85,9 +91,20 @@ final class VodProvider extends BaseController
             'limit' => $limit,
             'total' => $total,
             'list' => $rows,
-            'class' => Category::where('status', 'published')->where('content_type', 'media')
-                ->field('id as type_id,parent_id as type_pid,name as type_name')->order('sort_order')->select()->toArray(),
+            'class' => $this->cache->remember('api:vod-provider:categories:v1', 300, static fn (): array => Category::where('status', 'published')->where('content_type', 'media')
+                ->field('id as type_id,parent_id as type_pid,name as type_name')->order('sort_order')->select()->toArray()),
         ];
+    }
+
+    /** @param array<string, mixed> $payload */
+    private function jsonEnvelope(array $payload): Response
+    {
+        $json = json($payload);
+        $etag = '"' . hash('sha256', json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR)) . '"';
+        if (trim((string) $this->request->header('if-none-match', '')) === $etag) {
+            return response('', 304)->header(['ETag' => $etag, 'Cache-Control' => 'public, max-age=15, stale-while-revalidate=30']);
+        }
+        return $json->header(['ETag' => $etag, 'Cache-Control' => 'public, max-age=15, stale-while-revalidate=30']);
     }
 
     /** @param array<string, mixed> $row */

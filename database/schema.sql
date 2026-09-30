@@ -72,6 +72,10 @@ CREATE TABLE IF NOT EXISTS ffx_media (
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   deleted_at DATETIME(6) NULL,
   metadata JSON NULL,
+  admin_weekday VARCHAR(80) GENERATED ALWAYS AS (COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.weekday')), '')) STORED,
+  admin_state VARCHAR(80) GENERATED ALWAYS AS (COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.state')), '')) STORED,
+  admin_series VARCHAR(255) GENERATED ALWAYS AS (COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.series')), '')) STORED,
+  admin_inputer VARCHAR(80) GENERATED ALWAYS AS (COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.inputer')), '')) STORED,
   UNIQUE KEY uk_ffx_media_slug (slug),
   KEY idx_ffx_media_feed (status, published_at, id),
   KEY idx_ffx_media_category (category_id, status, updated_at),
@@ -79,6 +83,10 @@ CREATE TABLE IF NOT EXISTS ffx_media (
   KEY idx_ffx_media_rank (status, weight, view_count),
   KEY idx_ffx_media_douban (douban_id),
   KEY idx_ffx_media_imdb (imdb_id),
+  KEY idx_ffx_media_admin_weekday (admin_weekday, status, updated_at),
+  KEY idx_ffx_media_admin_state (admin_state, status, updated_at),
+  KEY idx_ffx_media_admin_inputer (admin_inputer, status, updated_at),
+  KEY idx_ffx_media_updated (status, updated_at, id),
   CONSTRAINT fk_ffx_media_category FOREIGN KEY (category_id) REFERENCES ffx_categories(id) ON DELETE SET NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
@@ -682,7 +690,7 @@ CREATE TABLE IF NOT EXISTS ffx_legacy_map (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
 INSERT INTO ffx_schema_versions (version, description)
-VALUES (11, 'collection source new data policy')
+VALUES (12, 'indexed media administration filters')
 ON DUPLICATE KEY UPDATE description = VALUES(description);
 
 INSERT INTO ffx_roles (role_key, name, description)

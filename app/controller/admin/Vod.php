@@ -7,6 +7,7 @@ use app\BaseController;
 use app\model\Category;
 use app\model\Media;
 use app\service\AuditLogger;
+use app\service\AdminVodQuery;
 use app\service\CollectionRunner;
 use app\service\CsrfToken;
 use app\service\CollectionSourceIdentity;
@@ -31,6 +32,7 @@ final class Vod extends BaseController
         private readonly SiteSettings $settings,
         private readonly CollectionRunner $collectionRunner,
         private readonly MediaMerge $mediaMerge,
+        private readonly AdminVodQuery $vodQuery,
     )
     {
         parent::__construct($app);
@@ -62,75 +64,14 @@ final class Vod extends BaseController
         if (!in_array($status, ['published', 'draft'], true)) {
             $status = '';
         }
-        $orderAliases = ['id' => 'id', 'hits' => 'view_count', 'year' => 'release_year', 'addtime' => 'updated_at', 'stars' => 'weight', 'updated_at' => 'updated_at', 'weight' => 'weight', 'rating' => 'rating'];
-        if (!isset($orderAliases[$order])) $order = 'id';
-
-        $query = Media::whereNull('deleted_at')->order($orderAliases[$order], $sort)->order('id', $sort);
-        if ($keyword !== '') {
-            $like = '%' . $keyword . '%';
-            $query->whereRaw("(title LIKE ? OR subtitle LIKE ? OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.actor')), '') LIKE ? OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.director')), '') LIKE ?)", [$like, $like, $like, $like]);
-        }
-        if ($categoryId > 0) {
-            $query->where('category_id', $categoryId);
-        }
-        if ($status !== '') {
-            $query->where('status', $status);
-        }
-        if ($year > 0) {
-            $query->where('release_year', $year);
-        }
-        if ($stars > 0) $query->where('weight', $stars);
-        if ($isEnd === 'true') $query->where('is_completed', 1);
-        elseif ($isEnd === 'false') $query->where('is_completed', 0);
-        else $isEnd = '';
-        if ($weekday !== '') $query->whereRaw("COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.weekday')), '') = ?", [$weekday]);
-        if ($state !== '') $query->whereRaw("COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.state')), '') = ?", [$state]);
-        if ($area !== '') $query->where('area', $area);
-        if ($type !== '') $query->whereRaw("FIND_IN_SET(?, REPLACE(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.type')), ''), '，', ',')) > 0", [$type]);
-        if ($play !== '') $query->whereRaw('EXISTS (SELECT 1 FROM ffx_play_sources ps WHERE ps.media_id=ffx_media.id AND ps.status=\'enabled\' AND ps.source_key=?)', [$play]);
-        if (in_array($access, ['member', 'points', 'free'], true)) {
-            $query->where('access_mode', $access);
-        } else {
-            $access = '';
-        }
-        if ($missing === 'poster') {
-            $query->whereRaw("COALESCE(TRIM(poster_url), '') = ''");
-        } elseif ($missing === 'play') {
-            $query->whereRaw("NOT EXISTS (SELECT 1 FROM ffx_episodes ep INNER JOIN ffx_play_sources ps ON ps.id = ep.source_id WHERE ep.media_id = ffx_media.id AND ep.status = 'enabled' AND ps.status = 'enabled' AND TRIM(ep.media_url) <> '')");
-        } elseif ($missing === 'douban') {
-            $query->whereRaw("(douban_id = '' OR poster_url = '' OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.director')), '') = '' OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.actor')), '') = '')");
-        } elseif ($missing === 'scenario') {
-            $query->whereRaw('(COALESCE(episode_total, 0) > 0 OR EXISTS (SELECT 1 FROM ffx_episodes ep WHERE ep.media_id = ffx_media.id))')
-                ->whereRaw('NOT EXISTS (SELECT 1 FROM ffx_scenarios sc WHERE sc.media_id = ffx_media.id AND sc.deleted_at IS NULL)');
-        } else {
-            $missing = '';
-        }
-        if ($meta === 'lines') {
-            $query->whereRaw("COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$." . $meta . "')), '') <> ''");
-        } elseif ($meta === 'scenario') {
-            $query->whereRaw('EXISTS (SELECT 1 FROM ffx_scenarios sc WHERE sc.media_id = ffx_media.id AND sc.deleted_at IS NULL)');
-        } elseif ($meta === 'douban') {
-            $query->whereRaw("douban_id REGEXP '^[1-9][0-9]{4,11}$'");
-        } elseif ($meta === 'trysee') {
-            $query->whereRaw("COALESCE(CAST(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.trysee')) AS UNSIGNED), 0) > 0");
-        } elseif ($meta === 'series') {
-            $query->whereRaw("COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.series')), '') <> ''");
-        } else {
-            $meta = '';
-        }
-        if ($duplicate === 'title') {
-            $query->whereRaw('title IN (SELECT title FROM ffx_media WHERE deleted_at IS NULL GROUP BY title HAVING COUNT(*) > 1)');
-        } elseif ($duplicate === 'douban') {
-            $query->whereRaw("douban_id REGEXP '^[1-9][0-9]{4,11}$'")->whereRaw("douban_id IN (SELECT douban_id FROM ffx_media WHERE deleted_at IS NULL AND douban_id REGEXP '^[1-9][0-9]{4,11}$' GROUP BY douban_id HAVING COUNT(*) > 1)");
-        }
-        if ($locked) {
-            $query->whereRaw("COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.inputer')), '') = 'feifeicms'");
-        }
-        if ($paid) {
-            $query->where('price_points', '>', 0);
-        }
+        if (!in_array($order, ['id', 'hits', 'year', 'addtime', 'stars', 'updated_at', 'weight', 'rating'], true)) $order = 'id';
+        if (!in_array($access, ['member', 'points', 'free'], true)) $access = '';
+        if (!in_array($missing, ['poster', 'play', 'douban', 'scenario'], true)) $missing = '';
+        if (!in_array($meta, ['lines', 'scenario', 'douban', 'trysee', 'series'], true)) $meta = '';
+        if (!in_array($isEnd, ['true', 'false'], true)) $isEnd = '';
         $filters = ['wd' => $keyword, 'category_id' => $categoryId, 'status' => $status, 'year' => $year, 'order' => $order, 'sort' => $sort, 'stars' => $stars, 'isend' => $isEnd, 'weekday' => $weekday, 'state' => $state, 'area' => $area, 'play' => $play, 'type' => $type, 'access' => $access, 'missing' => $missing, 'meta' => $meta, 'duplicate' => $duplicate, 'locked' => $locked ? 1 : 0, 'paid' => $paid ? 1 : 0];
         $queryArgs = array_filter($filters, static fn (mixed $value): bool => $value !== '' && $value !== 0);
+        $query = $this->vodQuery->build($filters);
         $items = $query->paginate(['list_rows' => $this->settings->int('admin.content.admin_page_size', 30, 10, 200), 'query' => $queryArgs]);
         $categories = $this->categories();
         $this->decorateListItems($items, $categories);

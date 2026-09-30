@@ -40,10 +40,24 @@ final class SchemaV2Test extends TestCase
     public function testFreshInstallRecordsTheCompleteSchemaBaseline(): void
     {
         self::assertStringContainsString(
-            "VALUES (11, 'collection source new data policy')",
+            "VALUES (12, 'indexed media administration filters')",
             $this->schema
         );
         self::assertStringContainsString("new_data_policy VARCHAR(20) NOT NULL DEFAULT 'published'", $this->schema);
+        foreach (['admin_weekday', 'admin_state', 'admin_series', 'admin_inputer', 'idx_ffx_media_updated'] as $filterIndex) {
+            self::assertStringContainsString($filterIndex, $this->schema);
+        }
+    }
+
+    public function testIncrementalUpgradeCommandAndVersionTwelveMigrationAreRegistered(): void
+    {
+        $console = file_get_contents(dirname(__DIR__) . '/config/console.php');
+        $migration = file_get_contents(dirname(__DIR__) . '/database/migrations/012_media_admin_filter_indexes.sql');
+        self::assertIsString($console);
+        self::assertIsString($migration);
+        self::assertStringContainsString("'feifei:schema:upgrade'", $console);
+        self::assertStringContainsString("GET_LOCK('feifeicms_schema_upgrade'", file_get_contents(dirname(__DIR__) . '/app/command/SchemaUpgrade.php'));
+        self::assertStringContainsString("VALUES (12, 'indexed media administration filters')", $migration);
     }
 
     public function testCronTasksSupportIntervalHourlyAndDailySchedules(): void

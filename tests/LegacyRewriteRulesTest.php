@@ -5,6 +5,7 @@ namespace tests;
 
 use app\service\LegacyRewriteRules;
 use InvalidArgumentException;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 final class LegacyRewriteRulesTest extends TestCase
@@ -92,7 +93,7 @@ RULES;
         self::assertSame('video/12', $rules->preview($source)[0]['sample_target']);
     }
 
-    /** @dataProvider invalidRules */
+    #[DataProvider('invalidRules')]
     public function testItRejectsUnsafeMismatchedOrDuplicateRules(string $source): void
     {
         $this->expectException(InvalidArgumentException::class);
