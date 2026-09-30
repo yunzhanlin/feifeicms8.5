@@ -18,7 +18,7 @@ final class FrontendTemplateCoverageTest extends TestCase
             self::assertFileExists($root . '/view/mxone/' . $view);
         }
         $showcase = (string) file_get_contents($root . '/view/mxone/page/features.html');
-        foreach (['实时数据调用', '分集剧情与评论', '运营组件', '模板调用方法', 'ff_mysql_vod', 'MXONE-TEMPLATE-GUIDE.md'] as $marker) {
+        foreach (['实时数据调用', '分集剧情与评论', '运营组件', '模板调用方法', 'ff_mysql_vod', 'README.md'] as $marker) {
             self::assertStringContainsString($marker, $showcase);
         }
     }
@@ -40,9 +40,9 @@ final class FrontendTemplateCoverageTest extends TestCase
         }
     }
 
-    public function testTemplateGuideDocumentsRoutesTagsAndAdvertisementSlots(): void
+    public function testReadmeDocumentsRoutesTagsAndAdvertisementSlots(): void
     {
-        $guide = (string) file_get_contents(dirname(__DIR__) . '/docs/MXONE-TEMPLATE-GUIDE.md');
+        $guide = (string) file_get_contents(dirname(__DIR__) . '/README.md');
         foreach (['/features', '/vod/{id}/scenarios', '/scenario/{id}', 'ff_play_url', 'ff_mysql_vod', 'ff_mysql_scenario', 'home_top', 'vod_detail', 'vod_play'] as $marker) {
             self::assertStringContainsString($marker, $guide);
         }
