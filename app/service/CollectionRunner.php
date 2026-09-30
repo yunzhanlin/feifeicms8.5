@@ -3,13 +3,12 @@ declare(strict_types=1);
 
 namespace app\service;
 
-use GuzzleHttp\Client;
 use think\facade\Db;
 use Throwable;
 
 final class CollectionRunner
 {
-    public function __construct(private readonly SafeRemoteUrl $safeUrl, private readonly EpisodeParser $episodeParser, private readonly CollectionCategoryMap $categoryMap, private readonly CollectionPayloadNormalizer $normalizer, private readonly CollectionSourceIdentity $sourceIdentity, private readonly SiteSettings $settings)
+    public function __construct(private readonly CollectionHttpClient $http, private readonly EpisodeParser $episodeParser, private readonly CollectionCategoryMap $categoryMap, private readonly CollectionPayloadNormalizer $normalizer, private readonly CollectionSourceIdentity $sourceIdentity, private readonly SiteSettings $settings)
     {
     }
 
@@ -21,12 +20,21 @@ final class CollectionRunner
         if ($job === null) {
             throw new \RuntimeException('采集任务不存在');
         }
+        $claimed = Db::table('ffx_collection_jobs')->where('id', $jobId)->where('state', 'queued')->update([
+            'state' => 'running', 'started_at' => gmdate('Y-m-d H:i:s'), 'finished_at' => null, 'error_message' => null,
+        ]);
+        if ($claimed !== 1) {
+            throw new \RuntimeException('采集任务已被其他工作进程领取或当前不可执行');
+        }
         $source = Db::table('ffx_collection_sources')->where('id', (int) $job['source_id'])->find();
         if ($source === null || $source['status'] !== 'enabled') {
+            Db::table('ffx_collection_jobs')->where('id', $jobId)->where('state', 'running')->update([
+                'state' => 'failed', 'error_count' => (int) $job['error_count'] + 1,
+                'error_message' => '采集源不存在或未启用', 'finished_at' => gmdate('Y-m-d H:i:s'),
+            ]);
             throw new \RuntimeException('采集源不存在或未启用');
         }
 
-        Db::table('ffx_collection_jobs')->where('id', $jobId)->update(['state' => 'running', 'started_at' => gmdate('Y-m-d H:i:s'), 'error_message' => null]);
         $processed = $created = $updated = $errors = 0;
         $errorMessages = [];
         try {
@@ -54,7 +62,7 @@ final class CollectionRunner
                 $filters['page'] = $currentPage;
                 $params = $this->normalizer->requestParams($protocol, 'video_detail', $filters);
                 if (!empty($source['credential_ref'])) $params['key'] = mb_substr((string) $source['credential_ref'], 0, 255);
-                $response = $this->fetch((string) $source['endpoint'], $params);
+                $response = $this->http->fetch((string) $source['endpoint'], $params);
                 $envelope = $this->normalizer->envelope($response, $protocol);
                 $remotePageCount = max(1, (int) $envelope['pagecount']);
                 $lastRemotePage = $currentPage;
@@ -81,7 +89,7 @@ final class CollectionRunner
                     try {
                         $scenarioParams = $this->normalizer->requestParams($protocol, 'scenario', $filters);
                         if (!empty($source['credential_ref'])) $scenarioParams['key'] = mb_substr((string) $source['credential_ref'], 0, 255);
-                        $scenarioEnvelope = $this->normalizer->envelope($this->fetch((string) $source['endpoint'], $scenarioParams), $protocol);
+                        $scenarioEnvelope = $this->normalizer->envelope($this->http->fetch((string) $source['endpoint'], $scenarioParams), $protocol);
                         foreach ($scenarioEnvelope['rows'] as $scenarioRow) $this->importScenario((int) $source['id'], $scenarioRow);
                     } catch (Throwable $scenarioException) {
                         if (count($errorMessages) < 5) $errorMessages[] = '剧情接口：' . mb_substr($scenarioException->getMessage(), 0, 260);
@@ -131,7 +139,7 @@ final class CollectionRunner
         $protocol = $this->protocolForSource($source);
         $params = $this->normalizer->requestParams($protocol, $protocol === 'maccms_json' ? 'video_list' : 'video_detail', $filters);
         if (!empty($source['credential_ref'])) $params['key'] = mb_substr((string) $source['credential_ref'], 0, 255);
-        $response = $this->fetch((string) $source['endpoint'], $params);
+        $response = $this->http->fetch((string) $source['endpoint'], $params);
         $envelope = $this->normalizer->envelope($response, $protocol);
         $items = [];
         foreach ($envelope['rows'] as $row) {
@@ -179,7 +187,7 @@ final class CollectionRunner
         $resource = $protocol === 'feifei_json' ? 'scenario' : 'video_detail';
         $params = $this->normalizer->requestParams($protocol, $resource, $requestFilters);
         if (!empty($source['credential_ref'])) $params['key'] = mb_substr((string) $source['credential_ref'], 0, 255);
-        $envelope = $this->normalizer->envelope($this->fetch((string) $source['endpoint'], $params), $protocol);
+        $envelope = $this->normalizer->envelope($this->http->fetch((string) $source['endpoint'], $params), $protocol);
         $processed = $imported = $matched = 0;
         foreach ($envelope['rows'] as $row) {
             $processed++;
@@ -225,49 +233,6 @@ final class CollectionRunner
             $skipped += (int) $result['skipped'];
         }
         return ['processed' => $processed, 'imported' => $imported, 'skipped' => $skipped, 'sources' => count($refs)];
-    }
-
-    /** @return array<string, mixed> */
-    private function fetch(string $endpoint, array $params): array
-    {
-        $resolved = $this->safeUrl->resolve($endpoint);
-        $separator = str_contains($endpoint, '?') ? '&' : '?';
-        $url = $endpoint . $separator . http_build_query($params);
-        $timeout = $this->settings->int('admin.collection.timeout', 15, 2, 120);
-        $client = new Client(['timeout' => $timeout, 'connect_timeout' => min(10, $timeout), 'http_errors' => false, 'allow_redirects' => false]);
-        $options = [
-            'headers' => ['Accept' => 'application/json', 'User-Agent' => $this->settings->string('admin.collection.user_agent', 'FeiFeiCMS/8')],
-            'curl' => [CURLOPT_RESOLVE => [$resolved['host'] . ':' . $resolved['port'] . ':' . $resolved['ip']]],
-            'on_headers' => static function ($response): void {
-                if ((int) $response->getHeaderLine('Content-Length') > 5_242_880) throw new \RuntimeException('采集响应超过 5MB');
-            },
-        ];
-        $attempts = $this->settings->int('admin.collection.retry_count', 2, 0, 5) + 1;
-        $last = null;
-        for ($attempt = 1; $attempt <= $attempts; $attempt++) {
-            try {
-                $response = $client->get($url, $options);
-                $last = null;
-                break;
-            } catch (\Throwable $exception) {
-                $last = $exception;
-                if ($attempt < $attempts) usleep(200000 * $attempt);
-            }
-        }
-        if ($last !== null || !isset($response)) throw new \RuntimeException('采集请求失败：' . ($last?->getMessage() ?? '未知错误'), 0, $last);
-        if ($response->getStatusCode() !== 200) {
-            throw new \RuntimeException('采集源返回 HTTP ' . $response->getStatusCode());
-        }
-        $body = (string) $response->getBody();
-        if (strlen($body) > 5_242_880) {
-            throw new \RuntimeException('采集响应超过 5MB');
-        }
-        $body = preg_replace('/^\xEF\xBB\xBF/', '', $body) ?? $body;
-        $decoded = json_decode($body, true, 512, JSON_THROW_ON_ERROR);
-        if (!is_array($decoded)) {
-            throw new \RuntimeException('采集响应不是 JSON 对象');
-        }
-        return $decoded;
     }
 
     /** @return array<int, array<string, mixed>> */

@@ -31,6 +31,13 @@ docker compose exec app php think feifei:doctor
 docker compose exec app php think feifei:search:sync
 ```
 
+已安装站点升级代码后不要重新导入整库，执行带数据库互斥锁的增量升级：
+
+```bash
+php think feifei:schema:upgrade
+php think feifei:doctor
+```
+
 默认访问：
 
 - 前台：`http://localhost:8080/`
@@ -86,4 +93,4 @@ docker compose exec redis redis-cli ping
 curl -fsS http://localhost:8080/health
 ```
 
-本地宝塔的最终功能、采集、播放和视觉结果见 [`docs/ACCEPTANCE-2026-09-29.md`](docs/ACCEPTANCE-2026-09-29.md)，底层验证记录见 [`docs/VERIFICATION.md`](docs/VERIFICATION.md)。
+本地宝塔的最终功能、采集、播放和视觉结果见 [`docs/ACCEPTANCE-2026-09-29.md`](docs/ACCEPTANCE-2026-09-29.md)，第二阶段性能与稳定性改造见 [`docs/SECOND-PHASE-OPTIMIZATION-2026-09-30.md`](docs/SECOND-PHASE-OPTIMIZATION-2026-09-30.md)，底层验证记录见 [`docs/VERIFICATION.md`](docs/VERIFICATION.md)。

@@ -53,6 +53,8 @@ chmod -R u=rwX,g=rwX,o= runtime public/uploads
 /www/server/nginx/sbin/nginx -s reload -c /www/server/nginx/conf/nginx.conf
 ```
 
+伪静态文件同时为 CSS、JavaScript、图片和字体设置 7 天浏览器缓存；更新这些资源时应同步更新模板中的版本查询参数。
+
 ## 4. 数据库
 
 新站导入 `database/schema.sql`。旧站迁移必须先在隔离库恢复备份，再执行 `database/migrations/001_modernize_legacy.sql`：
@@ -66,6 +68,14 @@ mysql --default-character-set=utf8mb4 -u root -p feifeicms_migration < database/
 ```
 
 `--default-character-set=utf8mb4` 不能省略，否则旧中文数据可能在导入时二次转码。
+
+已安装的 8.5 站点每次更新代码后执行增量升级，命令会根据 `ffx_schema_versions` 只运行未应用的迁移：
+
+```bash
+cd /www/wwwroot/feifeicms-modern
+/www/server/php/84/bin/php think feifei:schema:upgrade
+/www/server/php/84/bin/php think feifei:doctor
+```
 
 ## 5. `.env`
 

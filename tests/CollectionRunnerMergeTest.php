@@ -4,7 +4,9 @@ declare(strict_types=1);
 namespace tests;
 
 use app\service\CollectionCategoryMap;
+use app\service\CollectionHttpClient;
 use app\service\CollectionPayloadNormalizer;
+use app\service\CollectionResponseSizeGuard;
 use app\service\CollectionRunner;
 use app\service\CollectionSourceIdentity;
 use app\service\EpisodeParser;
@@ -80,7 +82,7 @@ final class CollectionRunnerMergeTest extends TestCase
     private function runner(): CollectionRunner
     {
         return new CollectionRunner(
-            new SafeRemoteUrl(),
+            new CollectionHttpClient(new SafeRemoteUrl(), new SiteSettings(), new CollectionResponseSizeGuard()),
             new EpisodeParser(),
             new CollectionCategoryMap(),
             new CollectionPayloadNormalizer(),

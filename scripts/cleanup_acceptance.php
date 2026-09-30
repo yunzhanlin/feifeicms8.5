@@ -30,11 +30,27 @@ Db::transaction(static function () use ($targets, $marker): void {
     foreach ($targets as $table => $id) {
         if ($id > 0) Db::table($table)->where('id', $id)->delete();
     }
+    $label = '[' . $marker . ']';
+    foreach ([
+        'ffx_media' => 'title',
+        'ffx_articles' => 'title',
+        'ffx_topics' => 'title',
+        'ffx_people' => 'name',
+        'ffx_players' => 'name',
+        'ffx_slides' => 'name',
+        'ffx_links' => 'name',
+        'ffx_navigation' => 'title',
+        'ffx_ads' => 'name',
+    ] as $table => $field) {
+        Db::table($table)->whereLike($field, $label . '%')->delete();
+    }
+    Db::table('ffx_users')->where('username', strtolower($marker))->delete();
+    Db::table('ffx_categories')->whereLike('name', $label . '%')->delete();
     Db::table('ffx_audit_logs')->whereLike('after_data', '%' . $marker . '%')->delete();
     Db::table('ffx_audit_logs')->whereLike('before_data', '%' . $marker . '%')->delete();
     // Article/tag and manual media-tag acceptance paths may create the same
     // marker in different scopes. Remove every exact acceptance marker.
-    Db::table('ffx_tags')->where('name', '[' . $marker . ']')->delete();
+    Db::table('ffx_tags')->where('name', $label)->delete();
 });
 
 $upload = basename((string) ($options['upload'] ?? ''));
@@ -43,4 +59,13 @@ if ($upload !== '' && preg_match('/^[A-Za-z0-9._-]+$/', $upload)) {
     if (is_file($path)) unlink($path);
 }
 
-echo 'acceptance_cleanup=ok marker=' . $marker . PHP_EOL;
+$label = '[' . $marker . ']';
+$remaining = (int) Db::table('ffx_media')->whereLike('title', $label . '%')->count()
+    + (int) Db::table('ffx_categories')->whereLike('name', $label . '%')->count()
+    + (int) Db::table('ffx_users')->where('username', strtolower($marker))->count()
+    + (int) Db::table('ffx_tags')->where('name', $label)->count();
+if ($remaining !== 0) {
+    fwrite(STDERR, 'acceptance_cleanup=incomplete marker=' . $marker . ' remaining=' . $remaining . PHP_EOL);
+    exit(1);
+}
+echo 'acceptance_cleanup=ok marker=' . $marker . ' remaining=0' . PHP_EOL;
