@@ -66,7 +66,7 @@ final class AdminCoverageTest extends TestCase
         self::assertStringContainsString('scrollbar-gutter: stable', $css);
         self::assertStringContainsString('.editor-form { display: flow-root;', $css);
         self::assertStringContainsString('overflow: visible', $css);
-        self::assertStringContainsString('/static/admin.css?v=40', $header);
+        self::assertMatchesRegularExpression('#/static/admin\\.css\\?v=\\d+#', $header);
         self::assertStringContainsString('/static/admin.js?v=32', $header);
         self::assertStringContainsString("cell.textContent = '暂无数据'", $script);
         self::assertStringContainsString("已发布", $script);

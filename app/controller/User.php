@@ -6,6 +6,7 @@ namespace app\controller;
 use app\BaseController;
 use app\service\CsrfToken;
 use app\service\FrontendData;
+use app\service\PasswordHasher;
 use app\service\RequestRateLimiter;
 use app\service\SiteSettings;
 use app\service\WatchHistoryService;
@@ -15,7 +16,7 @@ use think\Response;
 
 final class User extends BaseController
 {
-    public function __construct(\think\App $app, private readonly FrontendData $frontend, private readonly CsrfToken $csrf, private readonly RequestRateLimiter $limiter, private readonly SiteSettings $settings, private readonly WatchHistoryService $watchHistory)
+    public function __construct(\think\App $app, private readonly FrontendData $frontend, private readonly CsrfToken $csrf, private readonly RequestRateLimiter $limiter, private readonly SiteSettings $settings, private readonly WatchHistoryService $watchHistory, private readonly PasswordHasher $passwordHasher)
     {
         parent::__construct($app);
     }
@@ -33,13 +34,15 @@ final class User extends BaseController
                 $rateKey = 'rate:user-login:' . hash('sha256', (string) $this->request->ip());
                 $attempts = $this->limiter->attempts($rateKey);
                 $user = $attempts >= 10 ? null : Db::table('ffx_users')->where('username', $username)->where('status', 'active')->whereNull('deleted_at')->find();
-                if ($user !== null && password_verify($password, (string) $user['password_hash'])) {
+                if ($user !== null && $this->passwordHasher->verify((string) $user['password_hash'], $password)) {
                     Session::regenerate(true);
                     Session::set('user_id', (int) $user['id']);
                     Session::set('user_name', (string) $user['username']);
-                    Db::table('ffx_users')->where('id', (int) $user['id'])->update([
+                    $loginUpdate = [
                         'last_login_ip' => (string) $this->request->ip(), 'last_login_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s'),
-                    ]);
+                    ];
+                    if ($this->passwordHasher->needsRehash((string) $user['password_hash'])) $loginUpdate['password_hash'] = $this->passwordHasher->hash($password);
+                    Db::table('ffx_users')->where('id', (int) $user['id'])->update($loginUpdate);
                     $this->limiter->clear($rateKey);
                     return redirect($redirect);
                 }
