@@ -49,7 +49,7 @@
         <table border="0" cellpadding="0" cellspacing="0" class="table legacy-vod-table" id="vod-tab-lines" hidden><tr><td class="tr padding-5050"><textarea name="lines" class="legacy-richtext">{$legacyMeta.lines|default=''|htmlspecialchars|raw}</textarea></td></tr></table>
         <table border="0" cellpadding="0" cellspacing="0" class="table legacy-vod-table" id="vod-tab-watch" hidden><tr><td class="tr padding-5050"><textarea name="watch" class="legacy-richtext">{$legacyMeta.watch|default=''|htmlspecialchars|raw}</textarea></td></tr></table>
         <table border="0" cellpadding="0" cellspacing="0" class="table legacy-vod-table" id="vod-tab-ending" hidden><tr><td class="tr padding-5050"><textarea name="ending" class="legacy-richtext">{$legacyMeta.ending|default=''|htmlspecialchars|raw}</textarea></td></tr></table>
-        <ul class="footer legacy-vod-footer"><li><button type="submit">提交</button> <button type="reset">重置</button>{if !$isNew} <a class="button" href="/admin/vod/{$media.id}/playback">线路管理</a> <a class="button" href="/admin/scenarios?media_id={$media.id}">分集剧情</a>{/if}</li></ul>
+        <ul class="footer legacy-vod-footer"><li><button type="submit">提交</button> <button type="reset">重置</button>{if !$isNew} <a class="button" href="/admin/vod/{$media.id}/playback">线路管理</a> <a class="button" href="/admin/scenarios/media/{$media.id}">分集剧情</a>{/if}</li></ul>
     </div>
 </form>
 {include file="admin/layout/footer" /}
