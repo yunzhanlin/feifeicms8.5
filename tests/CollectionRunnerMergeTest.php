@@ -81,13 +81,16 @@ final class CollectionRunnerMergeTest extends TestCase
 
     private function runner(): CollectionRunner
     {
+        $frontendCache = new \app\service\FrontendCache(new \app\service\ResilientCache());
+        $settings = new SiteSettings($frontendCache);
         return new CollectionRunner(
-            new CollectionHttpClient(new SafeRemoteUrl(), new SiteSettings(), new CollectionResponseSizeGuard()),
+            new CollectionHttpClient(new SafeRemoteUrl(), $settings, new CollectionResponseSizeGuard()),
             new EpisodeParser(),
             new CollectionCategoryMap(),
             new CollectionPayloadNormalizer(),
             new CollectionSourceIdentity(),
-            new SiteSettings(),
+            $settings,
+            $frontendCache,
         );
     }
 

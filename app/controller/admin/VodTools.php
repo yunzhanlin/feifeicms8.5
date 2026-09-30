@@ -9,6 +9,7 @@ use app\service\CollectionRunner;
 use app\service\CsrfToken;
 use app\service\DoubanComments;
 use app\service\DoubanMetadata;
+use app\service\FrontendCache;
 use think\facade\Db;
 use think\Response;
 use Throwable;
@@ -22,6 +23,7 @@ final class VodTools extends BaseController
         private readonly DoubanMetadata $douban,
         private readonly DoubanComments $doubanComments,
         private readonly CollectionRunner $runner,
+        private readonly FrontendCache $frontendCache,
     ) {
         parent::__construct($app);
     }
@@ -187,6 +189,7 @@ final class VodTools extends BaseController
         if ($update !== []) {
             $update['updated_at'] = gmdate('Y-m-d H:i:s');
             Db::table('ffx_media')->where('id', (int) $media['id'])->update($update);
+            $this->frontendCache->invalidateHome();
         }
         return array_values(array_filter(array_keys($update), static fn (string $field): bool => $field !== 'updated_at'));
     }

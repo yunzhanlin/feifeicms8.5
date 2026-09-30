@@ -8,10 +8,20 @@ use think\facade\Db;
 /** Generates links from the same logical rule vocabulary used by FeiFeiCMS 4.3/7.4. */
 final class LegacyUrlGenerator
 {
+    /** @var array<string,array<string,mixed>|null> Request-local records prepared by frontend DTO conversion. */
+    private static array $primedRecords = [];
+
     /** @var array<string,array<string,mixed>|null> */
     private array $recordCache = [];
 
     public function __construct(private readonly SiteSettings $settings, private readonly LegacyRewriteRules $rules) {}
+
+    /** @param array<string,mixed> $record */
+    public static function prime(string $table, array $record): void
+    {
+        $id = (int) ($record['id'] ?? 0);
+        if ($id > 0) self::$primedRecords[$table . ':' . $id] = $record;
+    }
 
     /** @param array<string,mixed> $params */
     public function generate(string $name, array $params, bool $withSuffix, string $fallback): string
@@ -125,6 +135,7 @@ final class LegacyUrlGenerator
     {
         if ($id < 1) return null;
         $key = $table . ':' . $id;
+        if (array_key_exists($key, self::$primedRecords)) return self::$primedRecords[$key];
         if (!array_key_exists($key, $this->recordCache)) {
             try {
                 $this->recordCache[$key] = Db::table($table)->where('id', $id)->whereNull('deleted_at')->find();
