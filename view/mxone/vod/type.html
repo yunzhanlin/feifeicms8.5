@@ -11,9 +11,9 @@
         <div class="mx-filter">
             <div>
                 <b>排序</b>
-                <a class="{if $filters.order=='addtime'}active{/if}" href="{:ff_url('type',$type.list_id)}?order=addtime&type={$filters.type|urlencode}&area={$filters.area|urlencode}&year={$filters.year|urlencode}">最新</a>
-                <a class="{if $filters.order=='hits'}active{/if}" href="{:ff_url('type',$type.list_id)}?order=hits&type={$filters.type|urlencode}&area={$filters.area|urlencode}&year={$filters.year|urlencode}">人气</a>
-                <a class="{if $filters.order=='gold'}active{/if}" href="{:ff_url('type',$type.list_id)}?order=gold&type={$filters.type|urlencode}&area={$filters.area|urlencode}&year={$filters.year|urlencode}">评分</a>
+                <a class="{if $filters.order=='addtime'}active{/if}" href="{:ff_url('type',$type.list_id)}?order=addtime&type={$filters.type|urlencode}&area={$filters.area|urlencode}&year={$filters.year|urlencode}&language={$filters.language|urlencode}">最新</a>
+                <a class="{if $filters.order=='hits'}active{/if}" href="{:ff_url('type',$type.list_id)}?order=hits&type={$filters.type|urlencode}&area={$filters.area|urlencode}&year={$filters.year|urlencode}&language={$filters.language|urlencode}">人气</a>
+                <a class="{if $filters.order=='gold'}active{/if}" href="{:ff_url('type',$type.list_id)}?order=gold&type={$filters.type|urlencode}&area={$filters.area|urlencode}&year={$filters.year|urlencode}&language={$filters.language|urlencode}">评分</a>
             </div>
             {notempty name="filterOptions.type"}
             <div>
@@ -22,6 +22,7 @@
                 {volist name="filterOptions.type" id="opt"}<a class="{if $filters.type==$opt}active{/if}" href="{:ff_url('type',$type.list_id)}?order={$filters.order}&type={$opt|urlencode}&area={$filters.area|urlencode}&year={$filters.year|urlencode}">{$opt}</a>{/volist}
             </div>
             {/notempty}
+            {notempty name="filterOptions.language"}<div><b>语言</b><a class="{if $filters.language==''}active{/if}" href="{:ff_url('type',$type.list_id)}?order={$filters.order}&type={$filters.type|urlencode}&area={$filters.area|urlencode}&year={$filters.year|urlencode}">全部</a>{volist name="filterOptions.language" id="opt"}<a class="{if $filters.language==$opt}active{/if}" href="{:ff_url('type',$type.list_id)}?order={$filters.order}&type={$filters.type|urlencode}&area={$filters.area|urlencode}&year={$filters.year|urlencode}&language={$opt|urlencode}">{$opt}</a>{/volist}</div>{/notempty}
             {notempty name="filterOptions.area"}
             <div>
                 <b>地区</b>

@@ -1,0 +1,14 @@
+{assign name="pageTitle" value="$scenario.title" /}
+{assign name="pageActive" value="" /}
+{include file="mxone/common/head" /}
+{include file="mxone/common/header" /}
+<main class="mx-wrap mx-main">
+    <article class="mx-panel mx-scenario-article">
+        <nav class="mx-scenario-breadcrumb"><a href="{:ff_url('vod',$vod.vod_id)}">{$vod.vod_name}</a><span>/</span><a href="/vod/{$vod.vod_id}/scenarios">分集剧情</a><span>/</span><em>第 {$scenario.episode_no} 集</em></nav>
+        <header><p class="mx-eyebrow">EPISODE {$scenario.episode_no}</p><h1>{$scenario.title|default='分集剧情'}</h1><p>{$vod.vod_name} · 更新于 {$scenario.updated_at}</p></header>
+        <div class="mx-scenario-copy">{$scenario.content|htmlentities|nl2br|raw}</div>
+        <nav class="mx-scenario-prevnext">{notempty name="previous"}<a href="/scenario/{$previous.id}"><small>上一集</small><strong>{notempty name="previous.title"}{$previous.title}{else /}第 {$previous.episode_no} 集{/notempty}</strong></a>{else /}<span></span>{/notempty}{notempty name="next"}<a href="/scenario/{$next.id}"><small>下一集</small><strong>{notempty name="next.title"}{$next.title}{else /}第 {$next.episode_no} 集{/notempty}</strong></a>{/notempty}</nav>
+    </article>
+    <div class="mx-scenario-bottom-actions"><a class="mx-btn" href="/vod/{$vod.vod_id}/scenarios">全部剧情</a><a class="mx-btn mx-btn-light" href="{:ff_url('vod',$vod.vod_id)}">影片详情</a></div>
+</main>
+{assign name="footerText" value="MXOne · 剧情详情" /}{include file="mxone/common/footer" /}

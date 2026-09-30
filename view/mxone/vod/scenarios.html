@@ -1,0 +1,9 @@
+{assign name="pageTitle" value="$vod.vod_name . ' 分集剧情'" /}
+{assign name="pageActive" value="" /}
+{include file="mxone/common/head" /}
+{include file="mxone/common/header" /}
+<main class="mx-wrap mx-main">
+    <section class="mx-panel mx-scenario-hero"><div><p class="mx-eyebrow">EPISODE STORY</p><h1>{$vod.vod_name} 分集剧情</h1><p>剧情内容与视频 #{$vod.vod_id} 关联，共 {$scenarios|count} 集。</p></div><a class="mx-btn" href="{:ff_url('vod',$vod.vod_id)}">返回视频详情</a></section>
+    {notempty name="scenarios"}<section class="mx-panel mx-scenario-catalog"><div class="mx-scenario-chapters">{volist name="scenarios" id="item"}<article><a href="/scenario/{$item.id}"><span class="mx-scenario-number">{$item.episode_no}</span><div><h3>{$item.title|default='分集剧情'}</h3><p>{$item.content|strip_tags}</p></div><b>阅读全文</b></a></article>{/volist}</div></section>{else /}<p class="mx-empty">暂无已发布的分集剧情。</p>{/notempty}
+</main>
+{assign name="footerText" value="MXOne · 分集剧情" /}{include file="mxone/common/footer" /}

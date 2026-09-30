@@ -3,6 +3,7 @@
 {include file="mxone/common/head" /}
 {include file="mxone/common/header" /}
 <main class="mx-wrap mx-main">
+    {notempty name="siteAds.home_top"}<aside class="mx-ad-slot">{$siteAds.home_top|raw}</aside>{/notempty}
     {notempty name="slides"}<section class="mx-hero"><div class="mx-hero-card mx-hero-slider" data-hero-slider><div class="mx-hero-track">{volist name="slides" id="slide" key="slideIndex"}<article class="mx-hero-slide {if $slideIndex==1}active{/if}"><img class="mx-hero-bg" src="{$slide.image_url|htmlentities}" alt=""><span class="mx-hero-badge">精选推荐</span><h1>{$slide.name|htmlentities}</h1><p>{$slide.description|htmlentities}</p><a class="mx-btn" href="{$slide.target_url|default='/'|htmlentities}">立即查看</a></article>{/volist}</div><div class="mx-hero-dots">{volist name="slides" id="slide" key="dotIndex"}<button type="button" class="{if $dotIndex==1}active{/if}" data-hero-dot="{$dotIndex-1}" aria-label="第 {$dotIndex} 张"></button>{/volist}</div></div><aside class="mx-panel"><div class="mx-title"><h2>热播榜</h2><a href="/hot">更多</a></div><div class="mx-list">{volist name="featured" id="hot" offset="0" length="6"}<a class="mx-list-card" href="{:ff_url('vod',$hot.vod_id)}"><strong>{$hot.vod_name}</strong><small>{$hot.vod_hits} 次播放</small></a>{/volist}</div></aside></section>{else /}{notempty name="featured"}<section class="mx-hero">{volist name="featured" id="hero" offset="0" length="1"}<div class="mx-hero-card mx-hero-static"><img class="mx-hero-bg" src="{$hero.vod_pic|htmlentities}" alt=""><div class="mx-hero-fallback"><span class="mx-hero-badge">热播推荐</span><h1>{$hero.vod_name}</h1><p>{$hero.summary_text}</p><a class="mx-btn" href="{:ff_url('vod',$hero.vod_id)}">查看详情</a></div></div>{/volist}<aside class="mx-panel"><div class="mx-title"><h2>热播榜</h2><a href="/hot">更多</a></div><div class="mx-list">{volist name="featured" id="hot" offset="0" length="6"}<a class="mx-list-card" href="{:ff_url('vod',$hot.vod_id)}"><strong>{$hot.vod_name}</strong><small>{$hot.vod_hits} 次播放</small></a>{/volist}</div></aside></section>{/notempty}{/notempty}
     <section>
         <div class="mx-title"><h2>热播推荐</h2><a href="/hot">更多 &gt;</a></div>
@@ -12,6 +13,7 @@
             {/volist}
         </div>
     </section>
+    {notempty name="siteAds.home_middle"}<aside class="mx-ad-slot">{$siteAds.home_middle|raw}</aside>{/notempty}
     <section>
         <div class="mx-title"><h2>最近更新</h2><a href="/latest">更多 &gt;</a></div>
         <div class="mx-grid">

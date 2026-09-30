@@ -129,6 +129,61 @@ final class LegacyTemplate
         return Db::table('ffx_navigation')->where('status', 'enabled')->order('sort_order')->order('id')->limit($this->limit($p, 50))->select()->toArray();
     }
 
+    /** @return array<int, array<string, mixed>> */
+    public function links(string $tag = ''): array
+    {
+        $p = $this->parse($tag);
+        return array_map(static fn (array $row): array => $row + [
+            'link_id' => (int) $row['id'], 'link_name' => (string) $row['name'],
+            'link_url' => (string) $row['url'], 'link_logo' => (string) ($row['logo_url'] ?? ''),
+            'link_type' => (string) ($row['link_type'] ?? 'text'),
+        ], Db::table('ffx_links')->where('status', 'enabled')->order('sort_order')->order('id')->limit($this->limit($p, 50))->select()->toArray());
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public function ads(string $tag = ''): array
+    {
+        $p = $this->parse($tag);
+        $query = Db::table('ffx_ads')->where('status', 'enabled')
+            ->where(function ($query): void { $query->whereNull('starts_at')->whereOr('starts_at', '<=', gmdate('Y-m-d H:i:s')); })
+            ->where(function ($query): void { $query->whereNull('ends_at')->whereOr('ends_at', '>=', gmdate('Y-m-d H:i:s')); });
+        if (!empty($p['slot'])) $query->where('slot_key', mb_substr((string) $p['slot'], 0, 100));
+        return array_map(static fn (array $row): array => $row + [
+            'ads_id' => (int) $row['id'], 'ads_name' => (string) $row['name'],
+            'ads_key' => (string) $row['slot_key'], 'ads_content' => (string) $row['content'],
+        ], $query->order('id')->limit($this->limit($p, 20))->select()->toArray());
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public function scenarios(string $tag = ''): array
+    {
+        $p = $this->parse($tag);
+        $query = Db::table('ffx_scenarios')->whereNull('deleted_at')->where('status', 'published');
+        if (!empty($p['id'])) $query->whereIn('id', $this->ids((string) $p['id']));
+        if (!empty($p['vodid']) || !empty($p['cid'])) $query->whereIn('media_id', $this->ids((string) ($p['vodid'] ?? $p['cid'])));
+        return array_map(static fn (array $row): array => $row + [
+            'scenario_id' => (int) $row['id'], 'scenario_vid' => (int) $row['media_id'],
+            'scenario_pid' => (int) $row['episode_no'], 'scenario_name' => (string) $row['title'],
+            'scenario_content' => (string) $row['content'],
+            'scenario_link' => ff_url('scenario', ['id' => (int) $row['id'], 'pid' => (int) $row['episode_no']]),
+        ], $query->order('sort_order')->order('episode_no')->order('id')->limit($this->limit($p, 100))->select()->toArray());
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public function comments(string $tag = ''): array
+    {
+        $p = $this->parse($tag);
+        $target = strtolower((string) ($p['target'] ?? 'media')) === 'site' ? 'site' : 'media';
+        $query = Db::table('ffx_comments')->whereNull('deleted_at')->where('status', 'approved')->where('target_type', $target);
+        if (!empty($p['cid'])) $query->whereIn('target_id', $this->ids((string) $p['cid']));
+        return array_map(static fn (array $row): array => $row + [
+            'forum_id' => (int) $row['id'], 'forum_cid' => (int) ($row['target_id'] ?? 0),
+            'forum_pid' => (int) ($row['parent_id'] ?? 0), 'forum_title' => (string) ($row['title'] ?? ''),
+            'forum_content' => (string) $row['content'], 'forum_name' => (string) ($row['author_name'] ?? '访客'),
+            'forum_addtime' => strtotime((string) $row['created_at']) ?: 0,
+        ], $query->order('created_at', 'desc')->order('id', 'desc')->limit($this->limit($p, 30))->select()->toArray());
+    }
+
     /** @return array<string, string> */
     private function parse(string $tag): array
     {

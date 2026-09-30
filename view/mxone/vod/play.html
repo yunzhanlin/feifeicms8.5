@@ -30,16 +30,20 @@
             </div>
         </div>
     </section>
+    {notempty name="siteAds.vod_play"}<aside class="mx-ad-slot">{$siteAds.vod_play|raw}</aside>{/notempty}
     <section>
-        <div class="mx-title"><!--<h2>选集</h2><span>{$currentSource.name}</span>--></div>
+        <div class="mx-title"><h2>线路与选集</h2><span>{$currentSource.name}</span></div>
+        <nav class="mx-play-source-tabs">{volist name="sources" id="source" key="sourceIndex"}<a class="{if ($sourceIndex-1)==$sid}active{/if}" href="{:ff_play_url($vod.vod_id,$sourceIndex-1,0)}" data-play-source="{$sourceIndex-1}">{$source.name}<em>{$source.episodes|count}</em></a>{/volist}</nav>
+        <div class="mx-play-source-panels">
         {volist name="sources" id="source" key="sourceIndex"}
-        <div class="mx-source">
-            <h3>{$source.name}</h3>
-            <div class="mx-episodes">
-                {volist name="source.episodes" id="episode" key="episodeIndex"}<a class="{if ($sourceIndex-1)==$sid && ($episodeIndex-1)==$pid}active{/if}" href="{:ff_play_url($vod.vod_id,$sourceIndex-1,$episodeIndex-1)}">{$episode.title}</a>{/volist}
+        <div class="mx-source" data-play-source-panel="{$sourceIndex-1}" data-episode-source {if ($sourceIndex-1)!=$sid}hidden{/if}>
+            <div class="mx-source-head"><h3>{$source.name}</h3><button class="mx-episode-sort-toggle" type="button" data-episode-sort-toggle>倒序</button></div>
+            <div class="mx-episodes" data-episode-list data-limit="{$frontendUi.episodeLimit}">
+                {volist name="source.episodes" id="episode" key="episodeIndex"}<a data-episode-index="{$episodeIndex-1}" class="{if ($sourceIndex-1)==$sid && ($episodeIndex-1)==$pid}active{/if}" href="{:ff_play_url($vod.vod_id,$sourceIndex-1,$episodeIndex-1)}">{$episode.title}</a>{/volist}
             </div>
         </div>
         {/volist}
+        </div>
     </section>
     {notempty name="related"}
     <section>
