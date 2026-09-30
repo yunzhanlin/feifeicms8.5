@@ -40,10 +40,14 @@ final class SchemaV2Test extends TestCase
     public function testFreshInstallRecordsTheCompleteSchemaBaseline(): void
     {
         self::assertStringContainsString(
-            "VALUES (12, 'indexed media administration filters')",
+            "VALUES (13, 'independent scenario collection sources')",
             $this->schema
         );
         self::assertStringContainsString("new_data_policy VARCHAR(20) NOT NULL DEFAULT 'published'", $this->schema);
+        self::assertStringContainsString("resource_type VARCHAR(20) NOT NULL DEFAULT 'video'", $this->schema);
+        self::assertStringContainsString('media_source_id BIGINT UNSIGNED NULL', $this->schema);
+        self::assertStringContainsString('UNIQUE KEY uk_ffx_collection_sources_resource_endpoint (resource_type, endpoint(255))', $this->schema);
+        self::assertStringContainsString('FOREIGN KEY (media_source_id) REFERENCES ffx_collection_sources(id) ON DELETE SET NULL', $this->schema);
         foreach (['admin_weekday', 'admin_state', 'admin_series', 'admin_inputer', 'idx_ffx_media_updated'] as $filterIndex) {
             self::assertStringContainsString($filterIndex, $this->schema);
         }
@@ -58,6 +62,15 @@ final class SchemaV2Test extends TestCase
         self::assertStringContainsString("'feifei:schema:upgrade'", $console);
         self::assertStringContainsString("GET_LOCK('feifeicms_schema_upgrade'", file_get_contents(dirname(__DIR__) . '/app/command/SchemaUpgrade.php'));
         self::assertStringContainsString("VALUES (12, 'indexed media administration filters')", $migration);
+    }
+
+    public function testScenarioCollectionSourceMigrationIsRegistered(): void
+    {
+        $migration = file_get_contents(dirname(__DIR__) . '/database/migrations/013_scenario_collection_sources.sql');
+        self::assertIsString($migration);
+        foreach (['resource_type', 'media_source_id', 'uk_ffx_collection_sources_resource_endpoint', 'fk_ffx_collection_sources_media_source', "VALUES (13, 'independent scenario collection sources')"] as $marker) {
+            self::assertStringContainsString($marker, $migration);
+        }
     }
 
     public function testCronTasksSupportIntervalHourlyAndDailySchedules(): void

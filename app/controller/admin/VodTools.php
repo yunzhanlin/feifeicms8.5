@@ -132,11 +132,13 @@ final class VodTools extends BaseController
     public function scenarios(): Response
     {
         $withScenarios = (int) Db::table('ffx_scenarios')->whereNull('deleted_at')->value('COUNT(DISTINCT media_id)');
+        $selectedSourceId = max(0, (int) $this->request->get('source_id', 0));
         return view('/admin/vod_tools/scenarios', [
             'total' => Db::table('ffx_scenarios')->whereNull('deleted_at')->count(),
             'mediaCount' => $withScenarios,
             'missing' => Db::table('ffx_media')->whereNull('deleted_at')->whereRaw('(COALESCE(episode_total,0)>0 OR EXISTS (SELECT 1 FROM ffx_episodes ep WHERE ep.media_id=ffx_media.id))')->whereRaw('NOT EXISTS (SELECT 1 FROM ffx_scenarios sc WHERE sc.media_id=ffx_media.id AND sc.deleted_at IS NULL)')->count(),
-            'sources' => Db::table('ffx_collection_sources')->where('status', 'enabled')->order('id')->select()->toArray(),
+            'sources' => Db::table('ffx_collection_sources')->where('status', 'enabled')->orderRaw("CASE WHEN resource_type='scenario' THEN 0 ELSE 1 END")->order('name')->select()->toArray(),
+            'selectedSourceId' => $selectedSourceId,
             'csrf' => $this->csrf->get(),
         ]);
     }

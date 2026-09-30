@@ -152,6 +152,8 @@ GET /api.php/provide/vod?ac=detail&ids=16
 GET /api/provide/vod?ac=detail&t=1&pg=1
 ```
 
+独立分集剧情源在后台“采集 → 剧情资源库 → 添加剧情资源库”中配置。FeiFeiCMS 7.3/7.4 JSON 使用独立 `scenario` 接口；创建剧情源时建议关联对应的视频资源库，系统将优先按远程视频 ID 关联本地影片，匹配成功后只更新 `ffx_scenarios`，不会改动视频资料或播放线路。
+
 #### 升级说明
 
 升级前必须备份数据库、`.env` 和上传文件。覆盖程序文件并安装依赖后执行：

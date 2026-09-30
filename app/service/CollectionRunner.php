@@ -52,6 +52,9 @@ final class CollectionRunner
                     $filters[$filter] = mb_substr(trim((string) $payload[$filter]), 0, $filter === 'ids' ? 1000 : 100);
                 }
             }
+            if (($source['resource_type'] ?? 'video') === 'scenario') {
+                return $this->runScenarioJob($jobId, $job, $source, $payload, $filters, $page, $pageEnd, $maxPages);
+            }
             $mapping = json_decode((string) ($source['category_mapping'] ?? '{}'), true);
             $mapping = is_array($mapping) ? $mapping : [];
             $defaultCategory = (int) Db::table('ffx_categories')->where('content_type', 'media')->where('status', 'published')->order('sort_order')->value('id');
@@ -191,7 +194,7 @@ final class CollectionRunner
         $processed = $imported = $matched = 0;
         foreach ($envelope['rows'] as $row) {
             $processed++;
-            $synced = $this->importScenario($sourceId, $row);
+            $synced = $this->importScenario($sourceId, $row, (int) ($source['media_source_id'] ?? 0));
             if ($synced > 0) $matched++;
             $imported += $synced;
         }
@@ -226,13 +229,22 @@ final class CollectionRunner
         if ($refs === []) throw new \RuntimeException('该影片没有可用的采集来源标识');
 
         $processed = $imported = $skipped = 0;
+        $targets = [];
         foreach ($refs as $ref) {
-            $result = $this->runScenarios((int) $ref['source_id'], ['ids' => (string) $ref['external_id'], 'limit' => 100]);
+            $sourceId = (int) $ref['source_id'];
+            $targets[$sourceId . ':' . $ref['external_id']] = ['source_id' => $sourceId, 'external_id' => (string) $ref['external_id']];
+            $linked = Db::table('ffx_collection_sources')->where('resource_type', 'scenario')->where('media_source_id', $sourceId)->where('status', 'enabled')->column('id');
+            foreach ($linked as $linkedSourceId) {
+                $targets[(int) $linkedSourceId . ':' . $ref['external_id']] = ['source_id' => (int) $linkedSourceId, 'external_id' => (string) $ref['external_id']];
+            }
+        }
+        foreach ($targets as $target) {
+            $result = $this->runScenarios((int) $target['source_id'], ['ids' => (string) $target['external_id'], 'limit' => 100]);
             $processed += (int) $result['processed'];
             $imported += (int) $result['imported'];
             $skipped += (int) $result['skipped'];
         }
-        return ['processed' => $processed, 'imported' => $imported, 'skipped' => $skipped, 'sources' => count($refs)];
+        return ['processed' => $processed, 'imported' => $imported, 'skipped' => $skipped, 'sources' => count($targets)];
     }
 
     /** @return array<int, array<string, mixed>> */
@@ -458,12 +470,13 @@ final class CollectionRunner
     }
 
     /** @param array<string, mixed> $row */
-    private function importScenario(int $sourceId, array $row): int
+    private function importScenario(int $sourceId, array $row, int $mediaSourceId = 0): int
     {
         $externalId = trim((string) ($row['vod_id'] ?? $row['id'] ?? ''));
-        $ref = $externalId === '' ? null : Db::table('ffx_external_refs')->where('source_id', $sourceId)->where('entity_type', 'media')->where('external_id', $externalId)->find();
+        $referenceSourceId = $mediaSourceId > 0 ? $mediaSourceId : $sourceId;
+        $ref = $externalId === '' ? null : Db::table('ffx_external_refs')->where('source_id', $referenceSourceId)->where('entity_type', 'media')->where('external_id', $externalId)->find();
         if ($ref === null && !empty($row['vod_reurl'])) {
-            $ref = Db::table('ffx_external_refs')->where('source_id', $sourceId)->where('entity_type', 'media')->where('source_url', (string) $row['vod_reurl'])->find();
+            $ref = Db::table('ffx_external_refs')->where('source_id', $referenceSourceId)->where('entity_type', 'media')->where('source_url', (string) $row['vod_reurl'])->find();
         }
         if ($ref === null && !empty($row['vod_name'])) {
             $ids = Db::table('ffx_media')->where('title', trim((string) $row['vod_name']))->whereNull('deleted_at')->column('id');
@@ -471,6 +484,41 @@ final class CollectionRunner
         }
         if ($ref === null) return 0;
         return $this->syncScenarioPayload((int) $ref['entity_id'], $row['vod_scenario'] ?? null, $sourceId, $externalId !== '' ? $externalId : (string) ($row['vod_reurl'] ?? ''));
+    }
+
+    /** @param array<string,mixed> $job @param array<string,mixed> $source @param array<string,mixed> $payload @param array<string,mixed> $filters
+     *  @return array<string,int|string>
+     */
+    private function runScenarioJob(int $jobId, array $job, array $source, array $payload, array $filters, int $page, int $pageEnd, int $maxPages): array
+    {
+        $processed = $imported = $skipped = 0;
+        $lastPage = $page;
+        $remotePageCount = $pageEnd;
+        for ($offset = 0; $offset < $maxPages && $page + $offset <= $pageEnd; $offset++) {
+            $currentPage = $page + $offset;
+            $result = $this->runScenarios((int) $source['id'], array_replace($filters, ['page' => $currentPage]));
+            $processed += (int) $result['processed'];
+            $imported += (int) $result['imported'];
+            $skipped += (int) $result['skipped'];
+            $lastPage = $currentPage;
+            $remotePageCount = max(1, (int) $result['pagecount']);
+            if ((int) $result['next_page'] === 0 || isset($payload['ids'])) break;
+            $pause = $this->settings->int('admin.collection.collect_time', 0, 0, 5);
+            if ($pause > 0) sleep($pause);
+        }
+        $totalProcessed = (int) $job['processed_count'] + $processed;
+        $totalImported = (int) $job['updated_count'] + $imported;
+        $hasMore = !isset($payload['ids']) && $lastPage < min($pageEnd, $remotePageCount);
+        if ($hasMore) $payload['page'] = $lastPage + 1;
+        Db::table('ffx_collection_jobs')->where('id', $jobId)->update([
+            'state' => $hasMore ? 'queued' : 'completed',
+            'cursor_value' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'processed_count' => $totalProcessed,
+            'updated_count' => $totalImported,
+            'finished_at' => $hasMore ? null : gmdate('Y-m-d H:i:s'),
+            'error_message' => $skipped > 0 ? '本批有 ' . $skipped . ' 条剧情未匹配到本地视频' : null,
+        ]);
+        return ['processed' => $totalProcessed, 'created' => 0, 'updated' => $totalImported, 'errors' => (int) $job['error_count'], 'next_page' => $hasMore ? $lastPage + 1 : 0];
     }
 
     private function syncScenarioPayload(int $mediaId, mixed $payload, int $sourceId, string $externalId): int
