@@ -3,6 +3,7 @@ declare(strict_types=1);
 
 namespace app\command;
 
+use app\service\SqlStatementStream;
 use think\console\Command;
 use think\console\Input;
 use think\console\Output;
@@ -25,19 +26,13 @@ final class SchemaInstall extends Command
         }
 
         $path = root_path() . 'database/schema-v2.sql';
-        $sql = file_get_contents($path);
-        if ($sql === false) {
+        if (!is_file($path)) {
             $output->writeln('[FAIL] 无法读取结构文件：' . $path);
             return 1;
         }
 
-        $statements = preg_split('/;\s*(?:\r?\n|$)/', $sql) ?: [];
         $executed = 0;
-        foreach ($statements as $statement) {
-            $statement = trim($statement);
-            if ($statement === '') {
-                continue;
-            }
+        foreach ((new SqlStatementStream())->fromFile($path) as $statement) {
             Db::execute($statement);
             $executed++;
         }

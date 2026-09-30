@@ -6,11 +6,12 @@ namespace app\service;
 use PDO;
 use PDOException;
 use RuntimeException;
+use think\facade\Log;
 use Throwable;
 
 final class WebInstaller
 {
-    public function __construct(private readonly PasswordHasher $passwordHasher)
+    public function __construct(private readonly PasswordHasher $passwordHasher, private readonly SqlStatementStream $sql)
     {
     }
 
@@ -70,43 +71,58 @@ final class WebInstaller
         if ($this->isLocked()) throw new RuntimeException('程序已安装；如需重装，请先备份数据并手工删除 runtime/install.lock。');
         if (!$this->environmentReady()) throw new RuntimeException('服务器环境检查未通过。');
 
-        $values = $this->validate($input);
-        $pdo = $this->connect($values);
-        $version = (string) $pdo->query('SELECT VERSION()')->fetchColumn();
-        if (!preg_match('/^8\./', $version)) {
-            throw new RuntimeException('需要 MySQL 8.x，当前版本为 ' . ($version ?: '未知') . '。');
+        $installGuard = fopen(runtime_path() . 'installing.lock', 'c+');
+        if ($installGuard === false || !flock($installGuard, LOCK_EX | LOCK_NB)) {
+            if (is_resource($installGuard)) fclose($installGuard);
+            throw new RuntimeException('另一个安装过程正在运行，请稍后再试。');
         }
-
-        $existing = (int) $pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'ffx\\_%'")->fetchColumn();
-        if ($existing > 0) {
-            throw new RuntimeException('目标数据库已存在 ffx_ 数据表，为防止覆盖已停止安装。');
-        }
-
-        $environment = $this->buildEnvironment($values);
-        $temporaryEnvironment = root_path() . '.env.installing';
-        if (file_put_contents($temporaryEnvironment, $environment, LOCK_EX) === false) {
-            throw new RuntimeException('无法写入临时环境配置。');
-        }
-        @chmod($temporaryEnvironment, 0600);
 
         try {
-            $this->executeSchema($pdo);
-            $this->createAdministrator($pdo, $values);
-            $this->saveSiteSettings($pdo, $values);
-
-            $environmentPath = root_path() . '.env';
-            if (!@rename($temporaryEnvironment, $environmentPath)) {
-                throw new RuntimeException('数据库已完成，但 .env 配置无法生效，请检查站点根目录权限。');
+            $values = $this->validate($input);
+            $pdo = $this->connect($values);
+            $version = (string) $pdo->query('SELECT VERSION()')->fetchColumn();
+            if (!preg_match('/^8\./', $version)) {
+                throw new RuntimeException('需要 MySQL 8.x，当前版本为 ' . ($version ?: '未知') . '。');
             }
-            @chmod($environmentPath, 0600);
-            $this->writeLock($version);
-        } catch (Throwable $exception) {
-            @unlink($temporaryEnvironment);
-            throw $exception;
-        }
 
-        $tables = (int) $pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'ffx\\_%'")->fetchColumn();
-        return ['database_version' => $version, 'tables' => $tables, 'admin' => $values['admin_username']];
+            $existing = (int) $pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'ffx\\_%'")->fetchColumn();
+            if ($existing > 0) {
+                throw new RuntimeException('目标数据库已存在 ffx_ 数据表，为防止覆盖已停止安装。');
+            }
+
+            $environment = $this->buildEnvironment($values);
+            $temporaryEnvironment = root_path() . '.env.installing';
+            if (file_put_contents($temporaryEnvironment, $environment, LOCK_EX) === false) {
+                throw new RuntimeException('无法写入临时环境配置。');
+            }
+            @chmod($temporaryEnvironment, 0600);
+            $environmentPath = root_path() . '.env';
+            $environmentActivated = false;
+
+            try {
+                $this->executeSchema($pdo);
+                $this->createAdministrator($pdo, $values);
+                $this->saveSiteSettings($pdo, $values);
+
+                if (!@rename($temporaryEnvironment, $environmentPath)) {
+                    throw new RuntimeException('数据库已完成，但 .env 配置无法生效，请检查站点根目录权限。');
+                }
+                $environmentActivated = true;
+                @chmod($environmentPath, 0600);
+                $this->writeLock($version);
+            } catch (Throwable $exception) {
+                @unlink($temporaryEnvironment);
+                if ($environmentActivated) @unlink($environmentPath);
+                $this->rollbackFreshSchema($pdo);
+                throw $exception;
+            }
+
+            $tables = (int) $pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'ffx\\_%'")->fetchColumn();
+            return ['database_version' => $version, 'tables' => $tables, 'admin' => $values['admin_username']];
+        } finally {
+            flock($installGuard, LOCK_UN);
+            fclose($installGuard);
+        }
     }
 
     /** @param array<string, mixed> $input @return array<string, string> */
@@ -161,18 +177,33 @@ final class WebInstaller
             $server->exec('CREATE DATABASE IF NOT EXISTS `' . $values['db_name'] . '` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci');
             return new PDO($serverDsn . ';dbname=' . $values['db_name'], $values['db_user'], $values['db_pass'], $options);
         } catch (PDOException $exception) {
-            throw new RuntimeException('数据库连接或创建失败：' . $exception->getMessage(), 0, $exception);
+            Log::error('安装程序数据库连接或创建失败', ['exception' => $exception->getMessage()]);
+            throw new RuntimeException('数据库连接或创建失败，请检查主机、端口、库名和账号权限。', 0, $exception);
+        }
+    }
+
+    private function rollbackFreshSchema(PDO $pdo): void
+    {
+        try {
+            $tables = $pdo->query("SELECT table_name FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'ffx\\_%'")->fetchAll(PDO::FETCH_COLUMN);
+            $pdo->exec('SET FOREIGN_KEY_CHECKS=0');
+            try {
+                foreach ($tables as $table) {
+                    if (is_string($table) && preg_match('/^ffx_[a-z0-9_]+$/', $table) === 1) {
+                        $pdo->exec('DROP TABLE IF EXISTS `' . $table . '`');
+                    }
+                }
+            } finally {
+                $pdo->exec('SET FOREIGN_KEY_CHECKS=1');
+            }
+        } catch (Throwable $rollbackException) {
+            Log::critical('安装失败后数据库清理未完成', ['exception' => $rollbackException->getMessage()]);
         }
     }
 
     private function executeSchema(PDO $pdo): void
     {
-        $sql = file_get_contents(root_path() . 'database/schema-v2.sql');
-        if ($sql === false) throw new RuntimeException('无法读取 database/schema-v2.sql。');
-        foreach (preg_split('/;\s*(?:\r?\n|$)/', $sql) ?: [] as $statement) {
-            $statement = trim($statement);
-            if ($statement !== '') $pdo->exec($statement);
-        }
+        foreach ($this->sql->fromFile(root_path() . 'database/schema-v2.sql') as $statement) $pdo->exec($statement);
     }
 
     /** @param array<string, string> $values */
@@ -208,7 +239,8 @@ final class WebInstaller
             'REDIS_PORT' => $values['redis_port'], 'REDIS_PASSWORD' => $values['redis_password'], 'REDIS_DB' => $values['redis_db'], 'REDIS_PREFIX' => 'ff85:',
             'SEARCH_DRIVER' => $values['search_driver'], 'SEARCH_FALLBACK' => 'mysql', 'MEILISEARCH_HOST' => $values['meilisearch_host'],
             'MEILISEARCH_KEY' => $values['meilisearch_key'], 'MEILISEARCH_INDEX' => 'feifeicms_media', 'SESSION_DRIVER' => $cacheIsRedis ? 'cache' : 'file',
-            'SESSION_STORE' => $cacheIsRedis ? 'redis' : '', 'SESSION_NAME' => 'FFSESSID', 'DEFAULT_LANG' => 'zh-cn', 'INSTALL_ENABLED' => 'false',
+            'SESSION_STORE' => $cacheIsRedis ? 'redis' : '', 'SESSION_NAME' => 'FFSESSID', 'COOKIE_SECURE' => str_starts_with(strtolower($values['app_url']), 'https://') ? 'true' : 'false',
+            'DEFAULT_LANG' => 'zh-cn', 'INSTALL_ENABLED' => 'false',
         ];
         $output = '';
         foreach ($lines as $key => $value) $output .= $key . ' = ' . $this->quoteEnvironmentValue($value) . PHP_EOL;

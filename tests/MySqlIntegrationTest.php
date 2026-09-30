@@ -1,0 +1,66 @@
+<?php
+declare(strict_types=1);
+
+namespace tests;
+
+use PDO;
+use PHPUnit\Framework\TestCase;
+
+final class MySqlIntegrationTest extends TestCase
+{
+    private ?PDO $pdo = null;
+
+    protected function setUp(): void
+    {
+        $path = dirname(__DIR__) . '/.env';
+        if (!is_file($path)) self::markTestSkipped('MySQL integration environment is not configured');
+        $env = parse_ini_file($path);
+        if (!is_array($env)) self::markTestSkipped('MySQL integration database is not configured');
+        $value = static function (string $key, string $default = '') use ($env): string {
+            $system = getenv($key);
+            return is_string($system) && $system !== '' ? $system : (string) ($env[$key] ?? $default);
+        };
+        if ($value('DB_NAME') === '') self::markTestSkipped('MySQL integration database is not configured');
+        try {
+            $this->pdo = new PDO(
+                sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $value('DB_HOST', '127.0.0.1'), (int) $value('DB_PORT', '3306'), $value('DB_NAME')),
+                $value('DB_USER', 'root'),
+                $value('DB_PASS'),
+                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+            );
+        } catch (\Throwable $exception) {
+            self::markTestSkipped('MySQL integration database is unavailable: ' . $exception->getMessage());
+        }
+    }
+
+    public function testGeneratedAdministrationFiltersAndIndexesExist(): void
+    {
+        $columns = $this->pdo?->query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ffx_media' AND COLUMN_NAME LIKE 'admin_%'")->fetchAll(PDO::FETCH_COLUMN);
+        self::assertEqualsCanonicalizing(['admin_weekday', 'admin_state', 'admin_series', 'admin_inputer'], $columns);
+        $indexes = $this->pdo?->query("SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ffx_media' AND INDEX_NAME LIKE 'idx_ffx_media_admin_%'")->fetchAll(PDO::FETCH_COLUMN);
+        self::assertEqualsCanonicalizing(['idx_ffx_media_admin_weekday', 'idx_ffx_media_admin_state', 'idx_ffx_media_admin_inputer'], $indexes);
+    }
+
+    public function testAQueuedCollectionJobCanOnlyBeClaimedOnce(): void
+    {
+        self::assertNotNull($this->pdo);
+        $suffix = bin2hex(random_bytes(8));
+        $source = $this->pdo->prepare('INSERT INTO ffx_collection_sources (name,endpoint,source_type,status) VALUES (?,?,?,?)');
+        $source->execute(['integration-' . $suffix, 'https://example.test/' . $suffix, 'maccms_json', 'enabled']);
+        $sourceId = (int) $this->pdo->lastInsertId();
+        $jobId = 0;
+        try {
+            $job = $this->pdo->prepare('INSERT INTO ffx_collection_jobs (source_id,idempotency_key,mode,state) VALUES (?,?,?,?)');
+            $job->execute([$sourceId, 'integration-' . $suffix, 'manual', 'queued']);
+            $jobId = (int) $this->pdo->lastInsertId();
+            $claim = $this->pdo->prepare("UPDATE ffx_collection_jobs SET state='running',started_at=NOW(6) WHERE id=? AND state='queued'");
+            $claim->execute([$jobId]);
+            self::assertSame(1, $claim->rowCount());
+            $claim->execute([$jobId]);
+            self::assertSame(0, $claim->rowCount());
+        } finally {
+            if ($jobId > 0) $this->pdo->prepare('DELETE FROM ffx_collection_jobs WHERE id=?')->execute([$jobId]);
+            $this->pdo->prepare('DELETE FROM ffx_collection_sources WHERE id=?')->execute([$sourceId]);
+        }
+    }
+}

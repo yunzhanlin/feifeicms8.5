@@ -6,15 +6,16 @@ namespace app\controller;
 use app\BaseController;
 use app\service\CsrfToken;
 use app\service\FrontendData;
-use app\service\ResilientCache;
+use app\service\RequestRateLimiter;
 use app\service\SiteSettings;
+use app\service\WatchHistoryService;
 use think\facade\Db;
 use think\facade\Session;
 use think\Response;
 
 final class User extends BaseController
 {
-    public function __construct(\think\App $app, private readonly FrontendData $frontend, private readonly CsrfToken $csrf, private readonly ResilientCache $cache, private readonly SiteSettings $settings)
+    public function __construct(\think\App $app, private readonly FrontendData $frontend, private readonly CsrfToken $csrf, private readonly RequestRateLimiter $limiter, private readonly SiteSettings $settings, private readonly WatchHistoryService $watchHistory)
     {
         parent::__construct($app);
     }
@@ -30,18 +31,19 @@ final class User extends BaseController
                 $username = mb_substr(trim((string) $this->request->post('user_name', '')), 0, 80);
                 $password = (string) $this->request->post('user_pwd', '');
                 $rateKey = 'rate:user-login:' . hash('sha256', (string) $this->request->ip());
-                $attempts = (int) $this->cache->get($rateKey, 0);
+                $attempts = $this->limiter->attempts($rateKey);
                 $user = $attempts >= 10 ? null : Db::table('ffx_users')->where('username', $username)->where('status', 'active')->whereNull('deleted_at')->find();
                 if ($user !== null && password_verify($password, (string) $user['password_hash'])) {
+                    Session::regenerate(true);
                     Session::set('user_id', (int) $user['id']);
                     Session::set('user_name', (string) $user['username']);
                     Db::table('ffx_users')->where('id', (int) $user['id'])->update([
                         'last_login_ip' => (string) $this->request->ip(), 'last_login_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s'),
                     ]);
-                    $this->cache->delete($rateKey);
+                    $this->limiter->clear($rateKey);
                     return redirect($redirect);
                 }
-                $this->cache->set($rateKey, $attempts + 1, 900);
+                $this->limiter->hit($rateKey, 900);
                 $message = $attempts >= 10 ? '尝试次数过多，请 15 分钟后再试。' : '用户名或密码不正确。';
             }
         }
@@ -66,7 +68,7 @@ final class User extends BaseController
                 $maxName = $this->settings->int('admin.register.username_max', 30, $minName, 80);
                 $minPassword = $this->settings->int('admin.register.password_min', 8, 6, 72);
                 $rateKey = 'rate:user-register:' . hash('sha256', (string) $this->request->ip());
-                if ((int) $this->cache->get($rateKey, 0) > 0) {
+                if ($this->limiter->attempts($rateKey) > 0) {
                     $message = '注册过于频繁，请稍后再试。';
                 } elseif (!preg_match('/^[\p{L}\p{N}_-]{' . $minName . ',' . $maxName . '}$/u', $username)) {
                     $message = '用户名需为 ' . $minName . '–' . $maxName . ' 个字符，只能使用文字、数字、下划线或短横线。';
@@ -91,10 +93,11 @@ final class User extends BaseController
                         'last_login_ip' => (string) $this->request->ip(), 'last_login_at' => $now,
                         'created_at' => $now, 'updated_at' => $now,
                     ]);
-                    $this->cache->set($rateKey, 1, $this->settings->int('admin.register.user_register_second', 60, 1, 86400));
+                    $this->limiter->hit($rateKey, $this->settings->int('admin.register.user_register_second', 60, 1, 86400));
                     if ($this->settings->bool('admin.register.user_register_check')) {
                         $message = '注册成功，请等待账号审核或完成邮箱验证。';
                     } else {
+                        Session::regenerate(true);
                         Session::set('user_id', $id);
                         Session::set('user_name', $username);
                         return redirect($redirect);
@@ -117,26 +120,7 @@ final class User extends BaseController
                 'user_deadtime' => $user['expires_at'] ? strtotime((string) $user['expires_at']) : 0,
                 'user_joinip' => (string) ($user['last_login_ip'] ?? ''), 'user_logip' => (string) ($user['last_login_ip'] ?? ''),
             ];
-            foreach (Db::table('ffx_watch_history')->where('user_id', $id)->order('watched_at', 'desc')->limit(50)->select()->toArray() as $record) {
-                $sourceIndex = 0;
-                $episodeIndex = 0;
-                if (!empty($record['episode_id'])) {
-                    $episode = Db::table('ffx_episodes')->where('id', (int) $record['episode_id'])->find();
-                    if ($episode !== null) {
-                        $sourceIds = Db::table('ffx_play_sources')->where('media_id', (int) $record['media_id'])->where('status', 'enabled')->order('sort_order')->order('id')->column('id');
-                        $sourceIndex = max(0, (int) array_search((int) $episode['source_id'], array_map('intval', $sourceIds), true));
-                        $episodeIds = Db::table('ffx_episodes')->where('source_id', (int) $episode['source_id'])->where('status', 'enabled')->order('sort_order')->order('id')->column('id');
-                        $episodeIndex = max(0, (int) array_search((int) $record['episode_id'], array_map('intval', $episodeIds), true));
-                    }
-                }
-                $media = Db::table('ffx_media')->where('id', (int) $record['media_id'])->find();
-                $records[] = [
-                    'record_did' => (int) $record['media_id'], 'record_did_sid' => $sourceIndex,
-                    'record_did_pid' => $episodeIndex, 'record_time' => strtotime((string) $record['watched_at']),
-                    'record_name' => (string) ($media['title'] ?? ('内容 ID：' . $record['media_id'])),
-                    'record_url' => ff_play_url((int) $record['media_id'], $sourceIndex, $episodeIndex),
-                ];
-            }
+            $records = $this->watchHistory->records($id);
         }
         $favorites = [];
         if ($user !== null) {
@@ -157,8 +141,7 @@ final class User extends BaseController
     public function logout(): Response
     {
         if (!$this->csrf->verify($this->request->post('_token'))) return response('请求已过期', 419);
-        Session::delete('user_id');
-        Session::delete('user_name');
+        Session::destroy();
         return redirect('/');
     }
 
