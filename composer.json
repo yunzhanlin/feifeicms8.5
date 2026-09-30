@@ -1,6 +1,6 @@
 {
     "name": "yunzhanlin/feifeicms8.5",
-    "description": "FeiFeiCMS 8.5 Beta 1 upgraded to ThinkPHP 8 with PHP 8.x, MySQL 8, Redis and Meilisearch support",
+    "description": "FeiFeiCMS 8.5.260930 Beta1 upgraded to ThinkPHP 8 with PHP 8.x, MySQL 8, Redis and Meilisearch support",
     "type": "project",
     "keywords": [
         "framework",
