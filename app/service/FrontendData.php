@@ -14,6 +14,7 @@ final class FrontendData
     {
         $categories = Db::table('ffx_categories')->where('content_type', 'media')->where('status', 'published')->whereNull('deleted_at')
             ->whereNull('parent_id')->order('sort_order')->select()->toArray();
+        $navigation = Db::table('ffx_navigation')->where('status', 'enabled')->order('sort_order')->order('id')->select()->toArray();
         return [
             'siteName' => $this->settings->string('admin.base.site_name', (string) config('feifei.site_name')),
             'siteDescription' => $this->settings->string('admin.base.site_description', (string) config('feifei.site_description')),
@@ -28,7 +29,14 @@ final class FrontendData
             ],
             'pageActive' => '',
             'friendLinks' => Db::table('ffx_links')->where('status', 'enabled')->order('sort_order')->limit(30)->select()->toArray(),
-            'siteNavigation' => Db::table('ffx_navigation')->where('status', 'enabled')->order('sort_order')->order('id')->select()->toArray(),
+            'siteNavigation' => array_values(array_filter($navigation, static fn (array $item): bool => empty($item['parent_id']))),
+            'siteNavigationChildren' => $this->navigationChildren($navigation),
+            'hotSearches' => $this->hotSearches(),
+            'frontendUi' => [
+                'recordLimit' => $this->settings->int('admin.base.ui_record', 50, 0, 500),
+                'slideInterval' => $this->settings->int('admin.base.ui_slide_index', 3000, 1000, 60000),
+                'episodeLimit' => $this->settings->int('admin.base.ui_playurl', 0, 0, 1000),
+            ],
             'siteSlides' => Db::table('ffx_slides')->where('status', 'enabled')->where(function ($query): void {
                 $query->whereNull('starts_at')->whereOr('starts_at', '<=', gmdate('Y-m-d H:i:s'));
             })->where(function ($query): void {
@@ -43,6 +51,36 @@ final class FrontendData
                 $query->whereNull('ends_at')->whereOr('ends_at', '>=', gmdate('Y-m-d H:i:s'));
             })->select()->toArray(), 'content', 'slot_key'),
         ];
+    }
+
+    /** @param array<int, array<string, mixed>> $navigation
+     *  @return array<int, array<int, array<string, mixed>>>
+     */
+    private function navigationChildren(array $navigation): array
+    {
+        $children = [];
+        foreach ($navigation as $item) {
+            $parentId = (int) ($item['parent_id'] ?? 0);
+            if ($parentId > 0) $children[$parentId][] = $item;
+        }
+        return $children;
+    }
+
+    /** @return array<int, array{title:string,url:string,target:string}> */
+    private function hotSearches(): array
+    {
+        $result = [];
+        $lines = preg_split('/\R+/', $this->settings->string('admin.base.site_hot'), -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        foreach (array_slice($lines, 0, 30) as $line) {
+            $parts = array_map('trim', explode('|', $line));
+            $title = mb_substr((string) ($parts[0] ?? ''), 0, 80);
+            if ($title === '') continue;
+            $url = trim((string) ($parts[1] ?? ''));
+            if ($url === '') $url = '/search?wd=' . rawurlencode($title);
+            if (!str_starts_with($url, '/') && !preg_match('#^https?://#i', $url)) continue;
+            $result[] = ['title' => $title, 'url' => $url, 'target' => ($parts[2] ?? '') === '_blank' ? '_blank' : '_self'];
+        }
+        return $result;
     }
 
     /** @param array<string, mixed> $category
@@ -90,6 +128,7 @@ final class FrontendData
             'vod_name' => (string) ($media['title'] ?? ''),
             'vod_ename' => (string) ($media['slug'] ?? ''),
             'vod_title' => (string) ($media['subtitle'] ?? ''),
+            'vod_original' => (string) ($media['original_title'] ?? ''),
             'vod_douban_id' => (string) ($media['douban_id'] ?? ''),
             'vod_imdb_id' => (string) ($media['imdb_id'] ?? ''),
             'vod_pic' => (string) ($media['poster_url'] ?? ''),
@@ -97,7 +136,7 @@ final class FrontendData
             'vod_actor' => $actor,
             'vod_director' => $director,
             'vod_type' => $categoryName,
-            'vod_keywords' => (string) ($media['tags_text'] ?? ''),
+            'vod_keywords' => (string) ($media['tags_text'] ?? $metadata['keywords'] ?? $metadata['type'] ?? ''),
             'vod_year' => (string) ($media['release_year'] ?? ''),
             'vod_area' => (string) ($media['area'] ?? ''),
             'vod_language' => (string) ($media['language'] ?? ''),
@@ -109,6 +148,16 @@ final class FrontendData
             'vod_down' => (int) ($media['dislike_count'] ?? 0),
             'vod_addtime' => $updated ?: $created,
             'vod_filmtime' => $release,
+            'vod_weekday' => (string) ($metadata['weekday'] ?? ''),
+            'vod_state' => (string) ($metadata['state'] ?? ''),
+            'vod_version' => (string) ($metadata['version'] ?? ''),
+            'vod_tv' => (string) ($metadata['tv'] ?? $metadata['channel'] ?? ''),
+            'vod_length' => (string) ($metadata['duration'] ?? $metadata['length'] ?? ''),
+            'vod_writer' => (string) ($metadata['writer'] ?? ''),
+            'vod_producer' => (string) ($metadata['producer'] ?? ''),
+            'vod_lines' => (string) ($metadata['lines'] ?? $metadata['classic_lines'] ?? ''),
+            'vod_watch' => (string) ($metadata['watch'] ?? $metadata['highlights'] ?? ''),
+            'vod_ending' => (string) ($metadata['ending'] ?? ''),
             'area_text' => (string) ($media['area'] ?? ''),
             'remark_text' => $remark,
             'summary_text' => $this->summary((string) ($media['summary'] ?? $content), $this->settings->int('admin.content.summary_length', 180, 20, 1000)),

@@ -19,6 +19,7 @@
         <h1>人物資料</h1>
         <div class="mx-content">{$item.safe_content|raw}</div>
     </article>
+    {notempty name="vod"}<section><div class="mx-title"><h2>关联作品</h2><span>共 {$vod|count} 部</span></div><div class="mx-grid">{volist name="vod" id="item"}{include file="mxone/module/vod_card" /}{/volist}</div></section>{else /}<p class="mx-empty">暂无关联作品。</p>{/notempty}
 </main>
 {assign name="footerText" value="MXOne · 人物详情" /}
 {include file="mxone/common/footer" /}

@@ -41,6 +41,19 @@ final class Vod extends BaseController
         $related = Db::table('ffx_media')->where('status', 'published')->whereNull('deleted_at')->where('category_id', (int) $media->category_id)
             ->where('id', '<>', $id)->order('view_count', 'desc')->order('id', 'desc')->limit($this->settings->int('admin.content.related_limit', 12, 0, 50))->select()->toArray();
         $comments = Db::table('ffx_comments')->where('target_type', 'media')->where('target_id', $id)->where('status', 'approved')->order('created_at', 'desc')->limit(20)->select()->toArray();
+        $scenarios = Db::table('ffx_scenarios')->where('media_id', $id)->where('status', 'published')->whereNull('deleted_at')->order('sort_order')->order('episode_no')->limit(6)->select()->toArray();
+        $assets = array_values(array_filter(
+            Db::table('ffx_media_assets')->where('media_id', $id)->order('asset_type')->order('sort_order')->order('id')->select()->toArray(),
+            fn (array $asset): bool => $this->mediaUrlGuard->allow((string) ($asset['url'] ?? '')) !== null,
+        ));
+        $userId = (int) Session::get('user_id', 0);
+        $userScore = $userId > 0 ? Db::table('ffx_ratings')->where('user_id', $userId)->where('target_type', 'media')->where('target_id', $id)->value('score') : null;
+        $actors = array_values(array_filter(array_map('trim', preg_split('/[,\/、|]+/u', (string) ($legacyVod['vod_actor'] ?? '')) ?: [])));
+        $sameActorItems = [];
+        if ($actors !== []) {
+            $sameActorItems = Db::table('ffx_media')->where('status', 'published')->whereNull('deleted_at')->where('id', '<>', $id)
+                ->whereLike('metadata', '%' . $actors[0] . '%')->order('view_count', 'desc')->limit(12)->select()->toArray();
+        }
         $access = $this->mediaAccess->status($mediaData, (int) Session::get('user_id', 0));
         return view(ff_theme_view('vod/detail'), $this->frontend->shared($media->title . ' - ' . $this->settings->string('admin.base.site_name', (string) config('feifei.site_name'))) + [
             'media' => $mediaData,
@@ -48,8 +61,10 @@ final class Vod extends BaseController
             'sources' => $sources,
             'tags' => Db::table('ffx_media_tags')->alias('mt')->join(['ffx_tags' => 't'], 't.id = mt.tag_id')->where('mt.media_id', $id)->order('t.name')->field('t.*')->select()->toArray(),
             'credits' => Db::table('ffx_media_people')->alias('mp')->join(['ffx_people' => 'p'], 'p.id = mp.person_id')->where('mp.media_id', $id)->order('mp.sort_order')->field('p.id,p.name,p.avatar_url,mp.credit_type,mp.character_name')->select()->toArray(),
-            'rating' => ['score' => number_format((float) ($media->rating ?? 0), 1), 'count' => (int) ($media->rating_count ?? 0), 'user_score' => null],
-            'sameActors' => [], 'sameActorLabel' => '', 'sameActorActive' => '', 'sameActorItems' => [],
+            'rating' => ['score' => number_format((float) ($media->rating ?? 0), 1), 'count' => (int) ($media->rating_count ?? 0), 'user_score' => $userScore],
+            'sameActors' => $actors, 'sameActorLabel' => $actors[0] ?? '', 'sameActorActive' => $actors[0] ?? '', 'sameActorItems' => $this->frontend->vodList($sameActorItems),
+            'scenarios' => $scenarios, 'scenarioCount' => Db::table('ffx_scenarios')->where('media_id', $id)->where('status', 'published')->whereNull('deleted_at')->count(),
+            'assets' => $assets,
             'commentCount' => count($comments), 'commentHtml' => $this->commentHtml($comments),
             'commentLoginRequired' => $this->settings->bool('admin.comments.guest_enabled', true) ? 0 : 1,
             'commentsEnabled' => $this->settings->bool('admin.comments.user_forum', true) ? 1 : 0,
@@ -95,6 +110,29 @@ final class Vod extends BaseController
             'danmuVideoId' => 'vod-' . $id . '-' . $sourceIndex . '-' . $episodeIndex,
             'related' => $this->frontend->vodList($related),
             'csrf' => $this->csrf->get(),
+        ]);
+    }
+
+    public function scenarios(int $id): View
+    {
+        $media = $this->findPublished($id);
+        $rows = Db::table('ffx_scenarios')->where('media_id', $id)->where('status', 'published')->whereNull('deleted_at')
+            ->order('sort_order')->order('episode_no')->order('id')->select()->toArray();
+        return view(ff_theme_view('vod/scenarios'), $this->frontend->shared($media->title . ' 分集剧情') + [
+            'vod' => $this->frontend->vod($media->toArray()), 'scenarios' => $rows, 'pageActive' => '',
+        ]);
+    }
+
+    public function scenario(int $id): View
+    {
+        $scenario = Db::table('ffx_scenarios')->where('id', $id)->where('status', 'published')->whereNull('deleted_at')->find();
+        if ($scenario === null) throw new HttpException(404, '剧情不存在或未发布');
+        $media = $this->findPublished((int) $scenario['media_id']);
+        $base = Db::table('ffx_scenarios')->where('media_id', (int) $scenario['media_id'])->where('status', 'published')->whereNull('deleted_at');
+        $previous = (clone $base)->where('episode_no', '<', (int) $scenario['episode_no'])->order('episode_no', 'desc')->find();
+        $next = (clone $base)->where('episode_no', '>', (int) $scenario['episode_no'])->order('episode_no')->find();
+        return view(ff_theme_view('vod/scenario'), $this->frontend->shared($media->title . ' ' . ($scenario['title'] ?: '第' . $scenario['episode_no'] . '集剧情')) + [
+            'vod' => $this->frontend->vod($media->toArray()), 'scenario' => $scenario, 'previous' => $previous, 'next' => $next, 'pageActive' => '',
         ]);
     }
 

@@ -11,6 +11,8 @@
             <div class="mx-detail-head">
                 <div class="mx-detail-title">
                     <h1>{$vod.vod_name}</h1>
+                    {notempty name="vod.vod_title"}<p class="mx-original-title">{$vod.vod_title}</p>{/notempty}
+                    {notempty name="vod.vod_original"}<p class="mx-original-title">{$vod.vod_original}</p>{/notempty}
                     <p class="mx-sub">{$vod.vod_year} / {$vod.area_text} / {$vod.vod_language} / {$vod.remark_text}</p>
                 </div>
                 <div class="mx-rating" data-vod-rating data-id="{$vod.vod_id}" data-score="{$rating.score}" data-count="{$rating.count}" data-user-score="{$rating.user_score}">
@@ -38,9 +40,14 @@
                 <span><b>地区</b><em>{$vod.area_text|default='暂无'}</em></span>
                 <span><b>语言</b><em>{$vod.vod_language|default='暂无'}</em></span>
                 <span><b>状态</b><em>{$vod.remark_text|default='暂无'}</em></span>
+                {notempty name="vod.vod_douban_id"}<span><b>豆瓣 ID</b><em>{$vod.vod_douban_id}</em></span>{/notempty}
+                {notempty name="vod.vod_imdb_id"}<span><b>IMDb ID</b><em>{$vod.vod_imdb_id}</em></span>{/notempty}
+                {notempty name="vod.vod_weekday"}<span><b>更新周期</b><em>{$vod.vod_weekday}</em></span>{/notempty}
+                {notempty name="vod.vod_tv"}<span><b>电视频道</b><em>{$vod.vod_tv}</em></span>{/notempty}
                 <span><b>上映/播出</b><em>{if $vod.vod_filmtime!=0}{$vod.vod_filmtime|date='Y-m-d'}{else /}暂无{/if}</em></span>
                 <span><b>更新时间</b><em>{if $vod.vod_addtime>0}{$vod.vod_addtime|date='Y-m-d H:i'}{else /}暂无{/if}</em></span>
             </div>
+            {notempty name="tags"}<div class="mx-chip-list mx-detail-tags">{volist name="tags" id="tag"}<a href="/search?wd={$tag.name|urlencode}">{$tag.name}</a>{/volist}</div>{/notempty}
             <p class="mx-desc">{$vod.vod_content|strip_tags}</p>
             <div class="mx-detail-bottom">
                 {if !empty($access.allowed)}{notempty name="sources"}<a class="mx-btn" href="{:ff_play_url($vod.vod_id,0,0)}">立即播放</a>{/notempty}{else /}
@@ -54,14 +61,19 @@
     <section>
         <div class="mx-title"><h2>播放线路</h2><span>选择播放源</span></div>
         {volist name="sources" id="source" key="sourceIndex"}
-        <div class="mx-source">
-            <h3>{$source.name}</h3>
-            <div class="mx-episodes">
-                {volist name="source.episodes" id="episode" key="episodeIndex"}{if !empty($access.allowed)}<a href="{:ff_play_url($vod.vod_id,$sourceIndex-1,$episodeIndex-1)}">{$episode.title}</a>{else /}<span class="mx-episode-locked">{$episode.title} 🔒</span>{/if}{/volist}
+        <div class="mx-source" data-episode-source>
+            <div class="mx-source-head"><h3>{$source.name}</h3><button class="mx-episode-sort-toggle" type="button" data-episode-sort-toggle>倒序</button></div>
+            <div class="mx-episodes" data-episode-list data-limit="{$frontendUi.episodeLimit}">
+                {volist name="source.episodes" id="episode" key="episodeIndex"}{if !empty($access.allowed)}<a data-episode-index="{$episodeIndex-1}" href="{:ff_play_url($vod.vod_id,$sourceIndex-1,$episodeIndex-1)}">{$episode.title}</a>{else /}<span data-episode-index="{$episodeIndex-1}" class="mx-episode-locked">{$episode.title} 🔒</span>{/if}{/volist}
             </div>
         </div>
         {/volist}
     </section>
+    {notempty name="credits"}<section><div class="mx-title"><h2>演职人员</h2><span>人物与影片关联</span></div><div class="mx-credit-grid">{volist name="credits" id="credit"}<a class="mx-panel" href="{:ff_url('person',$credit.id)}">{notempty name="credit.avatar_url"}<img src="{$credit.avatar_url|htmlentities}" alt="{$credit.name}">{/notempty}<strong>{$credit.name}</strong><span>{$credit.credit_type}{notempty name="credit.character_name"} · {$credit.character_name}{/notempty}</span></a>{/volist}</div></section>{/notempty}
+    {if $scenarioCount>0}<section><div class="mx-title"><h2>分集剧情</h2><a href="/vod/{$vod.vod_id}/scenarios">全部 {$scenarioCount} 集 &gt;</a></div><div class="mx-scenario-chapters">{volist name="scenarios" id="scenario"}<article><a href="/scenario/{$scenario.id}"><span class="mx-scenario-number">{$scenario.episode_no}</span><div><h3>{$scenario.title|default='分集剧情'}</h3><p>{$scenario.content|strip_tags}</p></div><b>查看</b></a></article>{/volist}</div></section>{/if}
+    {if $vod.vod_lines!='' || $vod.vod_watch!='' || $vod.vod_ending!=''}<section><div class="mx-title"><h2>影片资料</h2><span>采集与编辑字段</span></div><div class="mx-facts-copy">{notempty name="vod.vod_lines"}<article class="mx-panel"><h3>经典台词</h3><p>{$vod.vod_lines|htmlentities|nl2br|raw}</p></article>{/notempty}{notempty name="vod.vod_watch"}<article class="mx-panel"><h3>看点解析</h3><p>{$vod.vod_watch|htmlentities|nl2br|raw}</p></article>{/notempty}{notempty name="vod.vod_ending"}<article class="mx-panel"><h3>结局解析</h3><p>{$vod.vod_ending|htmlentities|nl2br|raw}</p></article>{/notempty}</div></section>{/if}
+    {notempty name="assets"}<section><div class="mx-title"><h2>附件资源</h2><span>字幕、预告、下载和其他附件</span></div><div class="mx-asset-list">{volist name="assets" id="asset"}<a class="mx-panel" href="{$asset.url|htmlentities}" target="_blank" rel="noopener"><strong>{$asset.label|default=$asset.asset_type}</strong><span>{$asset.asset_type} {notempty name="asset.language"}· {$asset.language}{/notempty}</span></a>{/volist}</div></section>{/notempty}
+    {notempty name="siteAds.vod_detail"}<aside class="mx-ad-slot">{$siteAds.vod_detail|raw}</aside>{/notempty}
     {notempty name="sameActors"}
     <section class="mx-panel mx-comments" data-same-actor data-vod-id="{$vod.vod_id}">
         <div class="mx-title"><h2>同主演</h2><span>默认展示 {$sameActorLabel}</span></div>

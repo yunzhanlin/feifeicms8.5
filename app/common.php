@@ -32,6 +32,8 @@ if (!function_exists('ff_url')) {
             'rss' => '/rss',
             'payment' => '/payment',
             'vip' => '/vip',
+            'features', 'template/guide' => '/features',
+            'scenario', 'scenario/read' => '/scenario/' . $value,
             'user/login' => '/user/login',
             'user/register' => '/user/register',
             'user/center' => '/user/center',
@@ -148,3 +150,7 @@ if (!function_exists('ff_mysql_role')) { function ff_mysql_role(string $tag = ''
 if (!function_exists('ff_mysql_tags')) { function ff_mysql_tags(string $tag = ''): array { return ff_legacy_template()->tags($tag); } }
 if (!function_exists('ff_mysql_slide')) { function ff_mysql_slide(string $tag = ''): array { return ff_legacy_template()->slides($tag); } }
 if (!function_exists('ff_mysql_nav')) { function ff_mysql_nav(string $tag = ''): array { return ff_legacy_template()->navigation($tag); } }
+if (!function_exists('ff_mysql_link')) { function ff_mysql_link(string $tag = ''): array { return ff_legacy_template()->links($tag); } }
+if (!function_exists('ff_mysql_ads')) { function ff_mysql_ads(string $tag = ''): array { return ff_legacy_template()->ads($tag); } }
+if (!function_exists('ff_mysql_scenario')) { function ff_mysql_scenario(string $tag = ''): array { return ff_legacy_template()->scenarios($tag); } }
+if (!function_exists('ff_mysql_forum')) { function ff_mysql_forum(string $tag = ''): array { return ff_legacy_template()->comments($tag); } }

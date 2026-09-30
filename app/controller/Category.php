@@ -45,6 +45,8 @@ final class Category extends BaseController
                 $param === 'year' ? $query->where($column, (int) $value) : $query->whereLike($column, '%' . $value . '%');
             }
         }
+        $typeFilter = trim((string) $this->request->param('type', ''));
+        if ($typeFilter !== '') $query->whereLike('metadata', '%' . $typeFilter . '%');
         $order = (string) $this->request->param('order', 'addtime');
         $orderColumn = ['hits' => 'view_count', 'gold' => 'rating', 'id' => 'id'][$order] ?? 'published_at';
         $pager = $query->order($orderColumn, 'desc')->paginate(['list_rows' => $this->pageSize(), 'query' => $this->request->get()]);
@@ -53,6 +55,7 @@ final class Category extends BaseController
             'type' => trim((string) $this->request->param('type', '')),
             'area' => trim((string) $this->request->param('area', '')),
             'year' => trim((string) $this->request->param('year', '')),
+            'language' => trim((string) $this->request->param('language', '')),
         ];
         return view(ff_theme_view('vod/type'), $this->frontend->shared((string) $category['name'] . ' - ' . $this->siteName()) + [
             'category' => $category,

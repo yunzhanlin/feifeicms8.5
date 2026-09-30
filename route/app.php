@@ -26,6 +26,7 @@ Route::get('map', 'Page/map');
 Route::get('rss', 'Page/rss');
 Route::get('payment', 'Page/payment')->middleware(SessionInit::class);
 Route::get('vip', 'Page/vip')->middleware(SessionInit::class);
+Route::get('features', 'Page/features')->middleware(SessionInit::class);
 Route::get('list/:id', 'Category/show')->pattern(['id' => '\\d+']);
 Route::get('list/read/id/:id', 'Category/show')->pattern(['id' => '\\d+']);
 Route::get('list/read/id/:id.html', 'Category/show')->pattern(['id' => '\\d+']);
@@ -58,6 +59,8 @@ foreach (['htm', 'shtml', 'shtm'] as $legacySuffix) {
         ->pattern(['id' => '\\d+', 'sid' => '\\d+', 'pid' => '\\d+'])->middleware(SessionInit::class);
 }
 Route::get('vod/:id/comments', 'Interaction/comments')->pattern(['id' => '\\d+'])->middleware(SessionInit::class);
+Route::get('vod/:id/scenarios', 'Vod/scenarios')->pattern(['id' => '\\d+'])->middleware(SessionInit::class);
+Route::get('scenario/:id', 'Vod/scenario')->pattern(['id' => '\\d+'])->middleware(SessionInit::class);
 Route::get('vod/:id', 'Vod/detail')->pattern(['id' => '\\d+'])->middleware(SessionInit::class);
 Route::get('play/:id/:sid/:pid', 'Vod/play')
     ->pattern(['id' => '\\d+', 'sid' => '\\d+', 'pid' => '\\d+'])->middleware(SessionInit::class);

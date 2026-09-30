@@ -1,0 +1,62 @@
+{assign name="pageTitle" value="模板功能与调用" /}
+{assign name="pageActive" value="features" /}
+{include file="mxone/common/head" /}
+{include file="mxone/common/header" /}
+<main class="mx-wrap mx-main mx-feature-page">
+    <section class="mx-panel mx-feature-hero">
+        <p class="mx-eyebrow">MXONE TEMPLATE SHOWCASE</p>
+        <h1>前台功能与模板调用示例</h1>
+        <p>本页直接调用当前站点数据，同时展示 FeiFeiCMS 兼容标签、URL 函数、采集 API 和运营组件的用法；未录入的内容会明确显示空状态，不伪造演示数据。</p>
+        <div class="mx-feature-actions"><a class="mx-btn" href="#live-demo">查看真实数据</a><a class="mx-btn mx-btn-light" href="#template-calls">查看调用方法</a></div>
+    </section>
+
+    {volist name="featureGroups" id="group"}
+    <section>
+        <div class="mx-title"><h2>{$group.name}</h2><span>页面与业务链路</span></div>
+        <div class="mx-feature-grid">
+            {volist name="group.items" id="feature"}<a class="mx-panel mx-feature-card" href="{$feature.url|htmlentities}"><strong>{$feature.name}</strong><span>{$feature.note}</span><em>打开 →</em></a>{/volist}
+        </div>
+    </section>
+    {/volist}
+
+    <section id="live-demo">
+        <div class="mx-title"><h2>实时数据调用</h2><span>数据来自当前数据库</span></div>
+        <div class="mx-feature-subtitle"><h3>视频</h3><code>ff_mysql_vod('limit:6;order:vod_hits;sort:desc')</code></div>
+        {notempty name="demoVod"}<div class="mx-grid">{volist name="demoVod" id="item"}{include file="mxone/module/vod_card" /}{/volist}</div>{else /}<p class="mx-empty">暂无已发布视频，请在后台“视频管理”录入。</p>{/notempty}
+
+        <div class="mx-feature-subtitle"><h3>资讯、专题与人物</h3><code>ff_mysql_news / ff_mysql_special / ff_mysql_star</code></div>
+        <div class="mx-news-grid">
+            {notempty name="demoNews"}{volist name="demoNews" id="news"}{include file="mxone/module/news_card" /}{/volist}{/notempty}
+            {notempty name="demoSpecials"}{volist name="demoSpecials" id="special"}{include file="mxone/module/special_card" /}{/volist}{/notempty}
+        </div>
+        {if empty($demoNews) && empty($demoSpecials)}<p class="mx-empty">暂无资讯或专题，可在后台“文章 / 专题”添加。</p>{/if}
+        {notempty name="demoPeople"}<div class="mx-grid mx-person-demo">{volist name="demoPeople" id="person"}<a class="mx-card" href="{:ff_url('person',$person.person_id)}"><span class="mx-pic"><img src="{$person.person_pic|default='/static/images/no-poster.svg'}" alt="{$person.person_name}"><i>{$person.subtitle|default='STAR'}</i></span><strong>{$person.person_name}</strong><small>{$person.person_profession|default='资料整理中'}</small></a>{/volist}</div>{else /}<p class="mx-empty">暂无已发布人物，可在后台“人物”添加。</p>{/notempty}
+
+        <div class="mx-feature-subtitle"><h3>标签</h3><code>ff_mysql_tags('scope:media;limit:20')</code></div>
+        {notempty name="demoTags"}<div class="mx-chip-list">{volist name="demoTags" id="tag"}<a href="/search?wd={$tag.tag_name|urlencode}">{$tag.tag_name}</a>{/volist}</div>{else /}<p class="mx-empty">暂无标签，视频入库后可由后台标签工具生成。</p>{/notempty}
+    </section>
+
+    <section id="scenario-demo">
+        <div class="mx-title"><h2>分集剧情与评论</h2><span>独立表、独立 URL，关联原视频</span></div>
+        {notempty name="demoScenarios"}<div class="mx-scenario-chapters">{volist name="demoScenarios" id="scenario"}<article><a href="{$scenario.scenario_link}"><span class="mx-scenario-number">{$scenario.scenario_pid}</span><div><h3>{$scenario.scenario_name|default='分集剧情'}</h3><p>{$scenario.scenario_content|strip_tags}</p></div><b>阅读剧情</b></a></article>{/volist}</div>{else /}<p class="mx-empty">暂无已发布分集剧情，可在后台“剧情”录入或采集。</p>{/notempty}
+        {notempty name="demoComments"}<div class="mx-feature-comment-list">{volist name="demoComments" id="comment"}<article class="mx-panel"><strong>{$comment.forum_name}</strong><p>{$comment.forum_content|htmlentities}</p></article>{/volist}</div>{else /}<p class="mx-empty">暂无站点留言，可在留言板提交并由后台审核。</p>{/notempty}
+    </section>
+
+    <section id="operations-demo">
+        <div class="mx-title"><h2>运营组件</h2><span>导航、轮播、广告和友情链接</span></div>
+        <div class="mx-feature-ops">
+            <div class="mx-panel"><h3>轮播图</h3><b>{$demoSlides|count}</b><span>条有效数据</span></div>
+            <div class="mx-panel"><h3>广告位</h3><b>{$demoAds|count}</b><span>条有效数据</span></div>
+            <div class="mx-panel"><h3>友情链接</h3><b>{$demoLinks|count}</b><span>条启用数据</span></div>
+        </div>
+        <p class="mx-empty mx-feature-note">建议广告位键：<code>header</code>、<code>home_top</code>、<code>home_middle</code>、<code>vod_detail</code>、<code>vod_play</code>、<code>footer</code>。内容由后台运营模块管理。</p>
+    </section>
+
+    <section id="template-calls">
+        <div class="mx-title"><h2>模板调用方法</h2><span>可直接复制到 ThinkPHP 模板</span></div>
+        <div class="mx-code-grid">{volist name="templateExamples" id="example"}<article class="mx-panel mx-code-card"><h3>{$example.title}</h3><pre><code>{$example.code|htmlentities|raw}</code></pre></article>{/volist}</div>
+        <p class="mx-feature-doc-link">完整参数、返回字段、广告位约定和扩展方法见 <code>docs/MXONE-TEMPLATE-GUIDE.md</code>。</p>
+    </section>
+</main>
+{assign name="footerText" value="MXOne · 功能与调用示例" /}
+{include file="mxone/common/footer" /}
