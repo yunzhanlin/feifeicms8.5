@@ -56,7 +56,7 @@ final class Dashboard extends BaseController
                 'openssl' => extension_loaded('openssl'),
                 'uploadLimit' => (string) (ini_get('upload_max_filesize') ?: '未知'),
                 'gd' => $gdVersion,
-                'version' => 'FeiFeiCMS ' . (string) config('feifei.version', '8.0.0'),
+                'version' => 'FeiFeiCMS ' . (string) config('feifei.version'),
             ],
         ]);
     }
