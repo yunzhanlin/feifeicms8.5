@@ -1,6 +1,15 @@
 <?php
 // 应用公共文件
 
+if (!function_exists('ff_url_generator')) {
+    /** Reuse one generator and its record cache throughout the current request. */
+    function ff_url_generator(): app\service\LegacyUrlGenerator
+    {
+        static $generator = null;
+        return $generator ??= app()->make(app\service\LegacyUrlGenerator::class);
+    }
+}
+
 if (!function_exists('ff_url')) {
     /**
      * FeiFeiCMS template URL contract. Templates call logical resources and
@@ -41,7 +50,7 @@ if (!function_exists('ff_url')) {
         };
         if (in_array($normalized, ['type', 'list', 'list/read', 'list/select', 'vod', 'vod/read', 'vod/forum', 'comments', 'forum', 'news', 'news/read', 'special', 'special/read', 'person', 'star', 'role', 'star/read', 'role/read', 'scenario', 'scenario/read', 'guestbook', 'guestbook/read', 'forum/read', 'user', 'user/index', 'user/center', 'vod/juqing', 'vod/taici', 'vod/zixun', 'vod/yanyuan', 'vod/pingfen', 'vod/kandian', 'vod/shoubo', 'vod/jieju', 'vod/rss', 'vod/yugao', 'vod/xiazai'], true)) {
             try {
-                return app()->make(app\service\LegacyUrlGenerator::class)->generate($normalized, $params, $suffix, $fallback);
+                return ff_url_generator()->generate($normalized, $params, $suffix, $fallback);
             } catch (\Throwable) {
                 // Installer and database maintenance tasks can run before settings are available.
             }
@@ -56,7 +65,7 @@ if (!function_exists('ff_play_url')) {
     function ff_play_url(int|string $vodId, int|string $sourceIndex = 0, int|string $episodeIndex = 0): string
     {
         try {
-            return app()->make(app\service\LegacyUrlGenerator::class)->play($vodId, $sourceIndex, $episodeIndex);
+            return ff_url_generator()->play($vodId, $sourceIndex, $episodeIndex);
         } catch (\Throwable) {
             return '/vod/play/id/' . rawurlencode((string) $vodId)
                 . '/sid/' . app\service\PlaybackPosition::publicSourceNumber($sourceIndex)
@@ -107,7 +116,7 @@ if (!function_exists('ff_url_play')) {
     function ff_url_play(mixed $listId, mixed $listDir, mixed $vodId, mixed $ename = '', mixed $sid = 0, mixed $pid = 0, bool $suffix = true): string
     {
         try {
-            return app()->make(app\service\LegacyUrlGenerator::class)->play((int) $vodId, (int) $sid, (int) $pid, ['list_id' => (int) $listId, 'list_dir' => (string) $listDir, 'ename' => (string) $ename]);
+            return ff_url_generator()->play((int) $vodId, (int) $sid, (int) $pid, ['list_id' => (int) $listId, 'list_dir' => (string) $listDir, 'ename' => (string) $ename]);
         } catch (\Throwable) {
             return ff_play_url((int) $vodId, (int) $sid, (int) $pid);
         }

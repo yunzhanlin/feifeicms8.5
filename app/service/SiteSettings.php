@@ -5,11 +5,13 @@ namespace app\service;
 
 use think\facade\Db;
 
-/** Runtime access to admin-managed settings with one database read per request. */
+/** Runtime access to admin-managed settings with a short shared cache. */
 final class SiteSettings
 {
     /** @var array<string, mixed>|null */
     private ?array $values = null;
+
+    public function __construct(private readonly FrontendCache $cache) {}
 
     public function get(string $key, mixed $default = null): mixed
     {
@@ -51,22 +53,28 @@ final class SiteSettings
     public function forget(): void
     {
         $this->values = null;
+        $this->cache->invalidateSettings();
     }
 
     /** @return array<string, mixed> */
     private function all(): array
     {
         if ($this->values !== null) return $this->values;
-        $this->values = [];
-        try {
-            foreach (Db::table('ffx_site_settings')->field('setting_key,setting_value')->select()->toArray() as $row) {
-                $raw = $row['setting_value'] ?? null;
-                $decoded = is_string($raw) ? json_decode($raw, true) : $raw;
-                $this->values[(string) $row['setting_key']] = json_last_error() === JSON_ERROR_NONE ? $decoded : $raw;
+        $loader = static function (): array {
+            $values = [];
+            try {
+                foreach (Db::table('ffx_site_settings')->field('setting_key,setting_value')->select()->toArray() as $row) {
+                    $raw = $row['setting_value'] ?? null;
+                    $decoded = is_string($raw) ? json_decode($raw, true) : $raw;
+                    $values[(string) $row['setting_key']] = json_last_error() === JSON_ERROR_NONE ? $decoded : $raw;
+                }
+            } catch (\Throwable) {
+                // Fresh installs may render the installer before the settings table exists.
             }
-        } catch (\Throwable) {
-            // Fresh installs may render the installer before the settings table exists.
-        }
+            return $values;
+        };
+        $values = $this->cache->settings($loader);
+        $this->values = is_array($values) ? $values : [];
         return $this->values;
     }
 }

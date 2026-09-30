@@ -40,7 +40,7 @@ final class SchemaV2Test extends TestCase
     public function testFreshInstallRecordsTheCompleteSchemaBaseline(): void
     {
         self::assertStringContainsString(
-            "VALUES (13, 'independent scenario collection sources')",
+            "VALUES (14, 'indexed cached frontend queries')",
             $this->schema
         );
         self::assertStringContainsString("new_data_policy VARCHAR(20) NOT NULL DEFAULT 'published'", $this->schema);
@@ -70,6 +70,16 @@ final class SchemaV2Test extends TestCase
         self::assertIsString($migration);
         foreach (['resource_type', 'media_source_id', 'uk_ffx_collection_sources_resource_endpoint', 'fk_ffx_collection_sources_media_source', "VALUES (13, 'independent scenario collection sources')"] as $marker) {
             self::assertStringContainsString($marker, $migration);
+        }
+    }
+
+    public function testFrontendQueryIndexesMigrationIsRegistered(): void
+    {
+        $migration = file_get_contents(dirname(__DIR__) . '/database/migrations/014_frontend_query_indexes.sql');
+        self::assertIsString($migration);
+        foreach (['idx_ffx_categories_frontend', 'idx_ffx_media_frontend_popular', 'idx_ffx_media_frontend_category', "VALUES (14, 'indexed cached frontend queries')"] as $marker) {
+            self::assertStringContainsString($marker, $migration);
+            self::assertStringContainsString($marker, $this->schema);
         }
     }
 

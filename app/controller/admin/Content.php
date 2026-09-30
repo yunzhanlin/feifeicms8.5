@@ -6,6 +6,7 @@ namespace app\controller\admin;
 use app\BaseController;
 use app\service\AuditLogger;
 use app\service\CsrfToken;
+use app\service\FrontendCache;
 use app\service\Slugger;
 use app\service\SiteSettings;
 use think\exception\HttpException;
@@ -20,7 +21,7 @@ final class Content extends BaseController
         'people' => ['table' => 'ffx_people', 'label' => '人物', 'title' => 'name', 'category_type' => null],
     ];
 
-    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly Slugger $slugger, private readonly SiteSettings $settings)
+    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly Slugger $slugger, private readonly SiteSettings $settings, private readonly FrontendCache $frontendCache)
     {
         parent::__construct($app);
     }
@@ -91,6 +92,7 @@ final class Content extends BaseController
             return $id;
         });
         $this->audit->record(rtrim($type, 's') . '.create', rtrim($type, 's'), $id, null, $data);
+        $this->frontendCache->invalidateHome();
         return redirect('/admin/content/' . $type . '/' . $id . '/edit');
     }
 
@@ -114,6 +116,7 @@ final class Content extends BaseController
             $this->syncRelations($type, $id);
         });
         $this->audit->record(rtrim($type, 's') . '.update', rtrim($type, 's'), $id, $before, $data);
+        $this->frontendCache->invalidateHome();
         return redirect('/admin/content/' . $type . '/' . $id . '/edit');
     }
 
@@ -125,6 +128,7 @@ final class Content extends BaseController
         $data = ['status' => 'archived', 'deleted_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s')];
         Db::table($def['table'])->where('id', $id)->update($data);
         $this->audit->record(rtrim($type, 's') . '.archive', rtrim($type, 's'), $id, $before, $data);
+        $this->frontendCache->invalidateHome();
         return redirect('/admin/content/' . $type);
     }
 
@@ -146,6 +150,7 @@ final class Content extends BaseController
         }
         Db::table($def['table'])->whereIn('id', $ids)->whereNull('deleted_at')->update($data);
         $this->audit->record('content.batch.' . $action, $type, implode(',', $ids), $before, $data);
+        $this->frontendCache->invalidateHome();
         return redirect('/admin/content/' . $type);
     }
 

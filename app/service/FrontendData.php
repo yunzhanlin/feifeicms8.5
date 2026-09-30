@@ -7,14 +7,42 @@ use think\facade\Db;
 
 final class FrontendData
 {
-    public function __construct(private readonly SiteSettings $settings) {}
+    /** @var array<int, string>|null */
+    private ?array $categoryNames = null;
+
+    private readonly SiteSettings $settings;
+    private readonly FrontendCache $cache;
+
+    public function __construct(?SiteSettings $settings = null, ?FrontendCache $cache = null)
+    {
+        $this->cache = $cache ?? new FrontendCache(new ResilientCache());
+        $this->settings = $settings ?? new SiteSettings($this->cache);
+    }
 
     /** @return array<string, mixed> */
     public function shared(string $pageTitle, string $keyword = ''): array
     {
-        $categories = Db::table('ffx_categories')->where('content_type', 'media')->where('status', 'published')->whereNull('deleted_at')
-            ->whereNull('parent_id')->order('sort_order')->select()->toArray();
-        $navigation = Db::table('ffx_navigation')->where('status', 'enabled')->order('sort_order')->order('id')->select()->toArray();
+        $categories = array_values(array_filter($this->categories(), static fn (array $category): bool => empty($category['parent_id'])));
+        $structure = $this->cache->shared(static function (): array {
+            $now = gmdate('Y-m-d H:i:s');
+            return [
+                'navigation' => Db::table('ffx_navigation')->where('status', 'enabled')->order('sort_order')->order('id')->select()->toArray(),
+                'friendLinks' => Db::table('ffx_links')->where('status', 'enabled')->order('sort_order')->limit(30)->select()->toArray(),
+                'slides' => Db::table('ffx_slides')->where('status', 'enabled')->where(function ($query) use ($now): void {
+                    $query->whereNull('starts_at')->whereOr('starts_at', '<=', $now);
+                })->where(function ($query) use ($now): void {
+                    $query->whereNull('ends_at')->whereOr('ends_at', '>=', $now);
+                })->order('sort_order')->limit(100)->select()->toArray(),
+                'ads' => Db::table('ffx_ads')->where('status', 'enabled')->where(function ($query) use ($now): void {
+                    $query->whereNull('starts_at')->whereOr('starts_at', '<=', $now);
+                })->where(function ($query) use ($now): void {
+                    $query->whereNull('ends_at')->whereOr('ends_at', '>=', $now);
+                })->select()->toArray(),
+            ];
+        });
+        $structure = is_array($structure) ? $structure : [];
+        $navigation = is_array($structure['navigation'] ?? null) ? $structure['navigation'] : [];
+        $slideLimit = $this->settings->int('admin.base.ui_slide_max', 10, 0, 100) ?: 100;
         return [
             'siteName' => $this->settings->string('admin.base.site_name', (string) config('feifei.site_name')),
             'siteDescription' => $this->settings->string('admin.base.site_description', (string) config('feifei.site_description')),
@@ -28,7 +56,7 @@ final class FrontendData
                 'description' => $this->settings->string('admin.base.site_description', (string) config('feifei.site_description')),
             ],
             'pageActive' => '',
-            'friendLinks' => Db::table('ffx_links')->where('status', 'enabled')->order('sort_order')->limit(30)->select()->toArray(),
+            'friendLinks' => is_array($structure['friendLinks'] ?? null) ? $structure['friendLinks'] : [],
             'siteNavigation' => array_values(array_filter($navigation, static fn (array $item): bool => empty($item['parent_id']))),
             'siteNavigationChildren' => $this->navigationChildren($navigation),
             'hotSearches' => $this->hotSearches(),
@@ -37,20 +65,26 @@ final class FrontendData
                 'slideInterval' => $this->settings->int('admin.base.ui_slide_index', 3000, 1000, 60000),
                 'episodeLimit' => $this->settings->int('admin.base.ui_playurl', 0, 0, 1000),
             ],
-            'siteSlides' => Db::table('ffx_slides')->where('status', 'enabled')->where(function ($query): void {
-                $query->whereNull('starts_at')->whereOr('starts_at', '<=', gmdate('Y-m-d H:i:s'));
-            })->where(function ($query): void {
-                $query->whereNull('ends_at')->whereOr('ends_at', '>=', gmdate('Y-m-d H:i:s'));
-            })->order('sort_order')->limit($this->settings->int('admin.base.ui_slide_max', 10, 0, 100) ?: 100)->select()->toArray(),
+            'siteSlides' => array_slice(is_array($structure['slides'] ?? null) ? $structure['slides'] : [], 0, $slideLimit),
             'siteCopyright' => $this->settings->string('admin.base.site_copyright'),
             'siteIcp' => $this->settings->string('admin.base.site_icp'),
             'siteStatistics' => $this->settings->string('admin.base.site_tongji'),
-            'siteAds' => array_column(Db::table('ffx_ads')->where('status', 'enabled')->where(function ($query): void {
-                $query->whereNull('starts_at')->whereOr('starts_at', '<=', gmdate('Y-m-d H:i:s'));
-            })->where(function ($query): void {
-                $query->whereNull('ends_at')->whereOr('ends_at', '>=', gmdate('Y-m-d H:i:s'));
-            })->select()->toArray(), 'content', 'slot_key'),
+            'siteAds' => array_column(is_array($structure['ads'] ?? null) ? $structure['ads'] : [], 'content', 'slot_key'),
         ];
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    public function categories(): array
+    {
+        $categories = $this->cache->categories(static fn (): array => Db::table('ffx_categories')
+            ->where('content_type', 'media')->where('status', 'published')->whereNull('deleted_at')
+            ->order('sort_order')->order('id')->select()->toArray());
+        $categories = is_array($categories) ? $categories : [];
+        $this->categoryNames = [];
+        foreach ($categories as $category) {
+            $this->categoryNames[(int) ($category['id'] ?? 0)] = (string) ($category['name'] ?? '');
+        }
+        return $categories;
     }
 
     /** @param array<int, array<string, mixed>> $navigation
@@ -88,6 +122,7 @@ final class FrontendData
      */
     public function type(array $category): array
     {
+        LegacyUrlGenerator::prime('ffx_categories', $category);
         return $category + [
             'type_id' => (int) ($category['id'] ?? 0),
             'type_pid' => (int) ($category['parent_id'] ?? 0),
@@ -102,6 +137,7 @@ final class FrontendData
      */
     public function vod(array $media): array
     {
+        LegacyUrlGenerator::prime('ffx_media', $media);
         if (trim((string) ($media['poster_url'] ?? '')) === '') $media['poster_url'] = $this->settings->string('admin.content.default_poster');
         $metadata = $media['metadata'] ?? [];
         if (is_string($metadata)) {
@@ -110,7 +146,8 @@ final class FrontendData
         $metadata = is_array($metadata) ? $metadata : [];
         $categoryName = (string) ($media['category_name'] ?? '');
         if ($categoryName === '' && !empty($media['category_id'])) {
-            $categoryName = (string) Db::table('ffx_categories')->where('id', (int) $media['category_id'])->value('name');
+            if ($this->categoryNames === null) $this->categories();
+            $categoryName = (string) ($this->categoryNames[(int) $media['category_id']] ?? '');
         }
         $created = $this->timestamp($media['created_at'] ?? null);
         $updated = $this->timestamp($media['updated_at'] ?? $media['published_at'] ?? null);
@@ -167,6 +204,7 @@ final class FrontendData
     /** @param array<int, array<string, mixed>> $media */
     public function vodList(array $media): array
     {
+        if ($this->categoryNames === null) $this->categories();
         return array_map(fn (array $item): array => $this->vod($item), $media);
     }
 
@@ -194,6 +232,7 @@ final class FrontendData
     /** @param array<string, mixed> $article */
     public function news(array $article): array
     {
+        LegacyUrlGenerator::prime('ffx_articles', $article);
         if (trim((string) ($article['cover_url'] ?? '')) === '') $article['cover_url'] = $this->settings->string('admin.content.default_poster');
         $content = (string) ($article['content'] ?? '');
         return $article + [
@@ -210,6 +249,7 @@ final class FrontendData
     /** @param array<string, mixed> $topic */
     public function special(array $topic): array
     {
+        LegacyUrlGenerator::prime('ffx_topics', $topic);
         $content = (string) ($topic['content'] ?? '');
         return $topic + [
             'special_id' => (int) ($topic['id'] ?? 0),
@@ -226,6 +266,7 @@ final class FrontendData
     /** @param array<string, mixed> $person */
     public function person(array $person): array
     {
+        LegacyUrlGenerator::prime('ffx_people', $person);
         if (trim((string) ($person['avatar_url'] ?? '')) === '') $person['avatar_url'] = $this->settings->string('admin.content.default_avatar');
         $metadata = $person['metadata'] ?? [];
         if (is_string($metadata)) $metadata = json_decode($metadata, true);
