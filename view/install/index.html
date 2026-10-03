@@ -28,7 +28,7 @@
         <div class="form-row"><label for="site_name">站点名称</label><input id="site_name" name="site_name" value="{$values.site_name|htmlspecialchars|raw}" maxlength="100" required></div>
         <div class="form-row"><label for="app_url">站点地址</label><input id="app_url" name="app_url" type="url" value="{$values.app_url|htmlspecialchars|raw}" placeholder="https://example.com"></div>
 
-        <h2>MySQL 8</h2>
+        <h2>MySQL 5.7.13+ / 8.x</h2>
         <div class="form-grid">
             <div class="form-row"><label for="db_host">主机</label><input id="db_host" name="db_host" value="{$values.db_host|htmlspecialchars|raw}" required></div>
             <div class="form-row"><label for="db_port">端口</label><input id="db_port" name="db_port" inputmode="numeric" value="{$values.db_port|htmlspecialchars|raw}" required></div>

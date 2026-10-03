@@ -22,6 +22,18 @@ final class SchemaV2Test extends TestCase
         );
     }
 
+    public function testSchemaAndMigrationsUseMySql57CompatibleCollationAndRowFormat(): void
+    {
+        self::assertStringNotContainsString('utf8mb4_0900_ai_ci', $this->schema);
+        self::assertStringContainsString('COLLATE=utf8mb4_unicode_ci', $this->schema);
+        self::assertStringContainsString('ROW_FORMAT=DYNAMIC', $this->schema);
+        foreach (glob(dirname(__DIR__) . '/database/migrations/*.sql') ?: [] as $path) {
+            $migration = file_get_contents($path);
+            self::assertIsString($migration);
+            self::assertStringNotContainsString('utf8mb4_0900_ai_ci', $migration, basename($path));
+        }
+    }
+
     public function testPlaybackAndDiscoveryDataAreNormalized(): void
     {
         foreach ([

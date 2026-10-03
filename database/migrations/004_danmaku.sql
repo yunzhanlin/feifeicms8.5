@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS ffx_danmaku (
   KEY idx_ffx_danmaku_video (video_key, status, time_seconds),
   KEY idx_ffx_danmaku_user (user_id, created_at),
   CONSTRAINT fk_ffx_danmaku_user FOREIGN KEY (user_id) REFERENCES ffx_users(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO ffx_schema_versions (version, description)
 VALUES (4, 'local danmaku storage')

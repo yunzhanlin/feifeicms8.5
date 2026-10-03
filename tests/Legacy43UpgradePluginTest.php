@@ -48,4 +48,22 @@ final class Legacy43UpgradePluginTest extends TestCase
         self::assertStringContainsString('$this->passwordHasher->needsRehash', $controller);
         self::assertStringContainsString('$loginUpdate[\'password_hash\']', $controller);
     }
+
+    public function testOldSiteEntrypointUsesPhp74SyntaxAndBoundedCliBatches(): void
+    {
+        $root = dirname(__DIR__);
+        $path = $root . '/plugins/legacy43/ff43-upgrade.php';
+        self::assertFileExists($path);
+        $source = (string) file_get_contents($path);
+        $parser = (new \PhpParser\ParserFactory())->createForVersion(\PhpParser\PhpVersion::fromString('7.4'));
+        self::assertIsArray($parser->parse($source));
+        foreach (['ff43up_admin', "hash_equals(", "'FF43_DB_PASS'", "'--once'", "'--preflight'", "'--finish'", 'runtime/install.lock', "'ff43up_csrf'"] as $marker) {
+            self::assertTrue(str_contains($source, $marker), $marker);
+        }
+        self::assertStringNotContainsString("'--password=", $source);
+        $command = (string) file_get_contents($root . '/app/command/Legacy43Upgrade.php');
+        foreach (["->addOption('once'", "->addOption('preflight'", "->addOption('finish'", "->addOption('cursor'", 'FF43_JSON:'] as $marker) {
+            self::assertStringContainsString($marker, $command);
+        }
+    }
 }

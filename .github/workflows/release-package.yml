@@ -3,6 +3,7 @@ name: Build update package
 on:
   release:
     types: [published]
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -13,17 +14,22 @@ jobs:
     steps:
       - uses: actions/checkout@v5
         with:
-          ref: ${{ github.event.release.tag_name }}
+          ref: ${{ github.event.release.tag_name || github.ref_name }}
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
           extensions: curl, fileinfo, mbstring, openssl, pdo_mysql, zip
           tools: composer:v2
       - run: composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
-      - run: php scripts/build-update-package.php "${{ github.event.release.tag_name }}"
+      - run: php scripts/build-update-package.php "${{ github.event.release.tag_name || github.ref_name }}"
+      - run: |
+          cp plugins/legacy43/ff43-upgrade.php feifeicms43-upgrade-v1.0.0.php
+          sha256sum feifeicms43-upgrade-v1.0.0.php > feifeicms43-upgrade-v1.0.0.php.sha256
       - uses: softprops/action-gh-release@v2
         with:
-          tag_name: ${{ github.event.release.tag_name }}
+          tag_name: ${{ github.event.release.tag_name || github.ref_name }}
           files: |
             feifeicms-update.zip
             feifeicms-update.zip.sha256
+            feifeicms43-upgrade-v1.0.0.php
+            feifeicms43-upgrade-v1.0.0.php.sha256

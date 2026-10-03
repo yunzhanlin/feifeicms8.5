@@ -1,15 +1,15 @@
-# FeiFeiCMS 8.5.261003 Beta2
+# FeiFeiCMS 8.5.261003 Beta2.1
 
 #### 系统介绍
 
-飞飞影视导航系统（FeiFeiCMS）是一款免费开源的 PHP 影视内容管理程序。本项目以 FeiFeiCMS 4.3 系列为兼容基线，将原 ThinkPHP 2.1 内核升级为 ThinkPHP 8，保留原版后台使用习惯、模板标签、采集方式和常用 URL，同时支持 PHP 8、MySQL 8、Redis 与 Meilisearch。
+飞飞影视导航系统（FeiFeiCMS）是一款免费开源的 PHP 影视内容管理程序。本项目以 FeiFeiCMS 4.3 系列为兼容基线，将原 ThinkPHP 2.1 内核升级为 ThinkPHP 8，保留原版后台使用习惯、模板标签、采集方式和常用 URL，同时支持 PHP 8、MySQL 5.7.13+/8.x、Redis 与 Meilisearch。
 
 原始 FeiFeiCMS 源码保存在 `legacy/`，仅用于功能和兼容性对照，不会在 PHP 8 运行时直接执行。
 
 #### 环境要求
 
 - PHP 8.2～8.5
-- MySQL 8.0 或更高版本，推荐 MySQL 8.4 LTS
+- MySQL 5.7.13+ 或 8.x，推荐 MySQL 8.4 LTS；不支持 MySQL 5.6、5.5 或 MariaDB
 - Nginx 或 Apache
 - Composer 2
 - PHP 扩展：`curl`、`dom`、`fileinfo`、`gd`、`intl`、`mbstring`、`openssl`、`pdo_mysql`、`xml`、`xmlwriter`、`zip`
@@ -20,7 +20,7 @@
 
 * 开源免费
 * ThinkPHP 8 内核
-* PHP 8 与 MySQL 8 支持
+* PHP 8 与 MySQL 5.7/8 支持
 * Redis 数据缓存
 * Meilisearch 全文搜索
 * FeiFeiCMS 兼容模板标签
@@ -46,7 +46,7 @@
 
 * ThinkPHP 8.1
 * PHP 8.2～8.5
-* MySQL 8 / `utf8mb4`
+* MySQL 5.7.13+/8.x / `utf8mb4`
 * Redis 缓存与会话
 * Meilisearch 搜索，支持自动降级到 MySQL
 * `ffx_*` 规范化数据表
@@ -65,6 +65,8 @@
 7. 安装完成后访问 `http://您的域名/admin.php` 登录后台。
 
 安装程序只允许写入没有 `ffx_*` 表的空数据库，不会覆盖已有站点数据。管理员密码由安装时自行设置，本版本没有通用默认密码。
+
+MySQL 5.7 兼容使用 `utf8mb4_unicode_ci` 与 InnoDB `DYNAMIC` 行格式，要求 16 KiB 页和可用的长索引前缀。MySQL 5.7 已是旧分支，新部署仍建议使用 MySQL 8.4；已有 MySQL 8 数据库不会因程序升级而自动更改原有表的排序规则。
 
 宝塔 Linux 建议使用 PHP 8.4。站点运行目录设为 `/public`，伪静态复制 `deploy/baota/thinkphp.conf` 的内容；`deploy/baota/` 还提供 Redis 与计划任务配置示例。
 
@@ -170,6 +172,8 @@ php think feifei:search:sync
 
 旧版 FeiFeiCMS 数据不能直接覆盖新表。8.5 已内置“工具 → 4.3数据升级”插件：填写只读旧库连接，先执行预检/只读验证，再按批迁移到新的 `ffx_*` 表。插件不会修改旧库，使用 `ffx_legacy_map` 保留旧 ID 对照并支持中断重跑；视频会同时拆分播放线路和分集，4.3 采集源会迁移为默认停用的 FeiFei JSON 源，专题、评论、用户记录等会按旧 ID 重新关联。旧会员 MD5 密码只用于兼容首次登录，验证成功后会自动升级为当前安全散列。
 
+旧站也可使用[单文件升级入口](plugins/legacy43/README.md)：将 Release 附件 `feifeicms43-upgrade-v1.0.0.php` 重命名为 `ff43-upgrade.php`，放在 4.3 网站根目录；登录旧站后台后访问该文件，填写已安装的 8.5 项目目录和 PHP 8 CLI 路径，即可从旧站页面预检并分批迁移。它不原地覆盖 4.3 程序，也不自动切换域名；完成验收后务必删除这个旧站入口文件。
+
 数据量较大时也可以在终端执行（密码通过环境变量传入，避免进入 shell 历史）：
 
 ```bash
@@ -199,6 +203,7 @@ curl -fsS http://您的域名/health
 
 每个版本的新增、优化与删除项分别记录，不将多个版本混写：
 
+- [8.5.261003 Beta2.1](docs/releases/8.5.261003-beta2.1.md)
 - [8.5.261003 Beta2](docs/releases/8.5.261003-beta2.md)
 - [8.5.260930 Beta1](docs/releases/8.5.260930-beta1.md)
 

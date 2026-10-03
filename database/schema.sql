@@ -5,7 +5,7 @@ CREATE TABLE IF NOT EXISTS ffx_schema_versions (
   version INT UNSIGNED PRIMARY KEY,
   description VARCHAR(255) NOT NULL,
   applied_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 DROP TABLE IF EXISTS ffx_visit_logs;
 
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS ffx_site_settings (
   setting_value JSON NOT NULL,
   is_public TINYINT(1) NOT NULL DEFAULT 0,
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_categories (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -35,7 +35,7 @@ CREATE TABLE IF NOT EXISTS ffx_categories (
   KEY idx_ffx_categories_tree (parent_id, sort_order, status),
   KEY idx_ffx_categories_frontend (content_type, status, deleted_at, sort_order, id),
   CONSTRAINT fk_ffx_categories_parent FOREIGN KEY (parent_id) REFERENCES ffx_categories(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_media (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS ffx_media (
   KEY idx_ffx_media_frontend_popular (status, deleted_at, view_count, id),
   KEY idx_ffx_media_frontend_category (category_id, status, deleted_at, published_at, id),
   CONSTRAINT fk_ffx_media_category FOREIGN KEY (category_id) REFERENCES ffx_categories(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_media_categories (
   media_id BIGINT UNSIGNED NOT NULL,
@@ -102,7 +102,7 @@ CREATE TABLE IF NOT EXISTS ffx_media_categories (
   KEY idx_ffx_media_categories_category (category_id, is_primary, sort_order),
   CONSTRAINT fk_ffx_media_categories_media FOREIGN KEY (media_id) REFERENCES ffx_media(id) ON DELETE CASCADE,
   CONSTRAINT fk_ffx_media_categories_category FOREIGN KEY (category_id) REFERENCES ffx_categories(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_seasons (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -119,7 +119,7 @@ CREATE TABLE IF NOT EXISTS ffx_seasons (
   UNIQUE KEY uk_ffx_seasons_media_no (media_id, season_no),
   KEY idx_ffx_seasons_feed (media_id, status, season_no),
   CONSTRAINT fk_ffx_seasons_media FOREIGN KEY (media_id) REFERENCES ffx_media(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_play_sources (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -136,7 +136,7 @@ CREATE TABLE IF NOT EXISTS ffx_play_sources (
   KEY idx_ffx_play_source_order (media_id, status, sort_order),
   KEY idx_ffx_play_source_collection (collection_source_id, media_id),
   CONSTRAINT fk_ffx_play_source_media FOREIGN KEY (media_id) REFERENCES ffx_media(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_episodes (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -158,7 +158,7 @@ CREATE TABLE IF NOT EXISTS ffx_episodes (
   CONSTRAINT fk_ffx_episode_media FOREIGN KEY (media_id) REFERENCES ffx_media(id) ON DELETE CASCADE,
   CONSTRAINT fk_ffx_episode_source FOREIGN KEY (source_id) REFERENCES ffx_play_sources(id) ON DELETE CASCADE,
   CONSTRAINT fk_ffx_episode_season FOREIGN KEY (season_id) REFERENCES ffx_seasons(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_scenarios (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -175,7 +175,7 @@ CREATE TABLE IF NOT EXISTS ffx_scenarios (
   UNIQUE KEY uk_ffx_scenarios_media_episode (media_id, episode_no),
   KEY idx_ffx_scenarios_feed (status, updated_at, id),
   CONSTRAINT fk_ffx_scenarios_media FOREIGN KEY (media_id) REFERENCES ffx_media(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_media_assets (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -193,7 +193,7 @@ CREATE TABLE IF NOT EXISTS ffx_media_assets (
   KEY idx_ffx_media_assets_episode (episode_id, asset_type),
   CONSTRAINT fk_ffx_media_assets_media FOREIGN KEY (media_id) REFERENCES ffx_media(id) ON DELETE CASCADE,
   CONSTRAINT fk_ffx_media_assets_episode FOREIGN KEY (episode_id) REFERENCES ffx_episodes(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_people (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -217,7 +217,7 @@ CREATE TABLE IF NOT EXISTS ffx_people (
   UNIQUE KEY uk_ffx_people_slug (slug),
   KEY idx_ffx_people_name (name),
   KEY idx_ffx_people_status (kind, status, updated_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_media_people (
   media_id BIGINT UNSIGNED NOT NULL,
@@ -229,7 +229,7 @@ CREATE TABLE IF NOT EXISTS ffx_media_people (
   KEY idx_ffx_media_people_person (person_id, credit_type),
   CONSTRAINT fk_ffx_media_people_media FOREIGN KEY (media_id) REFERENCES ffx_media(id) ON DELETE CASCADE,
   CONSTRAINT fk_ffx_media_people_person FOREIGN KEY (person_id) REFERENCES ffx_people(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_articles (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -253,7 +253,7 @@ CREATE TABLE IF NOT EXISTS ffx_articles (
   KEY idx_ffx_articles_feed (status, published_at, id),
   KEY idx_ffx_articles_category (category_id, status, published_at),
   CONSTRAINT fk_ffx_articles_category FOREIGN KEY (category_id) REFERENCES ffx_categories(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_topics (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -273,7 +273,7 @@ CREATE TABLE IF NOT EXISTS ffx_topics (
   UNIQUE KEY uk_ffx_topics_slug (slug),
   KEY idx_ffx_topics_feed (status, published_at),
   CONSTRAINT fk_ffx_topics_category FOREIGN KEY (category_id) REFERENCES ffx_categories(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_topic_media (
   topic_id BIGINT UNSIGNED NOT NULL,
@@ -282,7 +282,7 @@ CREATE TABLE IF NOT EXISTS ffx_topic_media (
   PRIMARY KEY (topic_id, media_id),
   CONSTRAINT fk_ffx_topic_media_topic FOREIGN KEY (topic_id) REFERENCES ffx_topics(id) ON DELETE CASCADE,
   CONSTRAINT fk_ffx_topic_media_media FOREIGN KEY (media_id) REFERENCES ffx_media(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_tags (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -292,7 +292,7 @@ CREATE TABLE IF NOT EXISTS ffx_tags (
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   UNIQUE KEY uk_ffx_tags_scope_slug (scope, slug),
   KEY idx_ffx_tags_name (name)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_media_tags (
   media_id BIGINT UNSIGNED NOT NULL,
@@ -300,7 +300,7 @@ CREATE TABLE IF NOT EXISTS ffx_media_tags (
   PRIMARY KEY (media_id, tag_id),
   CONSTRAINT fk_ffx_media_tags_media FOREIGN KEY (media_id) REFERENCES ffx_media(id) ON DELETE CASCADE,
   CONSTRAINT fk_ffx_media_tags_tag FOREIGN KEY (tag_id) REFERENCES ffx_tags(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_article_tags (
   article_id BIGINT UNSIGNED NOT NULL,
@@ -308,7 +308,7 @@ CREATE TABLE IF NOT EXISTS ffx_article_tags (
   PRIMARY KEY (article_id, tag_id),
   CONSTRAINT fk_ffx_article_tags_article FOREIGN KEY (article_id) REFERENCES ffx_articles(id) ON DELETE CASCADE,
   CONSTRAINT fk_ffx_article_tags_tag FOREIGN KEY (tag_id) REFERENCES ffx_tags(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_users (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -328,7 +328,7 @@ CREATE TABLE IF NOT EXISTS ffx_users (
   UNIQUE KEY uk_ffx_users_username (username),
   UNIQUE KEY uk_ffx_users_email (email),
   KEY idx_ffx_users_status (status, created_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_comments (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -353,7 +353,7 @@ CREATE TABLE IF NOT EXISTS ffx_comments (
   CONSTRAINT fk_ffx_comments_user FOREIGN KEY (user_id) REFERENCES ffx_users(id) ON DELETE SET NULL,
   CONSTRAINT fk_ffx_comments_parent FOREIGN KEY (parent_id) REFERENCES ffx_comments(id) ON DELETE SET NULL,
   CONSTRAINT fk_ffx_comments_episode FOREIGN KEY (episode_id) REFERENCES ffx_episodes(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_watch_history (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -367,7 +367,7 @@ CREATE TABLE IF NOT EXISTS ffx_watch_history (
   CONSTRAINT fk_ffx_watch_history_user FOREIGN KEY (user_id) REFERENCES ffx_users(id) ON DELETE CASCADE,
   CONSTRAINT fk_ffx_watch_history_media FOREIGN KEY (media_id) REFERENCES ffx_media(id) ON DELETE CASCADE,
   CONSTRAINT fk_ffx_watch_history_episode FOREIGN KEY (episode_id) REFERENCES ffx_episodes(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_favorites (
   user_id BIGINT UNSIGNED NOT NULL,
@@ -376,7 +376,7 @@ CREATE TABLE IF NOT EXISTS ffx_favorites (
   PRIMARY KEY (user_id, media_id),
   CONSTRAINT fk_ffx_favorites_user FOREIGN KEY (user_id) REFERENCES ffx_users(id) ON DELETE CASCADE,
   CONSTRAINT fk_ffx_favorites_media FOREIGN KEY (media_id) REFERENCES ffx_media(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_media_entitlements (
   user_id BIGINT UNSIGNED NOT NULL,
@@ -387,7 +387,7 @@ CREATE TABLE IF NOT EXISTS ffx_media_entitlements (
   KEY idx_ffx_media_entitlements_media (media_id, created_at),
   CONSTRAINT fk_ffx_media_entitlements_user FOREIGN KEY (user_id) REFERENCES ffx_users(id) ON DELETE CASCADE,
   CONSTRAINT fk_ffx_media_entitlements_media FOREIGN KEY (media_id) REFERENCES ffx_media(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_ratings (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -400,7 +400,7 @@ CREATE TABLE IF NOT EXISTS ffx_ratings (
   UNIQUE KEY uk_ffx_ratings_user_target (user_id, target_type, target_id),
   KEY idx_ffx_ratings_target (target_type, target_id),
   CONSTRAINT fk_ffx_ratings_user FOREIGN KEY (user_id) REFERENCES ffx_users(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_danmaku (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -417,7 +417,7 @@ CREATE TABLE IF NOT EXISTS ffx_danmaku (
   KEY idx_ffx_danmaku_video (video_key, status, time_seconds),
   KEY idx_ffx_danmaku_user (user_id, created_at),
   CONSTRAINT fk_ffx_danmaku_user FOREIGN KEY (user_id) REFERENCES ffx_users(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_admins (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -431,7 +431,7 @@ CREATE TABLE IF NOT EXISTS ffx_admins (
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   UNIQUE KEY uk_ffx_admins_username (username)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_roles (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -440,7 +440,7 @@ CREATE TABLE IF NOT EXISTS ffx_roles (
   description VARCHAR(500) NOT NULL DEFAULT '',
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   UNIQUE KEY uk_ffx_roles_key (role_key)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_permissions (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -448,7 +448,7 @@ CREATE TABLE IF NOT EXISTS ffx_permissions (
   name VARCHAR(120) NOT NULL,
   description VARCHAR(500) NOT NULL DEFAULT '',
   UNIQUE KEY uk_ffx_permissions_key (permission_key)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_admin_roles (
   admin_id BIGINT UNSIGNED NOT NULL,
@@ -456,7 +456,7 @@ CREATE TABLE IF NOT EXISTS ffx_admin_roles (
   PRIMARY KEY (admin_id, role_id),
   CONSTRAINT fk_ffx_admin_roles_admin FOREIGN KEY (admin_id) REFERENCES ffx_admins(id) ON DELETE CASCADE,
   CONSTRAINT fk_ffx_admin_roles_role FOREIGN KEY (role_id) REFERENCES ffx_roles(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_role_permissions (
   role_id BIGINT UNSIGNED NOT NULL,
@@ -464,7 +464,7 @@ CREATE TABLE IF NOT EXISTS ffx_role_permissions (
   PRIMARY KEY (role_id, permission_id),
   CONSTRAINT fk_ffx_role_permissions_role FOREIGN KEY (role_id) REFERENCES ffx_roles(id) ON DELETE CASCADE,
   CONSTRAINT fk_ffx_role_permissions_permission FOREIGN KEY (permission_id) REFERENCES ffx_permissions(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_orders (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -487,7 +487,7 @@ CREATE TABLE IF NOT EXISTS ffx_orders (
   KEY idx_ffx_orders_user (user_id, created_at),
   KEY idx_ffx_orders_status (status, created_at),
   CONSTRAINT fk_ffx_orders_user FOREIGN KEY (user_id) REFERENCES ffx_users(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_cards (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -501,7 +501,7 @@ CREATE TABLE IF NOT EXISTS ffx_cards (
   UNIQUE KEY uk_ffx_cards_hash (card_hash),
   KEY idx_ffx_cards_status (status, created_at),
   CONSTRAINT fk_ffx_cards_user FOREIGN KEY (used_by) REFERENCES ffx_users(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_collection_sources (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -519,7 +519,7 @@ CREATE TABLE IF NOT EXISTS ffx_collection_sources (
   UNIQUE KEY uk_ffx_collection_sources_resource_endpoint (resource_type, endpoint(255)),
   KEY idx_ffx_collection_sources_media_source (media_source_id, resource_type),
   CONSTRAINT fk_ffx_collection_sources_media_source FOREIGN KEY (media_source_id) REFERENCES ffx_collection_sources(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_external_refs (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -538,7 +538,7 @@ CREATE TABLE IF NOT EXISTS ffx_external_refs (
   KEY idx_ffx_external_refs_entity (entity_type, entity_id),
   KEY idx_ffx_external_refs_source (source_id, updated_at),
   CONSTRAINT fk_ffx_external_refs_source FOREIGN KEY (source_id) REFERENCES ffx_collection_sources(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_collection_jobs (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -558,7 +558,7 @@ CREATE TABLE IF NOT EXISTS ffx_collection_jobs (
   UNIQUE KEY uk_ffx_collection_jobs_idem (idempotency_key),
   KEY idx_ffx_collection_jobs_state (state, created_at),
   CONSTRAINT fk_ffx_collection_jobs_source FOREIGN KEY (source_id) REFERENCES ffx_collection_sources(id) ON DELETE RESTRICT
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_cron_tasks (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -576,7 +576,7 @@ CREATE TABLE IF NOT EXISTS ffx_cron_tasks (
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   KEY idx_ffx_cron_due (status, next_run_at),
   CONSTRAINT fk_ffx_cron_source FOREIGN KEY (source_id) REFERENCES ffx_collection_sources(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_players (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -589,7 +589,7 @@ CREATE TABLE IF NOT EXISTS ffx_players (
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   UNIQUE KEY uk_ffx_players_key (player_key)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_navigation (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -601,7 +601,7 @@ CREATE TABLE IF NOT EXISTS ffx_navigation (
   status VARCHAR(20) NOT NULL DEFAULT 'enabled',
   KEY idx_ffx_navigation_order (parent_id, status, sort_order),
   CONSTRAINT fk_ffx_navigation_parent FOREIGN KEY (parent_id) REFERENCES ffx_navigation(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_slides (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -615,7 +615,7 @@ CREATE TABLE IF NOT EXISTS ffx_slides (
   starts_at DATETIME(6) NULL,
   ends_at DATETIME(6) NULL,
   KEY idx_ffx_slides_active (status, sort_order, starts_at, ends_at)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_links (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -626,7 +626,7 @@ CREATE TABLE IF NOT EXISTS ffx_links (
   sort_order INT NOT NULL DEFAULT 0,
   status VARCHAR(20) NOT NULL DEFAULT 'enabled',
   KEY idx_ffx_links_active (status, sort_order)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_ads (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -639,7 +639,7 @@ CREATE TABLE IF NOT EXISTS ffx_ads (
   created_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   UNIQUE KEY uk_ffx_ads_slot (slot_key)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_jobs (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -656,7 +656,7 @@ CREATE TABLE IF NOT EXISTS ffx_jobs (
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   UNIQUE KEY uk_ffx_jobs_idem (idempotency_key),
   KEY idx_ffx_jobs_queue (state, available_at, id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_audit_logs (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -673,7 +673,7 @@ CREATE TABLE IF NOT EXISTS ffx_audit_logs (
   KEY idx_ffx_audit_target (target_type, target_id, created_at),
   KEY idx_ffx_audit_admin (admin_id, created_at),
   CONSTRAINT fk_ffx_audit_admin FOREIGN KEY (admin_id) REFERENCES ffx_admins(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_search_state (
   index_name VARCHAR(100) PRIMARY KEY,
@@ -684,7 +684,7 @@ CREATE TABLE IF NOT EXISTS ffx_search_state (
   last_error_at DATETIME(6) NULL,
   last_error TEXT NULL,
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS ffx_legacy_map (
   entity_type VARCHAR(50) NOT NULL,
@@ -694,7 +694,7 @@ CREATE TABLE IF NOT EXISTS ffx_legacy_map (
   migrated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (entity_type, legacy_id),
   UNIQUE KEY uk_ffx_legacy_map_new (entity_type, new_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO ffx_schema_versions (version, description)
 VALUES (13, 'independent scenario collection sources')

@@ -81,8 +81,8 @@ final class WebInstaller
             $values = $this->validate($input);
             $pdo = $this->connect($values);
             $version = (string) $pdo->query('SELECT VERSION()')->fetchColumn();
-            if (!preg_match('/^8\./', $version)) {
-                throw new RuntimeException('需要 MySQL 8.x，当前版本为 ' . ($version ?: '未知') . '。');
+            if (!MySqlCompatibility::supports($version)) {
+                throw new RuntimeException('需要 ' . MySqlCompatibility::requirement() . '，当前版本为 ' . ($version ?: '未知') . '。');
             }
 
             $existing = (int) $pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'ffx\\_%'")->fetchColumn();
@@ -174,7 +174,7 @@ final class WebInstaller
         $options = [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC, PDO::ATTR_EMULATE_PREPARES => false];
         try {
             $server = new PDO($serverDsn, $values['db_user'], $values['db_pass'], $options);
-            $server->exec('CREATE DATABASE IF NOT EXISTS `' . $values['db_name'] . '` CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci');
+            $server->exec('CREATE DATABASE IF NOT EXISTS `' . $values['db_name'] . '` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci');
             return new PDO($serverDsn . ';dbname=' . $values['db_name'], $values['db_user'], $values['db_pass'], $options);
         } catch (PDOException $exception) {
             Log::error('安装程序数据库连接或创建失败', ['exception' => $exception->getMessage()]);

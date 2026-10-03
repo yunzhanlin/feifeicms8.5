@@ -13,13 +13,14 @@ final class ReleaseCatalogTest extends TestCase
 <feed xmlns="http://www.w3.org/2005/Atom">
   <entry><id>tag:github.com,2008:Repository/1/v8.5.260930-beta1</id><title>Beta 1</title></entry>
   <entry><id>tag:github.com,2008:Repository/1/v8.5.261003-beta2</id><title>Beta 2</title></entry>
+  <entry><id>tag:github.com,2008:Repository/1/v8.5.261003-beta2.1</id><title>Beta 2.1</title></entry>
 </feed>
 XML;
         $latest = ReleaseCatalog::parseFeed($feed, '8.5.260930-beta1');
-        self::assertSame('v8.5.261003-beta2', $latest['tag']);
+        self::assertSame('v8.5.261003-beta2.1', $latest['tag']);
         self::assertTrue($latest['available']);
-        self::assertFalse(ReleaseCatalog::parseFeed($feed, '8.5.261003-beta2')['available']);
-        self::assertStringEndsWith('/v8.5.261003-beta2/feifeicms-update.zip', ReleaseCatalog::assetUrl($latest['tag'], ReleaseCatalog::PACKAGE));
+        self::assertFalse(ReleaseCatalog::parseFeed($feed, '8.5.261003-beta2.1')['available']);
+        self::assertStringEndsWith('/v8.5.261003-beta2.1/feifeicms-update.zip', ReleaseCatalog::assetUrl($latest['tag'], ReleaseCatalog::PACKAGE));
         $this->expectException(InvalidArgumentException::class);
         ReleaseCatalog::assetUrl('../evil', ReleaseCatalog::PACKAGE);
     }
@@ -41,12 +42,12 @@ XML;
             for ($i = 0; $i < 6; $i++) $files['app/example' . $i . '.php'] = str_repeat('e', 64);
             $zip = new ZipArchive();
             self::assertTrue($zip->open($archive, ZipArchive::CREATE));
-            $zip->addFromString('manifest.json', json_encode(['format' => 1, 'version' => '8.5.261003-beta2', 'files' => $files], JSON_THROW_ON_ERROR));
+            $zip->addFromString('manifest.json', json_encode(['format' => 1, 'version' => '8.5.261003-beta2.1', 'files' => $files], JSON_THROW_ON_ERROR));
             $zip->addFromString('../outside.php', '<?php');
             $zip->close();
             $this->expectException(RuntimeException::class);
             $this->expectExceptionMessage('非法文件');
-            (new ProgramUpdater())->unpack($archive, $stage, '8.5.261003-beta2');
+            (new ProgramUpdater())->unpack($archive, $stage, '8.5.261003-beta2.1');
         } finally {
             unlink($archive);
             rmdir($stage);

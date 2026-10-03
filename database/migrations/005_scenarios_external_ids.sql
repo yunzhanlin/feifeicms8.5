@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS ffx_scenarios (
   UNIQUE KEY uk_ffx_scenarios_media_episode (media_id, episode_no),
   KEY idx_ffx_scenarios_feed (status, updated_at, id),
   CONSTRAINT fk_ffx_scenarios_media FOREIGN KEY (media_id) REFERENCES ffx_media(id) ON DELETE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO ffx_scenarios (media_id, episode_no, title, content, source_ref, sort_order, status, created_at, updated_at)
 SELECT id, 1, '第1集', JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.scenario')), '', 0,

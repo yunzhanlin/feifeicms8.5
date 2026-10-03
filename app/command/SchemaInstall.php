@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace app\command;
 
 use app\service\SqlStatementStream;
+use app\service\MySqlCompatibility;
 use think\console\Command;
 use think\console\Input;
 use think\console\Output;
@@ -20,8 +21,8 @@ final class SchemaInstall extends Command
     protected function execute(Input $input, Output $output): int
     {
         $version = (string) (Db::query('SELECT VERSION() AS version')[0]['version'] ?? '');
-        if (!preg_match('/^(8\.[0-9]+\.[0-9]+)/', $version, $matches)) {
-            $output->writeln('[FAIL] 新结构要求 MySQL 8.x，当前版本：' . ($version ?: '未知'));
+        if (!MySqlCompatibility::supports($version)) {
+            $output->writeln('[FAIL] 新结构要求 ' . MySqlCompatibility::requirement() . '，当前版本：' . ($version ?: '未知'));
             return 1;
         }
 
@@ -44,7 +45,7 @@ final class SchemaInstall extends Command
         }
 
         $tableCount = (int) (Db::query("SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'ffx\\_%'")[0]['total'] ?? 0);
-        $output->writeln(sprintf('[OK] MySQL %s，执行 %d 条语句，当前 %d 张 ffx_ 表', $matches[1], $executed, $tableCount));
+        $output->writeln(sprintf('[OK] MySQL %s，执行 %d 条语句，当前 %d 张 ffx_ 表', $version, $executed, $tableCount));
         return 0;
     }
 }

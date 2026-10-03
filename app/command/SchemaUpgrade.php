@@ -4,6 +4,7 @@ declare(strict_types=1);
 namespace app\command;
 
 use app\service\SqlStatementStream;
+use app\service\MySqlCompatibility;
 use think\console\Command;
 use think\console\Input;
 use think\console\Output;
@@ -20,8 +21,8 @@ final class SchemaUpgrade extends Command
     protected function execute(Input $input, Output $output): int
     {
         $version = (string) (Db::query('SELECT VERSION() AS version')[0]['version'] ?? '');
-        if (!preg_match('/^8\./', $version)) {
-            $output->writeln('[FAIL] 新结构要求 MySQL 8.x，当前版本：' . ($version ?: '未知'));
+        if (!MySqlCompatibility::supports($version)) {
+            $output->writeln('[FAIL] 新结构要求 ' . MySqlCompatibility::requirement() . '，当前版本：' . ($version ?: '未知'));
             return 1;
         }
         $locked = (int) (Db::query("SELECT GET_LOCK('feifeicms_schema_upgrade', 0) AS acquired")[0]['acquired'] ?? 0) === 1;

@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS ffx_cron_tasks (
   updated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6),
   KEY idx_ffx_cron_due (status, next_run_at),
   CONSTRAINT fk_ffx_cron_source FOREIGN KEY (source_id) REFERENCES ffx_collection_sources(id) ON DELETE SET NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+) ENGINE=InnoDB ROW_FORMAT=DYNAMIC DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 INSERT INTO ffx_schema_versions (version, description)
 VALUES (3, 'scheduled collection tasks')
