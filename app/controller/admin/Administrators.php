@@ -46,7 +46,12 @@ final class Administrators extends BaseController
             return response('管理员名已存在', 422);
         }
         $data = ['username' => $username, 'password_hash' => $this->hasher->hash($password), 'email' => $this->email(), 'status' => 'active', 'created_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s')];
-        $id = Db::table('ffx_admins')->insertGetId($data);
+        $roleId = $this->roleId();
+        $id = Db::transaction(function () use ($data, $roleId): int {
+            $id = (int) Db::table('ffx_admins')->insertGetId($data);
+            Db::table('ffx_admin_roles')->insert(['admin_id' => $id, 'role_id' => $roleId]);
+            return $id;
+        });
         $safe = $data; unset($safe['password_hash']);
         $this->audit->record('admin.create', 'admin', $id, null, $safe);
         return redirect('/admin/administrators/' . $id . '/edit');
@@ -72,7 +77,13 @@ final class Administrators extends BaseController
             }
             $data['password_hash'] = $this->hasher->hash($password);
         }
-        Db::table('ffx_admins')->where('id', $id)->update($data);
+        $roleId = $this->roleId();
+        Db::transaction(function () use ($id, $data, $roleId): void {
+            $this->protectSuperAdmin($id, $data['status'] === 'active' && Db::table('ffx_roles')->where('id', $roleId)->value('role_key') === 'super_admin');
+            Db::table('ffx_admins')->where('id', $id)->update($data);
+            Db::table('ffx_admin_roles')->where('admin_id', $id)->delete();
+            Db::table('ffx_admin_roles')->insert(['admin_id' => $id, 'role_id' => $roleId]);
+        });
         unset($before['password_hash']); $safe = $data; unset($safe['password_hash']);
         $this->audit->record('admin.update', 'admin', $id, $before, $safe);
         return redirect('/admin/administrators/' . $id . '/edit');
@@ -88,7 +99,10 @@ final class Administrators extends BaseController
         if (Db::table('ffx_admins')->where('status', 'active')->count() <= 1) {
             return response('必须保留至少一个启用的管理员', 422);
         }
-        Db::table('ffx_admins')->where('id', $id)->delete();
+        Db::transaction(function () use ($id): void {
+            $this->protectSuperAdmin($id, false);
+            Db::table('ffx_admins')->where('id', $id)->delete();
+        });
         unset($before['password_hash']);
         $this->audit->record('admin.delete', 'admin', $id, $before, null);
         return redirect('/admin/administrators');
@@ -97,7 +111,27 @@ final class Administrators extends BaseController
     private function form(?array $item): Response
     {
         if ($item !== null) unset($item['password_hash']);
-        return view('/admin/administrators/edit', ['item' => $item ?? ['id' => 0, 'username' => '', 'email' => '', 'status' => 'active'], 'isNew' => $item === null, 'csrf' => $this->csrf->get(), 'currentId' => (int) Session::get('admin_id', 0)]);
+        $roleId = $item === null ? Db::table('ffx_roles')->where('role_key', 'editor')->value('id') : Db::table('ffx_admin_roles')->where('admin_id', $item['id'])->value('role_id');
+        return view('/admin/administrators/edit', ['roles' => Db::table('ffx_roles')->select()->toArray(), 'roleId' => (int) $roleId, 'item' => $item ?? ['id' => 0, 'username' => '', 'email' => '', 'status' => 'active'], 'isNew' => $item === null, 'csrf' => $this->csrf->get(), 'currentId' => (int) Session::get('admin_id', 0)]);
+    }
+
+    private function roleId(): int
+    {
+        $id = (int) $this->request->post('role_id', 0);
+        if ($id < 1 || Db::table('ffx_roles')->where('id', $id)->count() !== 1) throw new HttpException(422, '请选择有效的管理员角色');
+        return $id;
+    }
+
+    private function protectSuperAdmin(int $id, bool $remainsSuper): void
+    {
+        // Lock administrators in a stable order to serialize concurrent demotions.
+        Db::table('ffx_admins')->order('id')->lock(true)->select();
+        $supers = Db::table('ffx_admins')->alias('a')->join(['ffx_admin_roles' => 'ar'], 'ar.admin_id=a.id')
+            ->join(['ffx_roles' => 'r'], 'r.id=ar.role_id')->where('a.status', 'active')->where('r.role_key', 'super_admin')->column('a.id');
+        if (!$remainsSuper && in_array($id, array_map('intval', $supers), true)
+            && ($id === (int) Session::get('admin_id', 0) || count($supers) <= 1)) {
+            throw new HttpException(422, '不能移除当前登录或最后一个启用的超级管理员权限');
+        }
     }
 
     private function email(): ?string

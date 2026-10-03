@@ -1,0 +1,29 @@
+name: Build update package
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          ref: ${{ github.event.release.tag_name }}
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: curl, fileinfo, mbstring, openssl, pdo_mysql, zip
+          tools: composer:v2
+      - run: composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+      - run: php scripts/build-update-package.php "${{ github.event.release.tag_name }}"
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name }}
+          files: |
+            feifeicms-update.zip
+            feifeicms-update.zip.sha256

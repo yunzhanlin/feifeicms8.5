@@ -21,7 +21,7 @@ final class MeilisearchClientFactory
 
     public function client(): Client
     {
-        return new Client($this->host(), $this->key());
+        return new Client($this->host(), $this->key(), new \GuzzleHttp\Client(['connect_timeout' => 2, 'timeout' => 5]));
     }
 
     public function host(): string

@@ -7,7 +7,7 @@ return [
     'listen'    => [
         'AppInit'  => [],
         'HttpRun'  => [],
-        'HttpEnd'  => [],
+        'HttpEnd'  => [app\listener\SearchOutbox::class],
         'LogLevel' => [],
         'LogWrite' => [],
     ],

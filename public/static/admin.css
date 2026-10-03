@@ -1,5 +1,12 @@
 @charset "utf-8";
 
+.update-dialog { width: min(480px, calc(100vw - 32px)); max-width: 480px; padding: 0; border: 1px solid #9cbce0; box-shadow: 0 14px 45px #14396355; color: #154576; text-align: left; }
+.update-dialog::backdrop { background: #071b3899; }
+.update-dialog h2 { margin: 0; padding: 8px 14px; background: #d4e6fa; font-size: 16px; }
+.update-dialog p { margin: 12px 14px; line-height: 1.7; }
+.update-dialog .update-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 14px; border-top: 1px solid #c9dcef; }
+.update-dialog button, [data-update-start] { padding: 4px 12px; border: 1px solid #9db8d5; background: #d5ebfa; color: #125397; cursor: pointer; }
+
 :root {
     --ff-blue: #337abb;
     --ff-ink: #135294;

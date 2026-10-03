@@ -9,7 +9,7 @@ use think\facade\Db;
  * FeiFeiCMS-compatible manual video merge.
  *
  * The one published record is the primary video. Draft records are folded into
- * it, retaining collection identities, playback lines and the largest scenario
+ * it, retaining collection identities, all playback lines and unique scenario
  * set. Source records are archived instead of being physically deleted so the
  * merge remains auditable and recoverable.
  */
@@ -25,7 +25,8 @@ final class MediaMerge
         $ids = array_slice(array_values(array_unique(array_filter(array_map('intval', $ids), static fn (int $id): bool => $id > 0))), 0, 200);
         if (count($ids) < 2) throw new \RuntimeException('请至少选择两部需要合并的影片');
 
-        $rows = Db::table('ffx_media')->whereIn('id', $ids)->whereNull('deleted_at')->select()->toArray();
+        return Db::transaction(function () use ($ids): array {
+        $rows = Db::table('ffx_media')->whereIn('id', $ids)->whereNull('deleted_at')->order('id')->lock(true)->select()->toArray();
         $byId = [];
         foreach ($rows as $row) $byId[(int) $row['id']] = $row;
         $ordered = array_values(array_filter(array_map(static fn (int $id): ?array => $byId[$id] ?? null, $ids)));
@@ -38,7 +39,6 @@ final class MediaMerge
         $primaryId = (int) $primary['id'];
         $childIds = array_map(static fn (array $row): int => (int) $row['id'], $children);
 
-        return Db::transaction(function () use ($primary, $children, $primaryId, $childIds): array {
             $this->mergePrimaryFields($primary, $children);
             $playSources = $this->mergePlayback($primaryId, $childIds);
             $scenarios = $this->mergeScenarios($primaryId, $childIds);
@@ -87,7 +87,11 @@ final class MediaMerge
     /** @param array<int,int> $childIds */
     private function mergePlayback(int $primaryId, array $childIds): int
     {
-        $sources = Db::table('ffx_play_sources')->whereIn('media_id', array_merge([$primaryId], $childIds))->order('sort_order')->order('id')->select()->toArray();
+        // Reserve all primary keys BEFORE considering children, regardless of
+        // each source's sort order. Keep conflicting lines instead of replacing
+        // episodes (which also destroys history/subtitle references through FKs).
+        $primarySources = Db::table('ffx_play_sources')->where('media_id', $primaryId)->order('sort_order')->order('id')->select()->toArray();
+        $sources = array_merge($primarySources, Db::table('ffx_play_sources')->whereIn('media_id', $childIds)->order('sort_order')->order('id')->select()->toArray());
         $main = [];
         $sort = 0;
         foreach ($sources as $source) {
@@ -99,17 +103,12 @@ final class MediaMerge
                 continue;
             }
             if (isset($main[$key])) {
-                $mainSourceId = $main[$key];
-                Db::table('ffx_episodes')->where('source_id', $mainSourceId)->delete();
-                Db::table('ffx_episodes')->where('source_id', $sourceId)->update(['media_id' => $primaryId, 'source_id' => $mainSourceId, 'season_id' => null]);
-                Db::table('ffx_play_sources')->where('id', $mainSourceId)->update([
-                    'display_name' => (string) $source['display_name'], 'parser_key' => (string) $source['parser_key'],
-                    'collection_source_id' => $source['collection_source_id'], 'status' => (string) $source['status'], 'updated_at' => gmdate('Y-m-d H:i:s'),
-                ]);
-                Db::table('ffx_play_sources')->where('id', $sourceId)->delete();
-                continue;
+                $base = mb_substr($key, 0, 40) . '_merge_' . $sourceId;
+                $key = $base;
+                $suffix = 0;
+                while (isset($main[$key])) $key = $base . '_' . ++$suffix;
             }
-            Db::table('ffx_play_sources')->where('id', $sourceId)->update(['media_id' => $primaryId, 'sort_order' => $sort++]);
+            Db::table('ffx_play_sources')->where('id', $sourceId)->update(['media_id' => $primaryId, 'source_key' => $key, 'sort_order' => $sort++]);
             Db::table('ffx_episodes')->where('source_id', $sourceId)->update(['media_id' => $primaryId, 'season_id' => null]);
             $main[$key] = $sourceId;
         }
@@ -119,18 +118,20 @@ final class MediaMerge
     /** @param array<int,int> $childIds */
     private function mergeScenarios(int $primaryId, array $childIds): int
     {
-        $counts = [];
-        foreach (array_merge([$primaryId], $childIds) as $mediaId) {
-            $counts[$mediaId] = (int) Db::table('ffx_scenarios')->where('media_id', $mediaId)->whereNull('deleted_at')->count();
+        $main = [];
+        foreach (Db::table('ffx_scenarios')->where('media_id', $primaryId)->select()->toArray() as $row) $main[(int) $row['episode_no']] = $row;
+        foreach (Db::table('ffx_scenarios')->whereIn('media_id', $childIds)->whereNull('deleted_at')->order('media_id')->order('episode_no')->select()->toArray() as $row) {
+            $no = (int) $row['episode_no'];
+            if (!isset($main[$no])) {
+                Db::table('ffx_scenarios')->where('id', $row['id'])->update(['media_id' => $primaryId]);
+                $main[$no] = $row;
+            } elseif (trim((string) $main[$no]['content']) === '' && empty($main[$no]['deleted_at'])) {
+                Db::table('ffx_scenarios')->where('id', $main[$no]['id'])->update(['content' => $row['content']]);
+                $main[$no]['content'] = $row['content'];
+            }
+            // Conflicting text stays on the archived child for audit/recovery.
         }
-        arsort($counts);
-        $bestId = (int) array_key_first($counts);
-        $bestCount = (int) ($counts[$bestId] ?? 0);
-        if ($bestId !== $primaryId && $bestCount > 0) {
-            Db::table('ffx_scenarios')->where('media_id', $primaryId)->delete();
-            Db::table('ffx_scenarios')->where('media_id', $bestId)->update(['media_id' => $primaryId, 'updated_at' => gmdate('Y-m-d H:i:s')]);
-        }
-        return $bestCount;
+        return (int) Db::table('ffx_scenarios')->where('media_id', $primaryId)->whereNull('deleted_at')->count();
     }
 
     /** @param array<int,int> $childIds */

@@ -13,7 +13,7 @@ use think\Response;
 /** Delimiter fields are assembled at the HTTP boundary only. */
 final class VodProvider extends BaseController
 {
-    public function __construct(\think\App $app, private readonly ResilientCache $cache)
+    public function __construct(\think\App $app, private readonly ResilientCache $cache, private readonly \app\service\SiteSettings $settings)
     {
         parent::__construct($app);
     }
@@ -49,7 +49,11 @@ final class VodProvider extends BaseController
 
         $total = (clone $query)->count();
         $rows = $query->order('published_at', 'desc')->order('id', 'desc')->page($page, $limit)->select()->toArray();
-        $playback = $this->playbackByMedia(array_column($rows, 'id'));
+        // Public metadata is not an entitlement to download paid/VIP media.
+        // URL export is opt-in and restricted to explicitly free videos.
+        $exportable = $this->settings->bool('admin.collection.api_download_enabled')
+            ? array_filter($rows, static fn (array $row): bool => ($row['access_mode'] ?? 'free') === 'free') : [];
+        $playback = $exportable === [] ? [] : $this->playbackByMedia(array_column($exportable, 'id'));
         $result = [];
         foreach ($rows as $row) {
             $mapped = $this->mapBase($row);

@@ -341,6 +341,87 @@
 })();
 
 (() => {
+    const panel = document.querySelector('[data-update-panel]');
+    const notice = document.querySelector('[data-update-notice]');
+    if (!panel && !notice) return;
+    const token = (panel || notice).dataset.updateToken || '';
+    let release = null;
+    let dialog = null;
+    const message = panel?.querySelector('[data-update-message]');
+    const releaseText = panel?.querySelector('[data-update-release]');
+    const startButton = panel?.querySelector('[data-update-start]');
+    const say = (value) => { if (message) message.textContent = value; if (dialog) dialog.querySelector('[data-update-dialog-message]').textContent = value; };
+
+    const check = async () => {
+        try {
+            const response = await fetch('/admin/tools/version/status', { credentials: 'same-origin' });
+            const data = await response.json();
+            if (data.job && ['queued', 'running'].includes(data.job.status)) { say(data.job.message); watch(); return; }
+            if (data.job?.status === 'failed') say('上次更新失败：' + data.job.message);
+            if (!data.ok) { say('检查失败：' + (data.error || 'GitHub 暂时不可用')); return; }
+            release = data.release;
+            if (releaseText) releaseText.textContent = 'GitHub 最新发布：' + release.title + '（' + release.tag + '）';
+            if (!release.available) {
+                if (release.asset_ready === false) say('新版本已发布，正在等待 GitHub 安装包生成');
+                else if (!data.job || data.job.status !== 'failed') say('当前已是最新版本');
+                return;
+            }
+            say('发现新版本：' + release.title);
+            if (startButton) startButton.hidden = false;
+            if (notice) showDialog();
+        } catch (error) { say('版本检查暂时不可用：' + error.message); }
+    };
+
+    const showDialog = () => {
+        dialog = document.createElement('dialog');
+        dialog.className = 'update-dialog';
+        dialog.innerHTML = '<h2>发现 FeiFeiCMS 新版本</h2><p data-update-dialog-message></p><p>确认后将下载 GitHub 安装包，先备份程序与数据库，再安装更新。更新期间请勿关闭服务器。</p><div class="update-actions"><button type="button" data-update-cancel>稍后更新</button><button type="button" data-update-confirm>确认更新</button></div>';
+        document.body.appendChild(dialog);
+        dialog.querySelector('[data-update-dialog-message]').textContent = release.title;
+        dialog.querySelector('[data-update-cancel]').addEventListener('click', () => dialog.close());
+        dialog.querySelector('[data-update-confirm]').addEventListener('click', start);
+        dialog.showModal();
+    };
+
+    const start = async () => {
+        if (!release || !release.available) return;
+        startButton && (startButton.disabled = true);
+        if (dialog) dialog.querySelector('[data-update-confirm]').disabled = true;
+        say('正在启动后台更新…');
+        try {
+            const body = new URLSearchParams({ _token: token, tag: release.tag });
+            const response = await fetch('/admin/tools/version/start', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body });
+            const data = await response.json();
+            if (!data.ok) throw new Error(data.error || '无法启动更新');
+            say(data.job.message);
+            watch();
+        } catch (error) { say('更新未启动：' + error.message); if (startButton) startButton.disabled = false; }
+    };
+
+    let timer = null;
+    const watch = () => {
+        if (timer) return;
+        timer = setInterval(async () => {
+            try {
+                const response = await fetch('/admin/tools/version/status', { credentials: 'same-origin', cache: 'no-store' });
+                const data = await response.json();
+                if (data.job) say(data.job.message);
+                if (data.job && ['succeeded', 'failed'].includes(data.job.status)) {
+                    clearInterval(timer); timer = null;
+                    if (data.job.status === 'succeeded') {
+                        if (dialog) dialog.querySelector('[data-update-confirm]').textContent = '更新完成';
+                        if (startButton) startButton.hidden = true;
+                        window.setTimeout(() => window.location.assign('/admin.php'), 2500);
+                    } else if (startButton) startButton.disabled = false;
+                }
+            } catch (_) { /* next poll retries */ }
+        }, 2500);
+    };
+    startButton?.addEventListener('click', start);
+    check();
+})();
+
+(() => {
     const postForm = async (url, body) => {
         const response = await fetch(url, { method: 'POST', body, headers: { Accept: 'application/json' }, credentials: 'same-origin' });
         const payload = await response.json().catch(() => ({ ok: false, message: `请求失败（HTTP ${response.status}）` }));

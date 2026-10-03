@@ -204,6 +204,9 @@ final class WebInstaller
     private function executeSchema(PDO $pdo): void
     {
         foreach ($this->sql->fromFile(root_path() . 'database/schema-v2.sql') as $statement) $pdo->exec($statement);
+        foreach (glob(root_path() . 'database/migrations/015_*.sql') ?: [] as $migration) {
+            foreach ($this->sql->fromFile($migration) as $statement) $pdo->exec($statement);
+        }
     }
 
     /** @param array<string, string> $values */

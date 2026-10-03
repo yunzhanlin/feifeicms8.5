@@ -13,6 +13,7 @@
 <tr><th>搜索驱动：</th><td>{$search.driver|htmlspecialchars|raw}{if $search.driver == 'meilisearch'} · 索引 {$search.index|htmlspecialchars|raw}{/if}</td></tr>
 <tr><th>搜索状态：</th><td>{if $search.ok}<strong class="text-success">正常</strong>{else /}<strong class="text-danger">异常</strong>{/if}{if $search.error != ''} <span class="text-danger">{$search.error|htmlspecialchars|raw}</span>{/if}</td></tr>
 <tr><th>已审核视频：</th><td>{$search.published} 部</td></tr>
+<tr><th>待同步变更：</th><td>{$search.pending} 条；影片保存与搜索请求自动处理，后台任务可运行 <code>php think feifei:search:work</code> 重试。</td></tr>
 <tr><th>索引文档：</th><td>{$search.indexed} 部{if $search.driver == 'meilisearch' && $search.indexed != $search.published} <strong class="text-danger">与数据库不一致，请同步</strong>{/if}</td></tr>
 <tr><th>上次同步：</th><td>{if $search.last_success_at != ''}{$search.last_success_at|htmlspecialchars|raw}{else /}尚未在后台执行过{/if}</td></tr>
 <tr><th>索引操作：</th><td>{if $search.driver == 'meilisearch'}<form class="inline-action" method="post" action="/admin/tools/search/rebuild" data-confirm="确定从已审核视频全量同步并重建前台搜索索引？"><input type="hidden" name="_token" value="{$csrf|htmlspecialchars|raw}"><button type="submit">立即全量同步</button></form> <span class="tool-inline-help">同步后前台搜索立即生效；索引未同步时程序会自动用 MySQL 兜底。</span>{else /}<span class="text-success">MySQL 搜索直接读取已审核视频，无需手动同步。</span>{/if}</td></tr>

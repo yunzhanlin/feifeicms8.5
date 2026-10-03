@@ -832,7 +832,7 @@ final class Tools extends BaseController
         $search = [
             'driver' => $driver, 'index' => $indexName, 'ok' => $driver !== 'meilisearch',
             'published' => $published, 'indexed' => $driver === 'mysql' ? $published : null,
-            'pending' => $state === null ? null : (int) ($state['pending_count'] ?? 0),
+            'pending' => $this->searchIndexer->pendingCount(),
             'last_success_at' => (string) ($state['last_success_at'] ?? ''), 'error' => '',
         ];
         if ($driver !== 'meilisearch') {

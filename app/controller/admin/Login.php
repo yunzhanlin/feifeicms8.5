@@ -55,6 +55,7 @@ final class Login extends BaseController
         Session::regenerate(true);
         Session::set('admin_id', (int) $admin->id);
         Session::set('admin_name', (string) $admin->username);
+        Session::set('update_notice_pending', true);
         $this->limiter->clear($rateKey);
         return redirect('/admin');
     }

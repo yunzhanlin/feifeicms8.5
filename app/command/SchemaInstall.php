@@ -36,6 +36,12 @@ final class SchemaInstall extends Command
             Db::execute($statement);
             $executed++;
         }
+        foreach (glob(root_path() . 'database/migrations/015_*.sql') ?: [] as $migration) {
+            foreach ((new SqlStatementStream())->fromFile($migration) as $statement) {
+                Db::execute($statement);
+                $executed++;
+            }
+        }
 
         $tableCount = (int) (Db::query("SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'ffx\\_%'")[0]['total'] ?? 0);
         $output->writeln(sprintf('[OK] MySQL %s，执行 %d 条语句，当前 %d 张 ffx_ 表', $matches[1], $executed, $tableCount));

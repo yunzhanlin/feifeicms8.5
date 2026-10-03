@@ -5,13 +5,14 @@ namespace app\controller\admin;
 
 use app\BaseController;
 use app\service\CsrfToken;
+use app\service\AdminAuthorization;
 use think\facade\Db;
 use think\facade\Session;
 use think\response\View;
 
 final class Dashboard extends BaseController
 {
-    public function __construct(\think\App $app, private readonly CsrfToken $csrf)
+    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AdminAuthorization $authorization)
     {
         parent::__construct($app);
     }
@@ -38,7 +39,11 @@ final class Dashboard extends BaseController
             $gdVersion = (string) ($gd['GD Version'] ?? '已安装');
         }
 
+        $checkUpdate = (bool) Session::get('update_notice_pending', false)
+            && $this->authorization->allows((int) Session::get('admin_id', 0), 'Updater');
+        Session::delete('update_notice_pending');
         return view('/admin/dashboard', [
+            'checkUpdate' => $checkUpdate,
             'adminName' => (string) Session::get('admin_name', ''),
             'csrf' => $this->csrf->get(),
             'environment' => [

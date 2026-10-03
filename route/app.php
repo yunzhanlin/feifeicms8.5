@@ -198,6 +198,8 @@ Route::group('admin', function (): void {
     Route::post('tools/search/rebuild', 'admin.Tools/rebuildSearch');
     Route::get('tools/version', 'admin.Tools/version');
     Route::post('tools/version/check', 'admin.Tools/checkVersion');
+    Route::get('tools/version/status', 'admin.Updater/status');
+    Route::post('tools/version/start', 'admin.Updater/start');
     Route::get('tools/templates', 'admin.Tools/templates');
     Route::post('tools/templates', 'admin.Tools/saveTemplate');
     Route::post('tools/templates/create', 'admin.Tools/createTemplate');

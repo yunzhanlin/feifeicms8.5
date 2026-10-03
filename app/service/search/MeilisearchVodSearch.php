@@ -8,12 +8,14 @@ use app\service\MeilisearchClientFactory;
 
 final class MeilisearchVodSearch implements VodSearchDriver
 {
-    public function __construct(private readonly MeilisearchClientFactory $searchClient)
+    public function __construct(private readonly MeilisearchClientFactory $searchClient, private readonly \app\service\SearchIndexer $indexer)
     {
     }
 
     public function search(string $keyword, int $page, int $pageSize): SearchResult
     {
+        $this->indexer->flushPending();
+        if ($this->indexer->pendingCount() > 0) throw new \RuntimeException('搜索增量仍在同步，请使用数据库搜索');
         $client = $this->searchClient->client();
         $indexName = $this->searchClient->index();
         $raw = $client->index($indexName)->search($keyword, [

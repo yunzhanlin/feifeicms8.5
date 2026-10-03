@@ -12,7 +12,7 @@ final class MeilisearchClientFactoryTest extends TestCase
         self::assertStringContainsString("\$host = trim(\$this->settings->string('admin.cache.search_host', ''));", $factory);
         self::assertStringContainsString("if (\$host === '') {", $factory);
         self::assertStringContainsString("\$host = 'http://' . \$host;", $factory);
-        self::assertStringContainsString('new Client($this->host(), $this->key())', $factory);
+        self::assertStringContainsString('new Client($this->host(), $this->key(),', $factory);
 
         foreach ([
             dirname(__DIR__) . '/app/service/SearchIndexer.php',

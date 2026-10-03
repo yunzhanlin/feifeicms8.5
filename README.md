@@ -59,7 +59,7 @@
 1. 下载本项目，将全部文件上传到网站目录。
 2. 执行 `composer install --no-dev --classmap-authoritative` 安装依赖。
 3. 将网站运行目录设置为 `public/`，不要把项目根目录作为 Web 根目录。
-4. Linux 服务器需让 PHP-FPM 用户拥有 `runtime/` 和 `public/uploads/` 的写入权限。
+4. Linux 服务器需让 PHP-FPM 用户拥有 `runtime/` 和 `public/uploads/` 的写入权限。若使用后台一键更新，还须让站点 PHP 用户能写入程序目录；不愿授予程序目录写权限的站点请使用手动升级。
 5. 配置伪静态后访问 `http://您的域名/install.php`。
 6. 按安装向导填写 MySQL、管理员账号和站点信息。安装程序会创建数据表、`.env` 和 `runtime/install.lock`。
 7. 安装完成后访问 `http://您的域名/admin.php` 登录后台。
@@ -163,6 +163,10 @@ php think feifei:schema:upgrade
 php think feifei:doctor
 php think feifei:search:sync
 ```
+
+超级管理员登录后台时会检查 GitHub Release；发现比 `config/version.php` 更新、且安装包与 SHA-256 校验文件均已上传的版本后，弹窗确认即可后台更新。也可在“工具 → 版本升级”手动检查。自动更新先备份程序文件和 `ffx_*` 数据表、触发器，再安装新文件并执行增量迁移；`.env`、`public/uploads/` 和运行数据不会写入更新包。失败时在 `runtime/updates/` 查看任务日志和备份。数据库 DDL 无法事务回滚，如迁移中途失败，程序不会仅回退 PHP 文件；请根据备份修复后重试。
+
+发布新版本时先修改 `config/version.php` 并创建同名 `v` 前缀标签，再发布 GitHub Release。仓库工作流会为该发布上传 `feifeicms-update.zip` 与 `feifeicms-update.zip.sha256`，安装包只包含程序和 Composer 依赖，不包含站点配置与用户数据。GitHub 仓库的新提交本身不会触发站点自动更新，必须发布更高版本的 Release。
 
 旧版 FeiFeiCMS 数据不能直接覆盖新表。8.5 已内置“工具 → 4.3数据升级”插件：填写只读旧库连接，先执行预检/只读验证，再按批迁移到新的 `ffx_*` 表。插件不会修改旧库，使用 `ffx_legacy_map` 保留旧 ID 对照并支持中断重跑；视频会同时拆分播放线路和分集，4.3 采集源会迁移为默认停用的 FeiFei JSON 源，专题、评论、用户记录等会按旧 ID 重新关联。旧会员 MD5 密码只用于兼容首次登录，验证成功后会自动升级为当前安全散列。
 

@@ -67,7 +67,7 @@ final class AdminCoverageTest extends TestCase
         self::assertStringContainsString('.editor-form { display: flow-root;', $css);
         self::assertStringContainsString('overflow: visible', $css);
         self::assertMatchesRegularExpression('#/static/admin\\.css\\?v=\\d+#', $header);
-        self::assertStringContainsString('/static/admin.js?v=32', $header);
+        self::assertStringContainsString('/static/admin.js?v=34', $header);
         self::assertStringContainsString("cell.textContent = '暂无数据'", $script);
         self::assertStringContainsString("已发布", $script);
         self::assertStringContainsString('data-editor-tabs', (string) file_get_contents(dirname(__DIR__) . '/view/admin/vod/edit.html'));

@@ -10,6 +10,8 @@ return [
         'feifei:schema:upgrade' => app\command\SchemaUpgrade::class,
         'feifei:admin:create' => app\command\AdminCreate::class,
         'feifei:search:sync' => app\command\SearchSync::class,
+        'feifei:search:work' => app\command\SearchWork::class,
+        'feifei:update:apply' => app\command\UpdateApply::class,
         'feifei:collection:work' => app\command\CollectionWork::class,
         'feifei:collection:schedule' => app\command\CollectionSchedule::class,
         'feifei:legacy43:upgrade' => app\command\Legacy43Upgrade::class,
