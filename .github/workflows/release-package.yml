@@ -28,6 +28,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.release.tag_name || github.ref_name }}
+          overwrite_files: true
           files: |
             feifeicms-update.zip
             feifeicms-update.zip.sha256

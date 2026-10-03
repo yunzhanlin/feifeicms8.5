@@ -7,7 +7,7 @@ $release = require $root . '/config/version.php';
 $tag = (string) ($argv[1] ?? '');
 if ($tag !== 'v' . $release['version']) throw new RuntimeException('发布标签与 config/version.php 不一致');
 $target = (string) ($argv[2] ?? $root . '/feifeicms-update.zip');
-$roots = ['app', 'config', 'database/migrations', 'extend', 'plugins', 'route', 'view', 'vendor',
+$roots = ['app', 'config', 'database/migrations', 'extend', 'route', 'view', 'vendor',
     'public/static', 'public/legacy', 'public/mxstatic', 'public/player'];
 $single = ['think', 'composer.json', 'composer.lock', 'public/index.php', 'public/install.php',
     'public/router.php', 'public/.htaccess', 'public/favicon.ico', 'public/robots.txt'];

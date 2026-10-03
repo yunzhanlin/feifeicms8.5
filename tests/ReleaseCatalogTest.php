@@ -7,6 +7,17 @@ use PHPUnit\Framework\TestCase;
 
 final class ReleaseCatalogTest extends TestCase
 {
+    public function testStandaloneLegacyPluginDoesNotEnterTheProgramUpdateArchive(): void
+    {
+        // Beta2's unpacker rejects plugins/*; the legacy entrypoint is a
+        // separate Release asset for the old site's web root.
+        $builder = (string) file_get_contents(dirname(__DIR__) . '/scripts/build-update-package.php');
+        self::assertMatchesRegularExpression('/\$roots\s*=\s*\[(.*?)\];/s', $builder);
+        preg_match('/\$roots\s*=\s*\[(.*?)\];/s', $builder, $match);
+        self::assertStringNotContainsString("'plugins'", $match[1]);
+        self::assertStringContainsString('plugins/legacy43/ff43-upgrade.php', (string) file_get_contents(dirname(__DIR__) . '/.github/workflows/release-package.yml'));
+    }
+
     public function testPrereleaseFeedUsesVersionOrderAndValidatesAssetTargets(): void
     {
         $feed = <<<'XML'
