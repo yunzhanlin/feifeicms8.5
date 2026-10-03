@@ -1,4 +1,4 @@
-# FeiFeiCMS 8.5.260930 Beta1
+# FeiFeiCMS 8.5.261003 Beta2
 
 #### 系统介绍
 
@@ -194,6 +194,13 @@ curl -fsS http://您的域名/health
 
 - 升级版：[github.com/yunzhanlin/feifeicms8.5](https://github.com/yunzhanlin/feifeicms8.5)
 - 原始项目：[github.com/daicuo/feifeicms](https://github.com/daicuo/feifeicms)
+
+#### 版本记录
+
+每个版本的新增、优化与删除项分别记录，不将多个版本混写：
+
+- [8.5.261003 Beta2](docs/releases/8.5.261003-beta2.md)
+- [8.5.260930 Beta1](docs/releases/8.5.260930-beta1.md)
 
 #### 参与贡献
 
