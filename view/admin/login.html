@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="zh-CN">
-<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>管理登录 · {$siteName|htmlspecialchars|raw}</title><link rel="stylesheet" href="/static/admin.css?v=30"></head>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>管理登录 · {$siteName|htmlspecialchars|raw}</title><link rel="stylesheet" href="/static/admin.css?v=43"></head>
 <body class="admin-login-page"><main class="login-card"><p class="eyebrow">FeiFeiCMS</p><h1>管理员登录</h1>
 {if $error !== ''}<div class="form-error" role="alert">{$error|htmlspecialchars|raw}</div>{/if}
 <form method="post" action="/admin.php/login" class="stack-form"><input type="hidden" name="_token" value="{$csrf|htmlspecialchars|raw}"><label>用户名<input name="username" autocomplete="username" maxlength="50" required autofocus></label><label>密码<input type="password" name="password" autocomplete="current-password" required></label><button type="submit">登录</button></form>

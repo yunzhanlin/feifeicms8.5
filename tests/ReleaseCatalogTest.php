@@ -57,6 +57,16 @@ XML;
         self::assertNotSame(ReleaseCatalog::cacheKey('8.5.261004.1'), ReleaseCatalog::cacheKey('8.5.261004.2'));
     }
 
+    public function testUpdateButtonHiddenAttributeIsNotOverriddenByAdminStyles(): void
+    {
+        $template = (string) file_get_contents(dirname(__DIR__) . '/view/admin/tools/version.html');
+        $styles = (string) file_get_contents(dirname(__DIR__) . '/public/static/admin.css');
+        $header = (string) file_get_contents(dirname(__DIR__) . '/view/admin/layout/header.html');
+        self::assertStringContainsString('data-update-start hidden', $template);
+        self::assertStringContainsString('[data-update-start][hidden] { display: none !important; }', $styles);
+        self::assertStringContainsString('/static/admin.css?v=43', $header);
+    }
+
     public function testUpdaterRejectsArchivePathTraversal(): void
     {
         $directory = sys_get_temp_dir() . '/ff-update-test-' . bin2hex(random_bytes(8));
