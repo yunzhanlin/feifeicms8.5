@@ -18,7 +18,7 @@ final class FrontendTemplateCoverageTest extends TestCase
             self::assertFileExists($root . '/view/mxone/' . $view);
         }
         $showcase = (string) file_get_contents($root . '/view/mxone/page/features.html');
-        foreach (['实时数据调用', '分集剧情与评论', '运营组件', '模板调用方法', 'ff_mysql_vod', 'README.md'] as $marker) {
+        foreach (['实时数据调用', '分集剧情与评论', '运营组件', '模板调用方法', 'ff_mysql_vod', '模板制作与标签调用指南'] as $marker) {
             self::assertStringContainsString($marker, $showcase);
         }
     }
@@ -40,10 +40,13 @@ final class FrontendTemplateCoverageTest extends TestCase
         }
     }
 
-    public function testReadmeDocumentsRoutesTagsAndAdvertisementSlots(): void
+    public function testTemplateGuideDocumentsRoutesTagsAndAdvertisementSlots(): void
     {
-        $guide = (string) file_get_contents(dirname(__DIR__) . '/README.md');
-        foreach (['/features', '/vod/{id}/scenarios', '/scenario/{id}', 'ff_play_url', 'ff_mysql_vod', 'ff_mysql_scenario', 'home_top', 'vod_detail', 'vod_play'] as $marker) {
+        $root = dirname(__DIR__);
+        $readme = (string) file_get_contents($root . '/README.md');
+        self::assertStringContainsString('docs/模板标签.md', $readme);
+        $guide = (string) file_get_contents($root . '/docs/模板标签.md');
+        foreach (['/features', '/vod/{影片ID}/scenarios', "ff_url('scenario'", 'ff_play_url', 'ff_mysql_vod', 'ff_mysql_scenario', 'home_top', 'vod_detail', 'vod_play'] as $marker) {
             self::assertStringContainsString($marker, $guide);
         }
     }
