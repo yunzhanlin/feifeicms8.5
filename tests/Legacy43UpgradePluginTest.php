@@ -28,11 +28,15 @@ final class Legacy43UpgradePluginTest extends TestCase
         foreach (['list', 'user', 'vod', 'cj', 'news', 'person', 'special', 'tag', 'forum', 'nav', 'slide', 'link', 'ads', 'player', 'orders', 'card', 'record', 'score'] as $table) {
             self::assertStringContainsString("'table' => '" . $table . "'", $migrator);
         }
-        foreach (['ffx_categories', 'ffx_media', 'ffx_play_sources', 'ffx_episodes', 'ffx_users', 'ffx_collection_sources', 'ffx_articles', 'ffx_people', 'ffx_topics', 'ffx_comments', 'ffx_legacy_map'] as $table) {
+        foreach (['ffx_categories', 'ffx_media', 'ffx_play_sources', 'ffx_episodes', 'ffx_scenarios', 'ffx_users', 'ffx_collection_sources', 'ffx_articles', 'ffx_people', 'ffx_topics', 'ffx_comments', 'ffx_legacy_map'] as $table) {
             self::assertStringContainsString($table, $migrator);
         }
         self::assertStringContainsString("'sources' => ['label' => '采集源'", $migrator);
         self::assertStringContainsString("'status' => 'disabled'", $migrator);
+        self::assertStringContainsString('$this->saveScenarios(', $migrator);
+        self::assertStringContainsString('$this->normalizer->normalizeArea(', $migrator);
+        self::assertStringContainsString('$this->normalizer->normalizeLanguage(', $migrator);
+        self::assertStringContainsString("Db::table('ffx_favorites')->where('user_id', \$userId)->where('media_id', \$mediaId)->update(\$favorite)", $migrator);
         $source = (string) file_get_contents($root . '/app/plugin/Legacy43/Legacy43Source.php');
         self::assertStringNotContainsString('INSERT ', $source);
         self::assertStringNotContainsString('UPDATE ', $source);
@@ -49,13 +53,13 @@ final class Legacy43UpgradePluginTest extends TestCase
         self::assertStringContainsString('$loginUpdate[\'password_hash\']', $controller);
     }
 
-    public function testOldSiteEntrypointUsesPhp74SyntaxAndBoundedCliBatches(): void
+    public function testOldSiteEntrypointUsesPhp56SyntaxAndBoundedCliBatches(): void
     {
         $root = dirname(__DIR__);
         $path = $root . '/plugins/legacy43/ff43-upgrade.php';
         self::assertFileExists($path);
         $source = (string) file_get_contents($path);
-        $parser = (new \PhpParser\ParserFactory())->createForVersion(\PhpParser\PhpVersion::fromString('7.4'));
+        $parser = (new \PhpParser\ParserFactory())->createForVersion(\PhpParser\PhpVersion::fromString('5.6'));
         self::assertIsArray($parser->parse($source));
         foreach (['ff43up_admin', "hash_equals(", "'FF43_DB_PASS'", "'--once'", "'--preflight'", "'--finish'", 'runtime/install.lock', "'ff43up_csrf'"] as $marker) {
             self::assertTrue(str_contains($source, $marker), $marker);

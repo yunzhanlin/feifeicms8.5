@@ -134,6 +134,7 @@ final class CollectionPayloadNormalizer
         }
         if (!is_array($payload)) return [];
         $items = is_array($payload['info'] ?? null) ? $payload['info'] : $payload;
+        $zeroBasedList = array_is_list($items);
         $result = [];
         $position = 0;
         foreach ($items as $key => $item) {
@@ -141,7 +142,7 @@ final class CollectionPayloadNormalizer
             $content = trim((string) (is_array($item) ? ($item['content'] ?? $item['scenario_content'] ?? $item['text'] ?? '') : $item));
             if ($content === '') continue;
             $episode = is_array($item) ? (int) ($item['episode_no'] ?? $item['scenario_pid'] ?? $item['pid'] ?? 0) : 0;
-            if ($episode < 1) $episode = is_numeric($key) && (int) $key > 0 ? (int) $key : $position;
+            if ($episode < 1) $episode = !$zeroBasedList && is_numeric($key) && (int) $key > 0 ? (int) $key : $position;
             $title = trim((string) (is_array($item) ? ($item['title'] ?? $item['name'] ?? $item['scenario_name'] ?? '') : ''));
             $result[] = ['episode_no' => $episode, 'title' => mb_substr($title !== '' ? $title : '第' . $episode . '集', 0, 255), 'content' => $content];
         }

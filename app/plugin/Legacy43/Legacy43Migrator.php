@@ -5,6 +5,7 @@ namespace app\plugin\Legacy43;
 
 use app\service\EpisodeParser;
 use app\service\FrontendCache;
+use app\service\CollectionPayloadNormalizer;
 use think\facade\Db;
 use Throwable;
 
@@ -32,7 +33,7 @@ final class Legacy43Migrator
         'ratings' => ['label' => '评分记录', 'table' => 'score', 'id' => 'score_id'],
     ];
 
-    public function __construct(private readonly EpisodeParser $episodes, private readonly FrontendCache $cache) {}
+    public function __construct(private readonly EpisodeParser $episodes, private readonly FrontendCache $cache, private readonly CollectionPayloadNormalizer $normalizer) {}
 
     /** @return array<string,array{label:string,table:string,id:string}> */
     public function modules(): array
@@ -159,7 +160,8 @@ final class Legacy43Migrator
             'douban_id' => (string) max(0, (int) ($row['vod_douban_id'] ?? 0)), 'imdb_id' => '',
             'summary' => null, 'content' => (string) ($row['vod_content'] ?? ''),
             'poster_url' => $this->text($row['vod_pic'] ?? '', 1000), 'backdrop_url' => $this->text($row['vod_pic_bg'] ?? '', 1000),
-            'media_type' => 'video', 'area' => $this->text($row['vod_area'] ?? '', 80), 'language' => $this->text($row['vod_language'] ?? '', 80),
+            'media_type' => 'video', 'area' => $this->text($this->normalizer->normalizeArea((string) ($row['vod_area'] ?? '')), 80),
+            'language' => $this->text($this->normalizer->normalizeLanguage((string) ($row['vod_language'] ?? '')), 80),
             'release_year' => ($year = (int) ($row['vod_year'] ?? 0)) >= 1000 && $year <= 9999 ? $year : null,
             'release_date' => $this->date($row['vod_filmtime'] ?? 0), 'episode_total' => max(0, (int) ($row['vod_total'] ?? 0)) ?: null,
             'episode_label' => $this->text($row['vod_continu'] ?? '', 50), 'is_completed' => (int) ($row['vod_isend'] ?? 0) === 1 ? 1 : 0,
@@ -174,10 +176,27 @@ final class Legacy43Migrator
         ];
         $outcome = $this->saveMapped('video', $id, 'ffx_media', $data, $row, $this->dateTime($row['vod_addtime'] ?? 0));
         $mediaId = $this->mappedId('video', $id);
-        if ($mediaId > 0 && $outcome !== 'skipped') {
-            Db::table('ffx_media_categories')->where('media_id', $mediaId)->delete();
-            if ($data['category_id']) Db::table('ffx_media_categories')->insert(['media_id' => $mediaId, 'category_id' => $data['category_id'], 'is_primary' => 1, 'sort_order' => 0]);
-            $this->savePlayback($mediaId, (string) ($row['vod_play'] ?? ''), (string) ($row['vod_url'] ?? ''));
+        if ($mediaId > 0) {
+            if ($outcome === 'skipped') {
+                // Existing installations may already have imported the raw
+                // 4.3 area/language values before normalization was added.
+                $current = Db::table('ffx_media')->where('id', $mediaId)->field('area,language')->find();
+                if ($current !== null) {
+                    $area = $this->normalizer->normalizeArea((string) ($current['area'] ?? ''));
+                    $language = $this->normalizer->normalizeLanguage((string) ($current['language'] ?? ''));
+                    if ($area !== (string) $current['area'] || $language !== (string) $current['language']) {
+                        Db::table('ffx_media')->where('id', $mediaId)->update(['area' => $area, 'language' => $language]);
+                    }
+                }
+            }
+            if ($outcome !== 'skipped') {
+                Db::table('ffx_media_categories')->where('media_id', $mediaId)->delete();
+                if ($data['category_id']) Db::table('ffx_media_categories')->insert(['media_id' => $mediaId, 'category_id' => $data['category_id'], 'is_primary' => 1, 'sort_order' => 0]);
+                $this->savePlayback($mediaId, (string) ($row['vod_play'] ?? ''), (string) ($row['vod_url'] ?? ''));
+            }
+            // Earlier 8.5 migrations did not extract vod_scenario. Run this
+            // even for an unchanged mapped video so a retry can backfill it.
+            $this->saveScenarios($mediaId, $id, $row['vod_scenario'] ?? null, $data['status']);
         }
         return $outcome;
     }
@@ -434,7 +453,7 @@ final class Legacy43Migrator
             $favorite = ['created_at' => $this->dateTime($row['record_time'] ?? 0) ?: $this->now()];
             $exists = Db::table('ffx_favorites')->where('user_id', $userId)->where('media_id', $mediaId)->find();
             if ($exists) {
-                Db::table('ffx_favorites')->where('id', (int) $exists['id'])->update($favorite);
+                Db::table('ffx_favorites')->where('user_id', $userId)->where('media_id', $mediaId)->update($favorite);
                 return 'updated';
             }
             Db::table('ffx_favorites')->insert(['user_id' => $userId, 'media_id' => $mediaId] + $favorite);
@@ -483,6 +502,27 @@ final class Legacy43Migrator
         $query = Db::table('ffx_play_sources')->where('media_id', $mediaId);
         if ($keep !== []) $query->whereNotIn('id', $keep);
         $query->delete();
+    }
+
+    private function saveScenarios(int $mediaId, int $legacyId, mixed $payload, string $status): void
+    {
+        $rows = $this->normalizer->scenarios($payload);
+        if ($rows === []) return;
+        $sourceRef = 'legacy43:vod:' . $legacyId;
+        $now = $this->now();
+        foreach ($rows as $row) {
+            $episode = (int) $row['episode_no'];
+            $existing = Db::table('ffx_scenarios')->where('media_id', $mediaId)->where('episode_no', $episode)->find();
+            $data = [
+                'title' => $row['title'], 'content' => $row['content'], 'source_ref' => $sourceRef,
+                'sort_order' => $episode, 'status' => $status, 'updated_at' => $now, 'deleted_at' => null,
+            ];
+            if ($existing === null) {
+                Db::table('ffx_scenarios')->insert($data + ['media_id' => $mediaId, 'episode_no' => $episode, 'created_at' => $now]);
+            } elseif ((string) ($existing['source_ref'] ?? '') === $sourceRef) {
+                Db::table('ffx_scenarios')->where('id', (int) $existing['id'])->update($data);
+            }
+        }
     }
 
     /** @param array<string,mixed> $data @param array<string,mixed> $legacy */

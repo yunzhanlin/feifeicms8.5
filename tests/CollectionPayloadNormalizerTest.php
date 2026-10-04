@@ -81,4 +81,14 @@ final class CollectionPayloadNormalizerTest extends TestCase
             ['episode_no' => 2, 'title' => '第2集', 'content' => '第二集剧情'],
         ], $rows);
     }
+
+    public function testLegacy43JsonScenarioListKeepsEveryEpisodeNumber(): void
+    {
+        $rows = $this->normalizer->scenarios('{"info":["第一集剧情","第二集剧情","第三集剧情"]}');
+        self::assertSame([
+            ['episode_no' => 1, 'title' => '第1集', 'content' => '第一集剧情'],
+            ['episode_no' => 2, 'title' => '第2集', 'content' => '第二集剧情'],
+            ['episode_no' => 3, 'title' => '第3集', 'content' => '第三集剧情'],
+        ], $rows);
+    }
 }
