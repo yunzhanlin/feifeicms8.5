@@ -6,6 +6,7 @@
 .update-dialog p { margin: 12px 14px; line-height: 1.7; }
 .update-dialog .update-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 14px; border-top: 1px solid #c9dcef; }
 .update-dialog button, [data-update-start] { padding: 4px 12px; border: 1px solid #9db8d5; background: #d5ebfa; color: #125397; cursor: pointer; }
+[data-update-start][hidden] { display: none !important; }
 
 :root {
     --ff-blue: #337abb;
