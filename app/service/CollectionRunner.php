@@ -294,7 +294,18 @@ final class CollectionRunner
         if ($created && $newDataPolicy === 'update_only') {
             throw new CollectionSkipException('资源库已设置为只更新，不新增');
         }
-        Db::transaction(function () use ($sourceId, $externalId, $title, $categoryId, $row, $incoming, $existing, $mergeId, $newDataPolicy): void {
+        $sourceSets = [[$incoming['play_from'], $incoming['play_url']]];
+        if ((string) $incoming['down_url'] !== '') $sourceSets[] = [$incoming['down_from'] !== '' ? $incoming['down_from'] : 'down', $incoming['down_url']];
+        $allowedPlayers = $this->allowedPlayers();
+        $parsedSources = [];
+        foreach ($sourceSets as [$play, $urls]) {
+            foreach ($this->episodeParser->parse((string) $play, (string) $urls) as $sourceIndex => $source) {
+                $parserKey = preg_replace('/[^a-zA-Z0-9_.-]+/', '-', strtolower((string) $source['key'])) ?: 'source-' . ($sourceIndex + 1);
+                if ($allowedPlayers !== [] && !in_array($parserKey, $allowedPlayers, true)) continue;
+                $parsedSources[] = ['parser_key' => $parserKey, 'source' => $source];
+            }
+        }
+        Db::transaction(function () use ($sourceId, $externalId, $title, $categoryId, $row, $incoming, $existing, $mergeId, $newDataPolicy, $parsedSources): void {
             $now = gmdate('Y-m-d H:i:s');
             $newStatus = $newDataPolicy === 'draft' ? 'draft' : 'published';
             $mediaData = [
@@ -324,7 +335,7 @@ final class CollectionRunner
                 $mediaId = (int) Db::table('ffx_media')->insertGetId($mediaData);
             } else {
                 $mediaId = $mergeId;
-                $local = Db::table('ffx_media')->where('id', $mediaId)->find() ?: [];
+                $local = Db::table('ffx_media')->where('id', $mediaId)->lock(true)->find() ?: [];
                 $mediaData = $this->mergeMediaData($local, $mediaData, true);
                 Db::table('ffx_media')->where('id', $mediaId)->update($mediaData);
             }
@@ -333,16 +344,26 @@ final class CollectionRunner
                 Db::table('ffx_media_categories')->insert(['media_id' => $mediaId, 'category_id' => $categoryId, 'is_primary' => $mergeId < 1 ? 1 : 0, 'sort_order' => 0]);
             }
 
-            Db::table('ffx_play_sources')->where('media_id', $mediaId)->where('collection_source_id', $sourceId)->delete();
-            $sourceSets = [[$incoming['play_from'], $incoming['play_url']]];
-            if ((string) $incoming['down_url'] !== '') $sourceSets[] = [$incoming['down_from'] !== '' ? $incoming['down_from'] : 'down', $incoming['down_url']];
+            // Never delete/recreate imported lines: episodes may have assets,
+            // comments and watch history referencing their stable IDs. Empty
+            // or filtered upstream playback must not erase local playback.
+            $oldSources = Db::table('ffx_play_sources')->where('media_id', $mediaId)
+                ->where('collection_source_id', $sourceId)->order('sort_order')->order('id')->select()->toArray();
+            $byParser = [];
+            foreach ($oldSources as $oldSource) $byParser[(string) $oldSource['parser_key']][] = $oldSource;
             $usedKeys = [];
             $sortBase = (int) Db::table('ffx_play_sources')->where('media_id', $mediaId)->max('sort_order') + 1;
-            foreach ($sourceSets as [$play, $urls]) {
-                foreach ($this->episodeParser->parse((string) $play, (string) $urls) as $sourceIndex => $source) {
-                    $parserKey = preg_replace('/[^a-zA-Z0-9_.-]+/', '-', strtolower((string) $source['key'])) ?: 'source-' . ($sourceIndex + 1);
-                    $allowed = $this->allowedPlayers();
-                    if ($allowed !== [] && !in_array($parserKey, $allowed, true)) continue;
+            foreach ($parsedSources as $parsed) {
+                $parserKey = $parsed['parser_key'];
+                $source = $parsed['source'];
+                $oldSource = isset($byParser[$parserKey]) ? array_shift($byParser[$parserKey]) : null;
+                if ($oldSource !== null) {
+                    $playSourceId = (int) $oldSource['id'];
+                    Db::table('ffx_play_sources')->where('id', $playSourceId)->update([
+                        'display_name' => mb_substr((string) $source['name'], 0, 120),
+                        'status' => 'enabled', 'updated_at' => $now,
+                    ]);
+                } else {
                     $key = $this->uniqueSourceKey($mediaId, $parserKey, $sourceId, $usedKeys);
                     $usedKeys[$key] = true;
                     $playSourceId = Db::table('ffx_play_sources')->insertGetId([
@@ -350,14 +371,24 @@ final class CollectionRunner
                         'collection_source_id' => $sourceId, 'display_name' => mb_substr((string) $source['name'], 0, 120),
                         'sort_order' => $sortBase++, 'status' => 'enabled', 'created_at' => $now, 'updated_at' => $now,
                     ]);
-                    foreach ($source['episodes'] as $episodeIndex => $episode) {
-                        Db::table('ffx_episodes')->insert([
-                            'media_id' => $mediaId, 'source_id' => $playSourceId,
-                            'episode_no' => $episodeIndex + 1, 'label' => mb_substr((string) $episode['label'], 0, 120),
-                            'media_url' => (string) $episode['url'], 'sort_order' => $episodeIndex,
-                            'status' => 'enabled', 'published_at' => $now, 'created_at' => $now, 'updated_at' => $now,
-                        ]);
+                }
+                $oldEpisodes = Db::table('ffx_episodes')->where('source_id', $playSourceId)->column('id', 'episode_no');
+                foreach ($source['episodes'] as $episodeIndex => $episode) {
+                    $episodeNo = $episodeIndex + 1;
+                    $episodeData = [
+                        'label' => mb_substr((string) $episode['label'], 0, 120),
+                        'media_url' => (string) $episode['url'], 'sort_order' => $episodeIndex,
+                        'status' => 'enabled', 'updated_at' => $now,
+                    ];
+                    $oldEpisodeId = (int) ($oldEpisodes[$episodeNo] ?? 0);
+                    if ($oldEpisodeId > 0) {
+                        Db::table('ffx_episodes')->where('id', $oldEpisodeId)->update($episodeData);
+                        continue;
                     }
+                    Db::table('ffx_episodes')->insert($episodeData + [
+                        'media_id' => $mediaId, 'source_id' => $playSourceId,
+                        'episode_no' => $episodeNo, 'published_at' => $now, 'created_at' => $now,
+                    ]);
                 }
             }
 

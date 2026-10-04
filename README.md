@@ -1,4 +1,4 @@
-# FeiFeiCMS 8.5.261004 Beta2.3
+# FeiFeiCMS 8.5.261004
 
 #### 系统介绍
 
@@ -172,7 +172,7 @@ php think feifei:search:sync
 
 旧版 FeiFeiCMS 数据不能直接覆盖新表。8.5 已内置“工具 → 4.3数据升级”插件：填写只读旧库连接，先执行预检/只读验证，再按批迁移到新的 `ffx_*` 表。插件不会修改旧库，使用 `ffx_legacy_map` 保留旧 ID 对照并支持中断重跑；视频会同时拆分播放线路和分集，4.3 采集源会迁移为默认停用的 FeiFei JSON 源，专题、评论、用户记录等会按旧 ID 重新关联。旧会员 MD5 密码只用于兼容首次登录，验证成功后会自动升级为当前安全散列。
 
-旧站也可使用[单文件升级入口](plugins/legacy43/README.md)：从 [Beta2.3 发布页](https://github.com/yunzhanlin/feifeicms8.5/releases/tag/v8.5.261004-beta2.3) 下载 `feifeicms43-upgrade-v1.0.1.php` 并重命名为 `ff43-upgrade.php`，放在 4.3 网站根目录；登录旧站后台后访问该文件，填写**已安装 Beta2.3 或更新版**的 8.5 项目目录和 PHP 8 CLI 路径，即可从旧站页面预检并分批迁移。该插件兼容旧站 PHP 5.6；Beta2.1 的 v1.0.0 附件不适用于 PHP 5.6，Beta2.2 的目标程序可能漏迁旧版分集剧情。插件不原地覆盖 4.3 程序，也不自动切换域名；完成验收后务必删除这个旧站入口文件。
+旧站也可使用[单文件升级入口](plugins/legacy43/README.md)：从 [8.5.261004 正式版发布页](https://github.com/yunzhanlin/feifeicms8.5/releases/tag/v8.5.261004) 下载 `feifeicms43-upgrade-v1.0.1.php` 并重命名为 `ff43-upgrade.php`，放在 4.3 网站根目录；登录旧站后台后访问该文件，填写**已安装 8.5.261004 正式版**的 8.5 项目目录和 PHP 8 CLI 路径，即可从旧站页面预检并分批迁移。该插件兼容旧站 PHP 5.6；Beta2.1 的 v1.0.0 附件不适用于 PHP 5.6，Beta2.2 的目标程序可能漏迁旧版分集剧情。插件不原地覆盖 4.3 程序，也不自动切换域名；完成验收后务必删除这个旧站入口文件。
 
 数据量较大时也可以在终端执行（密码通过环境变量传入，避免进入 shell 历史）：
 
@@ -203,6 +203,7 @@ curl -fsS http://您的域名/health
 
 每个版本的新增、优化与删除项分别记录，不将多个版本混写：
 
+- [8.5.261004 正式版](docs/releases/8.5.261004.md)
 - [8.5.261004 Beta2.3](docs/releases/8.5.261004-beta2.3.md)
 - [8.5.261004 Beta2.2](docs/releases/8.5.261004-beta2.2.md)
 - [8.5.261003 Beta2.1](docs/releases/8.5.261003-beta2.1.md)

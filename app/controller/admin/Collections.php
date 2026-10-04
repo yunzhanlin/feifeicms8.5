@@ -204,7 +204,12 @@ final class Collections extends BaseController
         if ($job === null) {
             throw new HttpException(404, '任务不存在');
         }
-        Db::table('ffx_collection_jobs')->where('id', $jobId)->update(['state' => 'queued', 'error_message' => null, 'started_at' => null, 'finished_at' => null]);
+        if (!in_array((string) $job['state'], ['failed', 'completed_with_errors', 'completed'], true)) {
+            throw new HttpException(409, '只能重试已结束的采集任务');
+        }
+        $changed = Db::table('ffx_collection_jobs')->where('id', $jobId)->where('state', (string) $job['state'])
+            ->update(['state' => 'queued', 'error_message' => null, 'started_at' => null, 'finished_at' => null]);
+        if ($changed !== 1) throw new HttpException(409, '采集任务状态已变化，请刷新后重试');
         $this->audit->record('collection_job.retry', 'collection_job', $jobId, $job, ['state' => 'queued']);
         return redirect('/admin/collections');
     }

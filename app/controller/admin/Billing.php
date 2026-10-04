@@ -32,15 +32,15 @@ final class Billing extends BaseController
     public function updateOrder(int $id): Response
     {
         $this->guardCsrf();
-        $order = Db::table('ffx_orders')->where('id', $id)->find();
-        if ($order === null) {
-            throw new HttpException(404, '订单不存在');
-        }
         $status = (string) $this->request->post('status', 'pending');
         if (!in_array($status, ['pending', 'paid', 'confirmed', 'cancelled', 'refunded'], true)) {
             return response('订单状态无效', 422);
         }
-        $data = Db::transaction(function () use ($id, $order, $status): array {
+        [$order, $data] = Db::transaction(function () use ($id, $status): array {
+            // Serialize fulfillment by order, not merely by user. A second
+            // request must see the first request's committed metadata.
+            $order = Db::table('ffx_orders')->where('id', $id)->lock(true)->find();
+            if ($order === null) throw new HttpException(404, '订单不存在');
             $data = ['status' => $status, 'updated_at' => gmdate('Y-m-d H:i:s')];
             if ($status === 'paid' && empty($order['paid_at'])) $data['paid_at'] = gmdate('Y-m-d H:i:s');
             if ($status === 'confirmed' && empty($order['confirmed_at'])) {
@@ -67,7 +67,7 @@ final class Billing extends BaseController
                 }
             }
             Db::table('ffx_orders')->where('id', $id)->update($data);
-            return $data;
+            return [$order, $data];
         });
         $this->audit->record('order.update', 'order', $id, $order, $data);
         return redirect('/admin/billing');
