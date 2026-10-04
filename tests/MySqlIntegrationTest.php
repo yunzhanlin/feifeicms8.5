@@ -4,7 +4,10 @@ declare(strict_types=1);
 namespace tests;
 
 use PDO;
+use app\controller\admin\Database;
 use PHPUnit\Framework\TestCase;
+use ReflectionClass;
+use ReflectionMethod;
 
 final class MySqlIntegrationTest extends TestCase
 {
@@ -39,6 +42,26 @@ final class MySqlIntegrationTest extends TestCase
         self::assertEqualsCanonicalizing(['admin_weekday', 'admin_state', 'admin_series', 'admin_inputer'], $columns);
         $indexes = $this->pdo?->query("SELECT DISTINCT INDEX_NAME FROM information_schema.STATISTICS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME='ffx_media' AND INDEX_NAME LIKE 'idx_ffx_media_admin_%'")->fetchAll(PDO::FETCH_COLUMN);
         self::assertEqualsCanonicalizing(['idx_ffx_media_admin_weekday', 'idx_ffx_media_admin_state', 'idx_ffx_media_admin_inputer'], $indexes);
+    }
+
+    public function testDatabaseBackupSerializesInstalledSearchTriggers(): void
+    {
+        self::assertNotNull($this->pdo);
+        $controller = (new ReflectionClass(Database::class))->newInstanceWithoutConstructor();
+        $method = new ReflectionMethod(Database::class, 'writeBackupTriggers');
+        $handle = fopen('php://temp', 'w+');
+        self::assertIsResource($handle);
+        try {
+            $method->invoke($controller, $handle, $this->pdo, ['ffx_media']);
+            rewind($handle);
+            $sql = stream_get_contents($handle);
+            self::assertIsString($sql);
+            foreach (['ffx_media_search_insert', 'ffx_media_search_update', 'ffx_media_search_delete'] as $trigger) {
+                self::assertStringContainsString('CREATE TRIGGER `' . $trigger . '`', $sql);
+            }
+        } finally {
+            fclose($handle);
+        }
     }
 
     public function testAQueuedCollectionJobCanOnlyBeClaimedOnce(): void
