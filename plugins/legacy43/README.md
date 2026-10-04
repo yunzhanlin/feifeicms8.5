@@ -1,12 +1,12 @@
-# FeiFeiCMS 4.3 数据升级插件 v1.0.0
+# FeiFeiCMS 4.3 数据升级插件 v1.0.1
 
 这个插件把旧站业务数据迁移到**独立安装**的 FeiFeiCMS 8.5，不会在旧站原地覆盖程序文件、删除旧表或自动切换域名。旧站和新站都应先备份数据库；迁移期间暂停旧站内容写入，避免复制后数据继续变化。
 
 ## 使用
 
 1. 在同一服务器的独立目录安装 FeiFeiCMS 8.5，完成浏览器安装和数据库初始化；旧站继续运行。
-2. 从 GitHub Release 下载 `feifeicms43-upgrade-v1.0.0.php`，重命名为 `ff43-upgrade.php`，放到 **FeiFeiCMS 4.3 网站根目录**，即与 `admin.php`、`Lib/`、`Runtime/` 同级。
-3. 旧站 PHP 至少为 7.4，安装 `pdo_mysql`，并允许使用 `proc_open`。新站需要 PHP 8.2～8.5 CLI，可执行文件与旧站 PHP-FPM 用户都能读取新站程序目录。
+2. 从 [Beta2.2 发布页](https://github.com/yunzhanlin/feifeicms8.5/releases/tag/v8.5.261004-beta2.2) 下载 `feifeicms43-upgrade-v1.0.1.php`，重命名为 `ff43-upgrade.php`，放到 **FeiFeiCMS 4.3 网站根目录**，即与 `admin.php`、`Lib/`、`Runtime/` 同级。Beta2.1 的 v1.0.0 附件只支持 PHP 7.4，不适用于 PHP 5.6 旧站。
+3. 旧站 PHP 至少为 5.6，安装 `pdo_mysql`、OpenSSL，并允许使用 `proc_open`。新站需要 PHP 8.2～8.5 CLI，可执行文件与旧站 PHP-FPM 用户都能读取新站程序目录。原版 4.3 的 ThinkPHP 旧代码建议继续使用 PHP 5.6；插件可在同一个旧站 PHP 环境中运行。
 4. 先从旧站 `admin.php` 登录，再访问 `https://旧站域名/ff43-upgrade.php`。输入已安装的新站项目根目录、PHP 8 CLI 绝对路径和当前旧站管理员密码。
 5. 点击“验证身份并预检”，核对旧库表数和目标路径；点击“开始迁移”。浏览器将逐批执行，刷新后可继续。错误批次不会推进游标，排查后点击继续会重试。
 6. 完成后到新站后台抽查分类、影片、播放线路、分集、会员及搜索结果，再安排站点切换。**立即删除旧站根目录的 `ff43-upgrade.php`**。

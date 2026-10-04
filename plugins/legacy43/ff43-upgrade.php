@@ -1,10 +1,9 @@
 <?php
 /**
- * FeiFeiCMS 4.3 数据升级 v1.0.0
+ * FeiFeiCMS 4.3 数据升级 v1.0.1
  * 将本文件复制到旧站根目录，以旧站管理员身份访问 /ff43-upgrade.php。
- * 本文件兼容 PHP 7.4；目标 FeiFeiCMS 8.5 必须已在同一服务器独立安装。
+ * 本文件兼容旧站 PHP 5.6；目标 FeiFeiCMS 8.5 必须已在同一服务器独立安装。
  */
-declare(strict_types=1);
 
 header('Content-Type: text/html; charset=utf-8');
 header('Cache-Control: no-store, max-age=0');
@@ -12,40 +11,45 @@ header('X-Content-Type-Options: nosniff');
 header('X-Frame-Options: DENY');
 header('Referrer-Policy: no-referrer');
 
-function ff43up_escape($value): string
+function ff43up_value($values, $key, $default = null)
+{
+    return isset($values[$key]) ? $values[$key] : $default;
+}
+
+function ff43up_escape($value)
 {
     return htmlspecialchars((string) $value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 }
 
-function ff43up_fail(string $message, int $status = 400): void
+function ff43up_fail($message, $status = 400)
 {
     http_response_code($status);
     throw new RuntimeException($message);
 }
 
-function ff43up_config(string $root): array
+function ff43up_config($root)
 {
     $path = $root . '/Runtime/Conf/config.php';
     if (!is_file($path)) ff43up_fail('找不到旧站 Runtime/Conf/config.php，请将插件放在 FeiFeiCMS 4.3 网站根目录。');
-    $config = (static function (string $file) { return require $file; })($path);
+    $config = require $path;
     if (!is_array($config)) ff43up_fail('旧站数据库配置无效。');
     foreach (['DB_HOST', 'DB_NAME', 'DB_USER'] as $key) {
         if (empty($config[$key])) ff43up_fail('旧站数据库配置缺少 ' . $key . '。');
     }
-    $prefix = (string) ($config['DB_PREFIX'] ?? 'ff_');
+    $prefix = (string) ff43up_value($config, 'DB_PREFIX', 'ff_');
     if (!preg_match('/^[A-Za-z0-9_]{1,32}$/', $prefix) || strtolower($prefix) === 'ffx_') ff43up_fail('旧表前缀无效。');
     $config['DB_PREFIX'] = $prefix;
     return $config;
 }
 
-function ff43up_admin(array $config, string $password): void
+function ff43up_admin(array $config, $password)
 {
-    $adminId = (int) ($_SESSION['feifeicms'] ?? 0);
+    $adminId = (int) ff43up_value($_SESSION, 'feifeicms', 0);
     if ($adminId < 1 || empty($_SESSION['AdminLogin'])) ff43up_fail('请先登录旧站管理后台。', 403);
     if ($password === '') ff43up_fail('请输入当前旧站管理员密码。');
-    $charset = strtolower((string) ($config['DB_CHARSET'] ?? 'utf8')) === 'utf8mb4' ? 'utf8mb4' : 'utf8';
-    $dsn = sprintf('mysql:host=%s;port=%d;dbname=%s;charset=%s', (string) $config['DB_HOST'], (int) ($config['DB_PORT'] ?? 3306), (string) $config['DB_NAME'], $charset);
-    $pdo = new PDO($dsn, (string) $config['DB_USER'], (string) ($config['DB_PWD'] ?? ''), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
+    $charset = strtolower((string) ff43up_value($config, 'DB_CHARSET', 'utf8')) === 'utf8mb4' ? 'utf8mb4' : 'utf8';
+    $dsn = sprintf('mysql:host=%s;port=%d;dbname=%s;charset=%s', (string) $config['DB_HOST'], (int) ff43up_value($config, 'DB_PORT', 3306), (string) $config['DB_NAME'], $charset);
+    $pdo = new PDO($dsn, (string) $config['DB_USER'], (string) ff43up_value($config, 'DB_PWD', ''), [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]);
     $statement = $pdo->prepare('SELECT admin_pwd,admin_del FROM `' . $config['DB_PREFIX'] . 'admin` WHERE admin_id=?');
     $statement->execute([$adminId]);
     $admin = $statement->fetch(PDO::FETCH_ASSOC);
@@ -55,7 +59,7 @@ function ff43up_admin(array $config, string $password): void
 }
 
 /** @return array{exit:int,output:string,data:array|null} */
-function ff43up_command(string $php, string $target, array $arguments, string $sourcePassword): array
+function ff43up_command($php, $target, array $arguments, $sourcePassword)
 {
     if (!function_exists('proc_open')) ff43up_fail('当前 PHP 禁用了 proc_open，无法从旧站网页启动迁移。');
     $command = array_merge([$php, $target . '/think', 'feifei:legacy43:upgrade'], $arguments);
@@ -68,7 +72,10 @@ function ff43up_command(string $php, string $target, array $arguments, string $s
         'FF43_DB_PASS' => $sourcePassword,
     ];
     $pipes = [];
-    $process = proc_open($command, [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes, $target, $environment);
+    // PHP 5.6 does not accept an argv array here. Every argument is quoted
+    // separately; the legacy database password remains only in the environment.
+    $shellCommand = implode(' ', array_map('escapeshellarg', $command));
+    $process = proc_open($shellCommand . ' 2>&1', [0 => ['pipe', 'r'], 1 => ['pipe', 'w']], $pipes, $target, $environment);
     if (!is_resource($process)) ff43up_fail('无法启动目标程序的迁移命令。');
     fclose($pipes[0]);
     stream_set_blocking($pipes[1], false);
@@ -101,23 +108,23 @@ function ff43up_command(string $php, string $target, array $arguments, string $s
     return ['exit' => $exit, 'output' => $output, 'data' => $data];
 }
 
-function ff43up_args(array $config): array
+function ff43up_args(array $config)
 {
     return [
         '--host=' . (string) $config['DB_HOST'],
-        '--port=' . (int) ($config['DB_PORT'] ?? 3306),
+        '--port=' . (int) ff43up_value($config, 'DB_PORT', 3306),
         '--database=' . (string) $config['DB_NAME'],
         '--user=' . (string) $config['DB_USER'],
         '--prefix=' . (string) $config['DB_PREFIX'],
-        '--charset=' . (strtolower((string) ($config['DB_CHARSET'] ?? 'utf8')) === 'utf8mb4' ? 'utf8mb4' : 'utf8'),
+        '--charset=' . (strtolower((string) ff43up_value($config, 'DB_CHARSET', 'utf8')) === 'utf8mb4' ? 'utf8mb4' : 'utf8'),
     ];
 }
 
-function ff43up_check_php(string $binary): void
+function ff43up_check_php($binary)
 {
     if (!function_exists('proc_open')) ff43up_fail('当前 PHP 禁用了 proc_open，无法从旧站网页启动迁移。');
     $pipes = [];
-    $process = proc_open([$binary, '-r', 'echo PHP_VERSION_ID;'], [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['redirect', 1]], $pipes);
+    $process = proc_open(escapeshellarg($binary) . " -r 'echo PHP_VERSION_ID;' 2>&1", [0 => ['pipe', 'r'], 1 => ['pipe', 'w']], $pipes);
     if (!is_resource($process)) ff43up_fail('无法启动 PHP 8 CLI。');
     fclose($pipes[0]);
     $version = trim((string) stream_get_contents($pipes[1]));
@@ -127,7 +134,7 @@ function ff43up_check_php(string $binary): void
     }
 }
 
-function ff43up_json(array $payload, int $status = 200): void
+function ff43up_json(array $payload, $status = 200)
 {
     http_response_code($status);
     header('Content-Type: application/json; charset=utf-8');
@@ -138,37 +145,43 @@ function ff43up_json(array $payload, int $status = 200): void
 $error = '';
 $root = __DIR__;
 try {
-    if (PHP_VERSION_ID < 70400) ff43up_fail('旧站插件要求 PHP 7.4+；新站要求 PHP 8.2+。');
+    if (PHP_VERSION_ID < 50600) ff43up_fail('旧站插件要求 PHP 5.6+；新站要求 PHP 8.2+。');
     if (!extension_loaded('pdo_mysql')) ff43up_fail('旧站 PHP 缺少 pdo_mysql 扩展。');
+    if (!function_exists('openssl_random_pseudo_bytes')) ff43up_fail('旧站 PHP 缺少 OpenSSL 扩展。');
     if (!is_file($root . '/Lib/Conf/config.php') || !is_file($root . '/admin.php')) ff43up_fail('请将本文件复制到 FeiFeiCMS 4.3 网站根目录。');
     session_start();
-    if ((int) ($_SESSION['feifeicms'] ?? 0) < 1 || empty($_SESSION['AdminLogin'])) ff43up_fail('请先登录旧站管理后台，再打开本文件。', 403);
-    if (!isset($_SESSION['ff43up_csrf'])) $_SESSION['ff43up_csrf'] = bin2hex(random_bytes(24));
+    if ((int) ff43up_value($_SESSION, 'feifeicms', 0) < 1 || empty($_SESSION['AdminLogin'])) ff43up_fail('请先登录旧站管理后台，再打开本文件。', 403);
+    if (!isset($_SESSION['ff43up_csrf'])) {
+        $strong = false;
+        $bytes = openssl_random_pseudo_bytes(24, $strong);
+        if ($bytes === false || !$strong) ff43up_fail('无法生成安全令牌，请检查 OpenSSL 扩展。', 500);
+        $_SESSION['ff43up_csrf'] = bin2hex($bytes);
+    }
     $config = ff43up_config($root);
-    $action = (string) ($_POST['action'] ?? '');
+    $action = (string) ff43up_value($_POST, 'action', '');
     if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-        if (!hash_equals($_SESSION['ff43up_csrf'], (string) ($_POST['_token'] ?? ''))) ff43up_fail('页面已过期，请刷新后重试。', 419);
+        if (!hash_equals($_SESSION['ff43up_csrf'], (string) ff43up_value($_POST, '_token', ''))) ff43up_fail('页面已过期，请刷新后重试。', 419);
         if ($action === 'prepare') {
-            ff43up_admin($config, (string) ($_POST['admin_password'] ?? ''));
-            $target = realpath(trim((string) ($_POST['target_root'] ?? '')));
-            $php = realpath(trim((string) ($_POST['php_binary'] ?? '')));
+            ff43up_admin($config, (string) ff43up_value($_POST, 'admin_password', ''));
+            $target = realpath(trim((string) ff43up_value($_POST, 'target_root', '')));
+            $php = realpath(trim((string) ff43up_value($_POST, 'php_binary', '')));
             if ($target === false || !is_file($target . '/think') || !is_file($target . '/vendor/autoload.php') || !is_file($target . '/app/plugin/Legacy43/Legacy43Migrator.php') || !is_file($target . '/runtime/install.lock')) ff43up_fail('目标路径必须是已安装的 FeiFeiCMS 8.5 项目根目录。');
             if ($php === false || !is_file($php) || !is_executable($php) || !preg_match('/^php(?:[0-9.]*)?$/i', basename($php))) ff43up_fail('请填写可执行的 PHP 8.2～8.5 CLI 绝对路径。');
             ff43up_check_php($php);
             // Re-run with the source connection, never passing its password in process arguments.
-            $check = ff43up_command($php, $target, array_merge(ff43up_args($config), ['--preflight']), (string) ($config['DB_PWD'] ?? ''));
+            $check = ff43up_command($php, $target, array_merge(ff43up_args($config), ['--preflight']), (string) ff43up_value($config, 'DB_PWD', ''));
             if ($check['exit'] !== 0 || !is_array($check['data']) || empty($check['data']['compatible'])) ff43up_fail('预检失败：' . substr($check['output'], -600));
             $_SESSION['ff43up_job'] = [
                 'target' => $target, 'php' => $php, 'preflight' => $check['data'],
-                'module_index' => 0, 'cursor' => 0, 'batch' => max(10, min(100, (int) ($_POST['batch'] ?? 50))),
+                'module_index' => 0, 'cursor' => 0, 'batch' => max(10, min(100, (int) ff43up_value($_POST, 'batch', 50))),
                 'started' => false, 'done' => false, 'updated' => time(), 'processed' => 0,
             ];
         } elseif ($action === 'reset') {
             unset($_SESSION['ff43up_job']);
             ff43up_json(['ok' => true]);
         } elseif ($action === 'start' || $action === 'batch') {
-            $job = $_SESSION['ff43up_job'] ?? null;
-            if (!is_array($job) || time() - (int) ($job['updated'] ?? 0) > 1800) ff43up_fail('迁移会话已过期，请重新预检。');
+            $job = ff43up_value($_SESSION, 'ff43up_job');
+            if (!is_array($job) || time() - (int) ff43up_value($job, 'updated', 0) > 1800) ff43up_fail('迁移会话已过期，请重新预检。');
             if ($action === 'start') {
                 $job['started'] = true;
                 $job['updated'] = time();
@@ -176,7 +189,7 @@ try {
                 ff43up_json(['ok' => true]);
             }
             if (empty($job['started'])) ff43up_fail('请先点击开始迁移。');
-            $modules = (array) ($job['preflight']['modules'] ?? []);
+            $modules = (array) ff43up_value($job['preflight'], 'modules', []);
             $keys = array_keys($modules);
             while (isset($keys[$job['module_index']]) && empty($modules[$keys[$job['module_index']]]['exists'])) {
                 $job['module_index']++;
@@ -184,9 +197,9 @@ try {
             if (!isset($keys[$job['module_index']])) {
                 if (empty($job['done'])) {
                     try {
-                        $finish = ff43up_command($job['php'], $job['target'], ['--finish'], (string) ($config['DB_PWD'] ?? ''));
+                        $finish = ff43up_command($job['php'], $job['target'], ['--finish'], (string) ff43up_value($config, 'DB_PWD', ''));
                         $job['search'] = $finish['exit'] === 0 ? '搜索索引同步完成' : '搜索索引同步失败，请在新站后台手动同步';
-                    } catch (Throwable $exception) {
+                    } catch (Exception $exception) {
                         $job['search'] = '搜索索引同步失败，请在新站后台手动同步';
                     }
                     $job['done'] = true;
@@ -198,29 +211,29 @@ try {
             $arguments = array_merge(ff43up_args($config), [
                 '--module=' . $module, '--cursor=' . (int) $job['cursor'], '--batch=' . (int) $job['batch'], '--once',
             ]);
-            $result = ff43up_command($job['php'], $job['target'], $arguments, (string) ($config['DB_PWD'] ?? ''));
+            $result = ff43up_command($job['php'], $job['target'], $arguments, (string) ff43up_value($config, 'DB_PWD', ''));
             if (!is_array($result['data'])) ff43up_fail('迁移失败：' . substr($result['output'], -600));
             $batch = $result['data'];
-            if ((int) ($batch['errors'] ?? 0) > 0 || $result['exit'] !== 0) {
+            if ((int) ff43up_value($batch, 'errors', 0) > 0 || $result['exit'] !== 0) {
                 ff43up_json(['ok' => false, 'message' => '本批有错误，游标未前进；处理原因后可重试。', 'batch' => $batch], 422);
             }
-            $job['cursor'] = (int) ($batch['cursor'] ?? $job['cursor']);
-            $job['processed'] += (int) ($batch['processed'] ?? 0);
+            $job['cursor'] = (int) ff43up_value($batch, 'cursor', $job['cursor']);
+            $job['processed'] += (int) ff43up_value($batch, 'processed', 0);
             if (!empty($batch['done'])) { $job['module_index']++; $job['cursor'] = 0; }
             $job['updated'] = time();
             $_SESSION['ff43up_job'] = $job;
             ff43up_json(['ok' => true, 'done' => false, 'module' => $module, 'module_index' => $job['module_index'], 'module_total' => count($keys), 'batch' => $batch, 'processed' => $job['processed']]);
         } else ff43up_fail('未知操作。');
     }
-} catch (Throwable $exception) {
+} catch (Exception $exception) {
     $error = $exception->getMessage();
-    if ($_SERVER['REQUEST_METHOD'] === 'POST' && (($_POST['action'] ?? '') !== 'prepare')) ff43up_json(['ok' => false, 'message' => $error], http_response_code() >= 400 ? http_response_code() : 500);
+    if ($_SERVER['REQUEST_METHOD'] === 'POST' && (ff43up_value($_POST, 'action', '') !== 'prepare')) ff43up_json(['ok' => false, 'message' => $error], http_response_code() >= 400 ? http_response_code() : 500);
 }
-$job = $_SESSION['ff43up_job'] ?? null;
-$token = $_SESSION['ff43up_csrf'] ?? '';
+$job = ff43up_value($_SESSION, 'ff43up_job');
+$token = ff43up_value($_SESSION, 'ff43up_csrf', '');
 ?>
-<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FeiFeiCMS 4.3 数据升级 v1.0.0</title>
-<style>body{font:15px/1.6 -apple-system,BlinkMacSystemFont,"Microsoft YaHei",sans-serif;background:#f3f6fb;color:#25344a;margin:0}main{max-width:940px;margin:35px auto;background:#fff;border:1px solid #cbdaf0;box-shadow:0 8px 30px #233b5b15}h1{margin:0;padding:17px 22px;background:linear-gradient(#4168a7,#25467f);color:#fff;font-size:21px}section{padding:20px 24px;border-top:1px solid #d8e3f2}h2{color:#15518e;font-size:17px;margin:0 0 12px}label{display:block;margin:10px 0;color:#174779}input{box-sizing:border-box;display:block;width:100%;max-width:650px;height:38px;margin-top:4px;border:1px solid #a8b8c8;padding:5px 9px;font:inherit}button{border:1px solid #9fb8d2;background:#d9edff;color:#174b80;padding:8px 17px;margin:8px 8px 0 0;cursor:pointer;font:inherit}button.primary{background:#31558f;color:#fff}.error{background:#fff1ef;color:#ad251d;padding:10px}.note{background:#fff9e9;border:1px solid #ecd591;padding:11px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #c9d8ec;padding:7px;text-align:left}th{background:#d9e9fb}#progress{white-space:pre-wrap;background:#f4f8fd;padding:12px;min-height:55px}</style></head><body><main><h1>FeiFeiCMS 4.3 数据升级 v1.0.0</h1>
+<!doctype html><html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>FeiFeiCMS 4.3 数据升级 v1.0.1</title>
+<style>body{font:15px/1.6 -apple-system,BlinkMacSystemFont,"Microsoft YaHei",sans-serif;background:#f3f6fb;color:#25344a;margin:0}main{max-width:940px;margin:35px auto;background:#fff;border:1px solid #cbdaf0;box-shadow:0 8px 30px #233b5b15}h1{margin:0;padding:17px 22px;background:linear-gradient(#4168a7,#25467f);color:#fff;font-size:21px}section{padding:20px 24px;border-top:1px solid #d8e3f2}h2{color:#15518e;font-size:17px;margin:0 0 12px}label{display:block;margin:10px 0;color:#174779}input{box-sizing:border-box;display:block;width:100%;max-width:650px;height:38px;margin-top:4px;border:1px solid #a8b8c8;padding:5px 9px;font:inherit}button{border:1px solid #9fb8d2;background:#d9edff;color:#174b80;padding:8px 17px;margin:8px 8px 0 0;cursor:pointer;font:inherit}button.primary{background:#31558f;color:#fff}.error{background:#fff1ef;color:#ad251d;padding:10px}.note{background:#fff9e9;border:1px solid #ecd591;padding:11px}table{border-collapse:collapse;width:100%}td,th{border:1px solid #c9d8ec;padding:7px;text-align:left}th{background:#d9e9fb}#progress{white-space:pre-wrap;background:#f4f8fd;padding:12px;min-height:55px}</style></head><body><main><h1>FeiFeiCMS 4.3 数据升级 v1.0.1</h1>
 <section><div class="note">先在独立目录安装 FeiFeiCMS 8.5，并备份新旧数据库。本插件只从 4.3 读取数据，向 8.5 的 ffx_ 表分批写入；不会替换旧站程序、切换 PHP 或删除旧库。升级完成并验收后，再单独切换站点入口。</div><?php if ($error !== ''): ?><p class="error"><?= ff43up_escape($error) ?></p><?php endif; ?></section>
 <?php if (!is_array($job)): ?><section><h2>连接目标程序并预检</h2><form method="post"><input type="hidden" name="action" value="prepare"><input type="hidden" name="_token" value="<?= ff43up_escape($token) ?>"><label>已安装的 FeiFeiCMS 8.5 项目根目录<input name="target_root" placeholder="/www/wwwroot/feifeicms85" required></label><label>PHP 8.2～8.5 CLI 绝对路径<input name="php_binary" placeholder="/www/server/php/84/bin/php" required></label><label>每批条数<input name="batch" type="number" min="10" max="100" value="50"></label><label>旧站管理员密码（仅本次验证，不保存）<input name="admin_password" type="password" autocomplete="current-password" required></label><button class="primary" type="submit">验证身份并预检</button></form></section>
 <?php else: ?><section><h2>预检结果</h2><p>目标：<?= ff43up_escape($job['target']) ?>　批量：<?= (int) $job['batch'] ?> 条　已处理：<?= (int) $job['processed'] ?> 条</p><table><thead><tr><th>模块</th><th>旧表</th><th>旧站条数</th><th>已迁移</th></tr></thead><tbody><?php foreach ($job['preflight']['modules'] as $module): ?><tr><td><?= ff43up_escape($module['label']) ?></td><td><?= ff43up_escape($module['table']) ?></td><td><?= (int) $module['count'] ?></td><td><?= (int) $module['migrated'] ?></td></tr><?php endforeach; ?></tbody></table><button class="primary" id="start" type="button"><?= !empty($job['started']) ? '继续迁移' : '开始迁移' ?></button><button id="reset" type="button">重新预检</button><p id="progress"><?= !empty($job['done']) ? '数据迁移已完成。请到 8.5 后台检查分类、影片、分集、会员和搜索索引。' : '等待开始。迁移期间请勿关闭此页面；中断后可刷新继续。' ?></p></section><?php endif; ?>
