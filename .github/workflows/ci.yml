@@ -48,10 +48,15 @@ jobs:
       - run: composer audit --locked --no-interaction
 
   mysql-integration:
+    name: MySQL ${{ matrix.mysql }} integration
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        mysql: ['5.7', '8.4']
     services:
       mysql:
-        image: mysql:8.4
+        image: mysql:${{ matrix.mysql }}
         env:
           MYSQL_DATABASE: feifeicms_test
           MYSQL_USER: feifeicms
@@ -95,7 +100,11 @@ jobs:
           sed -i 's/^REDIS_HOST.*/REDIS_HOST = 127.0.0.1/' .env
           sed -i 's/^SEARCH_DRIVER.*/SEARCH_DRIVER = mysql/' .env
           mkdir -p runtime public/uploads
-      - name: Load MySQL 8 schema
+      - name: Load MySQL schema
         run: mysql --protocol=TCP -h127.0.0.1 -ufeifeicms -pfeifeicms-test-password feifeicms_test < database/schema.sql
+      - name: Permit trusted triggers in isolated CI MySQL
+        run: mysql --protocol=TCP -h127.0.0.1 -uroot -proot-test-password -e 'SET GLOBAL log_bin_trust_function_creators=1'
+      - name: Apply current schema migrations
+        run: php think feifei:schema:upgrade
       - run: php think feifei:doctor
       - run: vendor/bin/phpunit --fail-on-phpunit-deprecation

@@ -25,7 +25,11 @@ final class SearchIndexer
         $client = $this->searchClient->client();
         $indexName = $this->searchClient->index();
         $temporary = $indexName . '_build_' . bin2hex(random_bytes(8));
-        $baseline = Db::table('ffx_search_outbox')->select()->toArray();
+        // A database-time watermark is constant-size even when the outbox
+        // contains millions of rows. Revisions made during the build update
+        // updated_at and remain pending after the swap.
+        $cutoff = (string) (Db::query('SELECT NOW(6) AS cutoff')[0]['cutoff'] ?? '');
+        if ($cutoff === '') throw new \RuntimeException('无法读取搜索同步时间水位');
         $this->waitForTask($client, $client->createIndex($temporary, ['primaryKey' => 'id']));
         $index = $client->index($temporary);
         $this->waitForTask($client, $index->updateSearchableAttributes(['title', 'original_title', 'subtitle', 'summary', 'content', 'area', 'language']));
@@ -57,8 +61,9 @@ final class SearchIndexer
         $task = $client->swapIndexes([[$indexName, $temporary]]);
         $swapSubmitted = true;
         $this->waitForTask($client, $task);
-        // Revisions changed during the rebuild remain pending for replay.
-        $this->acknowledge($baseline);
+        // Strictly older rows were already represented in the fresh index.
+        // Equal-time rows are retained for a harmless replay.
+        Db::table('ffx_search_outbox')->where('updated_at', '<', $cutoff)->delete();
         $this->recordSuccess($count);
         try { $this->waitForTask($client, $client->deleteIndex($temporary)); } catch (\Throwable $e) { trace('旧搜索索引清理失败：' . $e->getMessage(), 'warning'); }
         return $count;

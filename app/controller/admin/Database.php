@@ -7,6 +7,7 @@ use app\BaseController;
 use app\service\AuditLogger;
 use app\service\CsrfToken;
 use app\service\SqlStatementStream;
+use app\service\SearchOutboxTriggers;
 use think\exception\HttpException;
 use think\facade\Db;
 use think\Response;
@@ -39,6 +40,12 @@ final class Database extends BaseController
         $this->guardCsrf();
         $tables = $this->selectedTables();
         if ($tables === []) return response('请选择至少一张表', 422);
+        $engines = Db::query("SELECT table_name AS name, ENGINE AS engine FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'ffx\\_%'");
+        foreach ($engines as $table) {
+            if (in_array((string) $table['name'], $tables, true) && strtoupper((string) $table['engine']) !== 'INNODB') {
+                throw new HttpException(422, '一致性备份仅支持 InnoDB 表：' . $table['name']);
+            }
+        }
         $filename = 'feifeicms-v4-' . gmdate('Ymd-His') . '-' . bin2hex(random_bytes(3)) . '.sql';
         $path = $this->backupDir() . '/' . $filename;
         $handle = fopen($path, 'wb');
@@ -47,9 +54,14 @@ final class Database extends BaseController
         try {
             $this->writeAll($handle, "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n\n");
             $pdo = Db::connect()->getPdo();
+            if (!$pdo instanceof \PDO) throw new HttpException(500, '无法连接数据库进行备份');
             $bufferedQueryAttribute = $this->mysqlBufferedQueryAttribute();
             $pdo->setAttribute($bufferedQueryAttribute, false);
             try {
+                $pdo->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
+                $pdo->beginTransaction();
+                $snapshot = $pdo->query('SELECT 1 FROM `' . $tables[0] . '` LIMIT 1');
+                if ($snapshot !== false) $snapshot->closeCursor();
                 foreach ($tables as $table) {
                     $createStatement = $pdo->query('SHOW CREATE TABLE `' . $table . '`');
                     $createRow = $createStatement !== false ? ($createStatement->fetch(\PDO::FETCH_ASSOC) ?: []) : [];
@@ -69,7 +81,10 @@ final class Database extends BaseController
                     if ($rows !== false) $rows->closeCursor();
                     $this->writeAll($handle, "\n");
                 }
+                $this->writeBackupTriggers($handle, $pdo, $tables);
+                $pdo->commit();
             } finally {
+                if ($pdo->inTransaction()) $pdo->rollBack();
                 $pdo->setAttribute($bufferedQueryAttribute, true);
             }
             $this->writeAll($handle, "SET FOREIGN_KEY_CHECKS=1;\n");
@@ -139,7 +154,7 @@ final class Database extends BaseController
         if ((string) $this->request->post('confirm') !== 'RESTORE') throw new HttpException(422, '缺少恢复确认');
         $path = $this->backupPath($name);
         $size = filesize($path);
-        if ($size === false || $size < 1 || $size > 134_217_728) throw new HttpException(422, '备份文件大小异常');
+        if ($size === false || $size < 1) throw new HttpException(422, '备份文件大小异常');
         $statementCount = 0;
         foreach ($this->sql->fromFile($path, true) as $statement) {
             if (!$this->isAllowedBackupStatement($statement)) throw new HttpException(422, '备份包含不允许执行的语句');
@@ -147,6 +162,7 @@ final class Database extends BaseController
         }
         if ($statementCount === 0) throw new HttpException(422, '备份文件为空');
         foreach ($this->sql->fromFile($path, true) as $statement) Db::execute($statement);
+        SearchOutboxTriggers::ensure();
         $this->audit->record('database.restore', 'database', $name, null, ['statements' => $statementCount, 'bytes' => $size]);
         return redirect('/admin/database#backups');
     }
@@ -195,7 +211,31 @@ final class Database extends BaseController
             || preg_match('/^SET\s+FOREIGN_KEY_CHECKS\s*=\s*[01]$/i', $statement) === 1
             || preg_match('/^DROP\s+TABLE\s+IF\s+EXISTS\s+`ffx_[a-z0-9_]+`$/i', $statement) === 1
             || preg_match('/^CREATE\s+TABLE\s+`ffx_[a-z0-9_]+`\s*\(/is', $statement) === 1
-            || preg_match('/^INSERT\s+INTO\s+`ffx_[a-z0-9_]+`\s*\(/is', $statement) === 1;
+            || preg_match('/^INSERT\s+INTO\s+`ffx_[a-z0-9_]+`\s*\(/is', $statement) === 1
+            || preg_match('/^CREATE\s+TRIGGER\s+`ffx_[a-z0-9_]+`\s+(?:BEFORE|AFTER)\s+(?:INSERT|UPDATE|DELETE)\s+ON\s+`ffx_[a-z0-9_]+`\s+FOR\s+EACH\s+ROW\s+/is', $statement) === 1;
+    }
+
+    /** @param resource $handle @param list<string> $tables */
+    private function writeBackupTriggers($handle, \PDO $pdo, array $tables): void
+    {
+        $query = $pdo->query("SELECT TRIGGER_NAME,EVENT_MANIPULATION,EVENT_OBJECT_TABLE,ACTION_TIMING,ACTION_STATEMENT FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() AND TRIGGER_NAME LIKE 'ffx\\_%' ORDER BY TRIGGER_NAME");
+        $triggers = $query !== false ? $query->fetchAll(\PDO::FETCH_ASSOC) : [];
+        if ($query !== false) $query->closeCursor();
+        foreach ($triggers as $trigger) {
+            $name = (string) $trigger['TRIGGER_NAME'];
+            $table = (string) $trigger['EVENT_OBJECT_TABLE'];
+            $when = strtoupper((string) $trigger['ACTION_TIMING']);
+            $event = strtoupper((string) $trigger['EVENT_MANIPULATION']);
+            $body = trim((string) $trigger['ACTION_STATEMENT']);
+            if (!in_array($table, $tables, true)) continue;
+            if (!preg_match('/^ffx_[a-z0-9_]+$/', $name) || !preg_match('/^ffx_[a-z0-9_]+$/', $table)
+                || !in_array($when, ['BEFORE', 'AFTER'], true) || !in_array($event, ['INSERT', 'UPDATE', 'DELETE'], true)
+                || $body === '' || str_contains($body, ';')) {
+                throw new HttpException(500, '无法安全备份触发器：' . $name);
+            }
+            $this->writeAll($handle, 'CREATE TRIGGER `' . $name . '` ' . $when . ' ' . $event
+                . ' ON `' . $table . '` FOR EACH ROW ' . $body . ";\n");
+        }
     }
 
     /** @param resource $handle */

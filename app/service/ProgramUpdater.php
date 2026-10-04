@@ -36,12 +36,19 @@ final class ProgramUpdater
             $path = root_path() . $directory;
             if (is_dir($path) && !is_writable($path)) throw new \RuntimeException('自动更新需要站点 PHP 用户可写程序目录：' . ($directory ?: '.'));
         }
-        $previous = $this->state();
-        if (in_array((string) ($previous['status'] ?? ''), ['queued', 'running'], true)) throw new \RuntimeException('已有更新任务正在运行');
-        $job = ['id' => bin2hex(random_bytes(12)), 'tag' => $release['tag'], 'version' => $release['version'],
-            'title' => $release['title'], 'status' => 'queued', 'message' => '等待安装', 'updated_at' => gmdate('c')];
-        $this->save($job);
-        return $job;
+        $lock = fopen($this->directory() . '/update.lock', 'c');
+        if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) throw new \RuntimeException('另一项更新正在排队或执行');
+        try {
+            $previous = $this->state();
+            if (in_array((string) ($previous['status'] ?? ''), ['queued', 'running'], true)) throw new \RuntimeException('已有更新任务正在运行');
+            $job = ['id' => bin2hex(random_bytes(12)), 'tag' => $release['tag'], 'version' => $release['version'],
+                'title' => $release['title'], 'status' => 'queued', 'message' => '等待安装', 'updated_at' => gmdate('c')];
+            $this->save($job);
+            return $job;
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
     }
 
     public function failQueued(string $id, string $reason): void
@@ -264,8 +271,12 @@ final class ProgramUpdater
     private function save(array $job): void
     {
         $path = $this->directory() . '/job.json';
-        $temporary = $path . '.tmp';
-        if (file_put_contents($temporary, json_encode($job, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), LOCK_EX) === false || !rename($temporary, $path)) throw new \RuntimeException('无法保存更新任务状态');
+        $temporary = $path . '.' . bin2hex(random_bytes(8)) . '.tmp';
+        try {
+            if (file_put_contents($temporary, json_encode($job, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), LOCK_EX) === false || !rename($temporary, $path)) throw new \RuntimeException('无法保存更新任务状态');
+        } finally {
+            if (is_file($temporary)) @unlink($temporary);
+        }
         chmod($path, 0600);
     }
 }

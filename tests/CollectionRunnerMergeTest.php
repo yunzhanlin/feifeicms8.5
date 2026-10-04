@@ -23,6 +23,14 @@ final class CollectionRunnerMergeTest extends TestCase
         self::assertSame([], $method->invoke($this->runner()));
     }
 
+    public function testMissingOrEmptyPlaybackIsNotTreatedAsAReplacementLine(): void
+    {
+        $parser = new EpisodeParser();
+        self::assertSame([], $parser->parse('m3u8', ''));
+        self::assertSame([], $parser->parse('m3u8', '#'));
+        self::assertCount(1, $parser->parse('m3u8', '第1集$https://example.test/1.m3u8'));
+    }
+
     public function testMergeDoesNotPublishDraftWhenAutoPublishIsDisabled(): void
     {
         $result = $this->merge(['status' => 'draft'], ['status' => 'draft']);
