@@ -15,7 +15,10 @@ final class ReleaseCatalog
     /** @return array{tag:string,version:string,title:string,url:string,available:bool} */
     public function latest(bool $refresh = false): array
     {
-        $key = 'feifei:update:github-release:v1';
+        $current = (string) config('feifei.version_id');
+        // The cached "available" flag is relative to the installed version.
+        // Never reuse it after an updater replaces config/version.php.
+        $key = self::cacheKey($current);
         if (!$refresh) {
             $cached = Cache::get($key);
             if (is_array($cached)) return $cached;
@@ -24,7 +27,7 @@ final class ReleaseCatalog
         $response = $client->get('https://github.com/' . self::REPO . '/releases.atom', [
             'headers' => ['User-Agent' => 'FeiFeiCMS-Updater/8.5', 'Accept' => 'application/atom+xml'],
         ]);
-        $result = self::parseFeed((string) $response->getBody(), (string) config('feifei.version_id'));
+        $result = self::parseFeed((string) $response->getBody(), $current);
         // GitHub emits the release feed before the packaging workflow uploads
         // its two assets. Never offer an update that cannot yet be installed.
         if ($result['available']) {
@@ -40,6 +43,11 @@ final class ReleaseCatalog
         }
         Cache::set($key, $result, 300);
         return $result;
+    }
+
+    public static function cacheKey(string $current): string
+    {
+        return 'feifei:update:github-release:v2:' . $current;
     }
 
     /** @return array{tag:string,version:string,title:string,url:string,available:bool} */

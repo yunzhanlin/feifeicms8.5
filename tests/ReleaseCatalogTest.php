@@ -51,6 +51,12 @@ XML;
         self::assertStringContainsString('/v8.5.261004.1/', ReleaseCatalog::assetUrl($latest['tag'], ReleaseCatalog::PACKAGE));
     }
 
+    public function testReleaseCacheIsSeparatedByInstalledVersion(): void
+    {
+        self::assertNotSame(ReleaseCatalog::cacheKey('8.5.261003-beta2'), ReleaseCatalog::cacheKey('8.5.261004.1'));
+        self::assertNotSame(ReleaseCatalog::cacheKey('8.5.261004.1'), ReleaseCatalog::cacheKey('8.5.261004.2'));
+    }
+
     public function testUpdaterRejectsArchivePathTraversal(): void
     {
         $directory = sys_get_temp_dir() . '/ff-update-test-' . bin2hex(random_bytes(8));
