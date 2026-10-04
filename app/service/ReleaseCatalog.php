@@ -51,7 +51,7 @@ final class ReleaseCatalog
         $best = null;
         foreach ($feed->entry as $entry) {
             $id = (string) $entry->id;
-            if (!preg_match('~/((?:v)?([0-9]+\.[0-9]+\.[0-9]{6}(?:-[A-Za-z0-9.-]+)?))$~', $id, $m)) continue;
+            if (!preg_match('~/((?:v)?([0-9]+\.[0-9]+\.[0-9]{6}(?:\.[0-9]+)?(?:-[A-Za-z0-9.-]+)?))$~', $id, $m)) continue;
             $tag = $m[1];
             $version = $m[2];
             if ($best === null || version_compare($version, $best['version'], '>')) {
@@ -66,7 +66,7 @@ final class ReleaseCatalog
 
     public static function assetUrl(string $tag, string $name): string
     {
-        if (!preg_match('/^v[0-9]+\.[0-9]+\.[0-9]{6}(?:-[A-Za-z0-9.-]+)?$/', $tag)) throw new \InvalidArgumentException('版本标签无效');
+        if (!preg_match('/^v[0-9]+\.[0-9]+\.[0-9]{6}(?:\.[0-9]+)?(?:-[A-Za-z0-9.-]+)?$/', $tag)) throw new \InvalidArgumentException('版本标签无效');
         if (!in_array($name, [self::PACKAGE, self::PACKAGE . '.sha256'], true)) throw new \InvalidArgumentException('更新包名称无效');
         return 'https://github.com/' . self::REPO . '/releases/download/' . rawurlencode($tag) . '/' . $name;
     }
