@@ -97,5 +97,7 @@ jobs:
           mkdir -p runtime public/uploads
       - name: Load MySQL 8 schema
         run: mysql --protocol=TCP -h127.0.0.1 -ufeifeicms -pfeifeicms-test-password feifeicms_test < database/schema.sql
+      - name: Apply current schema migrations
+        run: php think feifei:schema:upgrade
       - run: php think feifei:doctor
       - run: vendor/bin/phpunit --fail-on-phpunit-deprecation
