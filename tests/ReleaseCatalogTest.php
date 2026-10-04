@@ -36,6 +36,21 @@ XML;
         ReleaseCatalog::assetUrl('../evil', ReleaseCatalog::PACKAGE);
     }
 
+    public function testPatchReleaseIsNewerThanStableRelease(): void
+    {
+        $feed = <<<'XML'
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <entry><id>tag:github.com,2008:Repository/1/v8.5.261004</id><title>正式版</title></entry>
+  <entry><id>tag:github.com,2008:Repository/1/v8.5.261004.1</id><title>正式版修订 1</title></entry>
+</feed>
+XML;
+        $latest = ReleaseCatalog::parseFeed($feed, '8.5.261004');
+        self::assertSame('v8.5.261004.1', $latest['tag']);
+        self::assertTrue($latest['available']);
+        self::assertFalse(ReleaseCatalog::parseFeed($feed, '8.5.261004.1')['available']);
+        self::assertStringContainsString('/v8.5.261004.1/', ReleaseCatalog::assetUrl($latest['tag'], ReleaseCatalog::PACKAGE));
+    }
+
     public function testUpdaterRejectsArchivePathTraversal(): void
     {
         $directory = sys_get_temp_dir() . '/ff-update-test-' . bin2hex(random_bytes(8));
