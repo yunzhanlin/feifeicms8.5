@@ -1,0 +1,10 @@
+# Fail closed if Apache is accidentally pointed at the project root.
+# Only public/.htaccess grants access to the real web root.
+Options -Indexes
+<IfModule mod_authz_core.c>
+  Require all denied
+</IfModule>
+<IfModule !mod_authz_core.c>
+  Order allow,deny
+  Deny from all
+</IfModule>

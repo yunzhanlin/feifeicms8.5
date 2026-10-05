@@ -8,13 +8,20 @@ use app\service\AuditLogger;
 use app\service\CsrfToken;
 use app\service\SqlStatementStream;
 use app\service\SearchOutboxTriggers;
+use app\service\MySqlBackup;
+use app\service\DatabaseFieldReplacer;
+use app\service\FrontendCache;
+use InvalidArgumentException;
+use PDO;
+use PDOException;
 use think\exception\HttpException;
 use think\facade\Db;
+use think\facade\Session;
 use think\Response;
 
 final class Database extends BaseController
 {
-    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly SqlStatementStream $sql)
+    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly SqlStatementStream $sql, private readonly DatabaseFieldReplacer $replacer, private readonly FrontendCache $frontendCache)
     {
         parent::__construct($app);
     }
@@ -35,6 +42,99 @@ final class Database extends BaseController
         ]);
     }
 
+    public function replace(): Response
+    {
+        $input = ['table' => (string) $this->request->get('table', 'ffx_media'), 'field' => '', 'search' => '', 'replacement' => '', 'condition' => ''];
+        return $this->replacementView($input, mb_substr((string) $this->request->get('message', ''), 0, 300));
+    }
+
+    public function replacementFields(): Response
+    {
+        try {
+            return json(['fields' => $this->replacer->fields($this->pdo(), (string) $this->request->get('table', ''))])
+                ->header(['Cache-Control' => 'no-store, private']);
+        } catch (InvalidArgumentException $error) {
+            return json(['error' => $error->getMessage()], 422);
+        }
+    }
+
+    public function previewReplace(): Response
+    {
+        $this->guardCsrf();
+        $input = [];
+        foreach (['table', 'field', 'search', 'replacement', 'condition'] as $key) {
+            $value = $this->request->post($key, '');
+            if (!is_string($value)) throw new HttpException(422, '替换参数无效');
+            $input[$key] = $value;
+        }
+        Session::delete('database.replace_preview');
+        try {
+            $preview = $this->replacer->preview($this->pdo(), $input);
+            $preview['receipt'] = bin2hex(random_bytes(32));
+            Session::set('database.replace_preview', [
+                'input' => $input, 'matched' => $preview['matched'], 'receipt' => $preview['receipt'], 'expires' => time() + 600,
+            ]);
+            return $this->replacementView($input, '', $preview);
+        } catch (InvalidArgumentException $error) {
+            return $this->replacementView($input, $error->getMessage(), [], true)->code(422);
+        } catch (PDOException) {
+            return $this->replacementView($input, '预览未完成，请检查字段与条件，或缩小范围后重试。', [], true)->code(422);
+        }
+    }
+
+    public function runReplace(): Response
+    {
+        $this->guardCsrf();
+        $preview = Session::get('database.replace_preview');
+        $receipt = $this->request->post('receipt');
+        if (!is_array($preview) || !is_string($receipt) || !hash_equals((string) $preview['receipt'], $receipt)
+            || (int) $preview['expires'] < time() || $this->request->post('confirm') !== 'REPLACE') {
+            throw new HttpException(422, '替换确认无效或已过期，请重新预览');
+        }
+        $input = $preview['input'];
+        try {
+            $result = $this->replacer->replace($this->pdo(), $input, (int) $preview['matched'], $receipt, function (int $changed) use ($input, $preview): void {
+                $this->audit->record('database.field_replace', 'database', $input['table'] . '.' . $input['field'], null, [
+                    'matched' => $preview['matched'], 'changed' => $changed,
+                    'search_sha256' => hash('sha256', $input['search']), 'replacement_sha256' => hash('sha256', $input['replacement']),
+                    'condition_sha256' => hash('sha256', $input['condition']),
+                ]);
+            });
+            if ($result['changed'] > 0) {
+                $this->frontendCache->invalidateCategories();
+                $this->frontendCache->invalidateSettings();
+            }
+            $message = ($result['replayed'] ? '这次替换已经完成，未重复执行：' : '替换完成：') . '匹配 ' . $result['matched'] . ' 条，更新 ' . $result['changed'] . ' 条。';
+            return redirect('/admin/database/replace?table=' . rawurlencode($input['table']) . '&message=' . rawurlencode($message));
+        } catch (InvalidArgumentException $error) {
+            return $this->replacementView($input, $error->getMessage(), [], true)->code(422);
+        } catch (PDOException) {
+            return $this->replacementView($input, '替换未能正常确认。字段长度、唯一键或 JSON 错误会整批回滚；若连接中断，请用同一确认重试，不要立即另建一批替换。', [
+                'matched' => $preview['matched'], 'samples' => [], 'receipt' => $receipt,
+            ], true)->code(422);
+        }
+    }
+
+    private function replacementView(array $input, string $message = '', array $preview = [], bool $error = false): Response
+    {
+        $pdo = $this->pdo();
+        $tables = $this->replacer->tables($pdo);
+        $fields = [];
+        try { $fields = $this->replacer->fields($pdo, $input['table']); }
+        catch (InvalidArgumentException $invalid) { $message = $invalid->getMessage(); $error = true; }
+        return view('/admin/database/replace', [
+            'tables' => $tables, 'fields' => $fields, 'input' => $input, 'preview' => $preview,
+            'message' => $message, 'isError' => $error, 'csrf' => $this->csrf->get(),
+        ])->header(['Cache-Control' => 'no-store, private']);
+    }
+
+    private function pdo(): PDO
+    {
+        $pdo = Db::connect()->getPdo();
+        if (!$pdo instanceof PDO) throw new HttpException(500, '无法连接数据库');
+        return $pdo;
+    }
+
     public function backup(): Response
     {
         $this->guardCsrf();
@@ -52,43 +152,9 @@ final class Database extends BaseController
         if ($handle === false) throw new HttpException(500, '无法创建备份文件');
         $complete = false;
         try {
-            $this->writeAll($handle, "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n\n");
             $pdo = Db::connect()->getPdo();
             if (!$pdo instanceof \PDO) throw new HttpException(500, '无法连接数据库进行备份');
-            $bufferedQueryAttribute = $this->mysqlBufferedQueryAttribute();
-            $pdo->setAttribute($bufferedQueryAttribute, false);
-            try {
-                $pdo->exec('SET TRANSACTION ISOLATION LEVEL REPEATABLE READ');
-                $pdo->beginTransaction();
-                $snapshot = $pdo->query('SELECT 1 FROM `' . $tables[0] . '` LIMIT 1');
-                if ($snapshot !== false) $snapshot->closeCursor();
-                foreach ($tables as $table) {
-                    $createStatement = $pdo->query('SHOW CREATE TABLE `' . $table . '`');
-                    $createRow = $createStatement !== false ? ($createStatement->fetch(\PDO::FETCH_ASSOC) ?: []) : [];
-                    if ($createStatement !== false) $createStatement->closeCursor();
-                    $create = (string) ($createRow['Create Table'] ?? '');
-                    if ($create === '') throw new HttpException(500, '无法读取数据表结构：' . $table);
-                    $this->writeAll($handle, 'DROP TABLE IF EXISTS `' . $table . "`;\n" . $create . ";\n\n");
-                    $rows = $pdo->query('SELECT * FROM `' . $table . '`', \PDO::FETCH_ASSOC);
-                    while ($rows !== false && ($row = $rows->fetch(\PDO::FETCH_ASSOC)) !== false) {
-                        $columns = array_map(static fn (string $column): string => '`' . str_replace('`', '``', $column) . '`', array_keys($row));
-                        $values = array_map(static function (mixed $value) use ($pdo): string {
-                            if ($value === null) return 'NULL';
-                            return $pdo->quote((string) $value);
-                        }, array_values($row));
-                        $this->writeAll($handle, 'INSERT INTO `' . $table . '` (' . implode(',', $columns) . ') VALUES (' . implode(',', $values) . ");\n");
-                    }
-                    if ($rows !== false) $rows->closeCursor();
-                    $this->writeAll($handle, "\n");
-                }
-                $this->writeBackupTriggers($handle, $pdo, $tables);
-                $pdo->commit();
-            } finally {
-                if ($pdo->inTransaction()) $pdo->rollBack();
-                $pdo->setAttribute($bufferedQueryAttribute, true);
-            }
-            $this->writeAll($handle, "SET FOREIGN_KEY_CHECKS=1;\n");
-            if (!fflush($handle)) throw new HttpException(500, '无法写完备份文件');
+            (new MySqlBackup())->dump($pdo, $handle, $tables);
             $complete = true;
         } finally {
             fclose($handle);
@@ -201,7 +267,7 @@ final class Database extends BaseController
     {
         if (!preg_match('/^feifeicms-v(?:2|4)-[0-9]{8}-[0-9]{6}-[a-f0-9]{6}\.sql$/', $name)) throw new HttpException(404, '备份不存在');
         $path = $this->backupDir() . DIRECTORY_SEPARATOR . $name;
-        if (!is_file($path)) throw new HttpException(404, '备份不存在');
+        if (!is_file($path) || is_link($path) || is_link($this->backupDir())) throw new HttpException(404, '备份不存在');
         return $path;
     }
 
@@ -218,46 +284,7 @@ final class Database extends BaseController
     /** @param resource $handle @param list<string> $tables */
     private function writeBackupTriggers($handle, \PDO $pdo, array $tables): void
     {
-        $query = $pdo->query("SELECT TRIGGER_NAME,EVENT_MANIPULATION,EVENT_OBJECT_TABLE,ACTION_TIMING,ACTION_STATEMENT FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() AND TRIGGER_NAME LIKE 'ffx\\_%' ORDER BY TRIGGER_NAME");
-        $triggers = $query !== false ? $query->fetchAll(\PDO::FETCH_ASSOC) : [];
-        if ($query !== false) $query->closeCursor();
-        foreach ($triggers as $trigger) {
-            $name = (string) $trigger['TRIGGER_NAME'];
-            $table = (string) $trigger['EVENT_OBJECT_TABLE'];
-            $when = strtoupper((string) $trigger['ACTION_TIMING']);
-            $event = strtoupper((string) $trigger['EVENT_MANIPULATION']);
-            $body = trim((string) $trigger['ACTION_STATEMENT']);
-            if (!in_array($table, $tables, true)) continue;
-            if (!preg_match('/^ffx_[a-z0-9_]+$/', $name) || !preg_match('/^ffx_[a-z0-9_]+$/', $table)
-                || !in_array($when, ['BEFORE', 'AFTER'], true) || !in_array($event, ['INSERT', 'UPDATE', 'DELETE'], true)
-                || $body === '' || str_contains($body, ';')) {
-                throw new HttpException(500, '无法安全备份触发器：' . $name);
-            }
-            $this->writeAll($handle, 'CREATE TRIGGER `' . $name . '` ' . $when . ' ' . $event
-                . ' ON `' . $table . '` FOR EACH ROW ' . $body . ";\n");
-        }
-    }
-
-    /** @param resource $handle */
-    private function writeAll($handle, string $contents): void
-    {
-        $length = strlen($contents);
-        $written = 0;
-        while ($written < $length) {
-            $bytes = fwrite($handle, substr($contents, $written));
-            if ($bytes === false || $bytes === 0) throw new HttpException(500, '备份文件写入失败');
-            $written += $bytes;
-        }
-    }
-
-    private function mysqlBufferedQueryAttribute(): int
-    {
-        $constant = class_exists('Pdo\\Mysql')
-            ? 'Pdo\\Mysql::ATTR_USE_BUFFERED_QUERY'
-            : 'PDO::MYSQL_ATTR_USE_BUFFERED_QUERY';
-        $value = constant($constant);
-        if (!is_int($value)) throw new HttpException(500, '当前 PDO MySQL 驱动不支持流式备份');
-        return $value;
+        (new MySqlBackup())->writeTriggers($handle, $pdo, $tables);
     }
 
     private function guardCsrf(): void

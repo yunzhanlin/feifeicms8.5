@@ -1,6 +1,6 @@
 {
     "name": "yunzhanlin/feifeicms8.5",
-    "description": "飞飞影视 FeiFeiCMS 8.5.261004.3 正式版，基于 ThinkPHP 8，支持 PHP 8、MySQL 5.7/8、Redis 和 Meilisearch",
+    "description": "飞飞影视 FeiFeiCMS 8.5.261005 正式版，基于 ThinkPHP 8，支持 PHP 8、MySQL 5.7/8、Redis 和 Meilisearch",
     "type": "project",
     "keywords": [
         "framework",

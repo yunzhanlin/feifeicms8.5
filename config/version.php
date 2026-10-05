@@ -10,7 +10,7 @@ declare(strict_types=1);
  */
 return [
     'name' => 'FeiFeiCMS',
-    'version' => '8.5.261004.3',
-    'display' => '8.5.261004.3',
+    'version' => '8.5.261005',
+    'display' => '8.5.261005',
     'channel' => 'stable',
 ];

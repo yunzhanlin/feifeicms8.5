@@ -2,6 +2,7 @@
 // 全局中间件定义文件
 return [
     app\middleware\SecurityHeaders::class,
+    app\middleware\PrivateFiles::class,
     app\middleware\SiteAvailability::class,
     // 全局请求缓存
     // \think\middleware\CheckRequestCache::class,

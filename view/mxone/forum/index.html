@@ -1,0 +1,22 @@
+{assign name="pageActive" value="guestbook" /}
+{include file="mxone/common/head" /}
+{include file="mxone/common/header" /}
+<main class="mx-wrap mx-main">
+    <section class="mx-block">
+        <div class="mx-title"><h1>{$category.name}</h1><span>社区</span></div>
+        {notempty name="items"}
+        <div class="mx-list">
+            {volist name="items" id="item"}
+            <article class="mx-list-card">
+                <h2>{$item.title|default='留言'}</h2>
+                <p>{$item.content}</p>
+                <small>{$item.author_name|default='访客'} · {$item.created_at}</small>
+            </article>
+            {/volist}
+        </div>
+        <div class="mx-pager">{$pagination|raw}</div>
+        {else /}<div class="mx-empty">暂时没有内容。</div>
+        {/notempty}
+    </section>
+</main>
+{include file="mxone/common/footer" /}

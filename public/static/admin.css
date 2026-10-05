@@ -6,6 +6,22 @@
 .update-dialog p { margin: 12px 14px; line-height: 1.7; }
 .update-dialog .update-actions { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 14px; border-top: 1px solid #c9dcef; }
 .update-dialog button, [data-update-start] { padding: 4px 12px; border: 1px solid #9db8d5; background: #d5ebfa; color: #125397; cursor: pointer; }
+.database-replace-form { width: 99%; margin: 0 auto 10px; border: 1px solid var(--ff-border); }
+.database-replace-form .legacy-form-row > label { padding: 8px 8px 8px 0; border-right: 1px solid var(--ff-border); color: var(--ff-ink); text-align: right; }
+.database-replace-form .legacy-form-row > div { min-width: 0; padding: 5px 8px; }
+.database-replace-form .legacy-form-row > div > input, .database-replace-form textarea { width: 80%; max-width: 850px; }
+.database-replace-form textarea { height: 80px; min-height: 80px; }
+.database-replace-form [data-replace-table] { width: 80%; height: 150px; max-width: 850px; }
+.database-replace-fields { width: 80%; padding: 8px; border: 1px solid #d1dce7; background: #fefff0; line-height: 2; }
+.database-replace-fields button.link-button { height: auto; min-height: 0; margin: 0 12px 0 0; padding: 0; border: 0; background: none; font: inherit; line-height: 2; letter-spacing: 0; }
+.database-replace-fields .link-button.active { color: #c51616 !important; font-weight: bold; }
+.database-replace-fields .link-button:disabled { color: #999 !important; cursor: not-allowed; text-decoration: none; }
+.database-replace-form .form-actions a { margin-left: 15px; }
+.database-replace-preview[hidden] { display: none !important; }
+.database-replace-samples { table-layout: fixed; }
+.database-replace-samples td { text-align: left; vertical-align: top; }
+.database-replace-samples pre { max-height: 180px; margin: 0; overflow: auto; white-space: pre-wrap; overflow-wrap: anywhere; font: inherit; }
+@media (max-width: 760px) { .database-replace-form [data-replace-table], .database-replace-fields, .database-replace-form .legacy-form-row > div > input, .database-replace-form textarea { width: 100%; } }
 [data-update-start][hidden] { display: none !important; }
 
 :root {

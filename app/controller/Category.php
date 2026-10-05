@@ -111,7 +111,7 @@ final class Category extends BaseController
     {
         $pager = Db::table('ffx_comments')->where('status', 'approved')->where('target_type', 'site')
             ->order('created_at', 'desc')->paginate(['list_rows' => $this->settings->int('admin.comments.page_size', 30, 1, 100), 'query' => $this->request->get()]);
-        return view('forum/index', $this->frontend->shared((string) $category['name'] . ' - ' . $this->siteName()) + [
+        return view(ff_theme_view('forum/index'), $this->frontend->shared((string) $category['name'] . ' - ' . $this->siteName()) + [
             'category' => $category, 'items' => $pager->items(), 'pagination' => $pager->render(),
         ]);
     }

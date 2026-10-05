@@ -1,4 +1,0 @@
-{include file="layout/header" /}
-<section class="section-block"><div class="section-heading"><div><p class="eyebrow">专题</p><h1>{$category.name|htmlspecialchars|raw}</h1></div></div>
-{if !empty($items)}<div class="feature-grid">{volist name="items" id="item"}<article><a href="/special/{$item.id}">{if !empty($item.banner_url)}<img src="{$item.banner_url|htmlspecialchars|raw}" alt="{$item.title|htmlspecialchars|raw}">{/if}<h2>{$item.title|htmlspecialchars|raw}</h2><p>{$item.summary|default=''|strip_tags|htmlspecialchars|raw}</p></a></article>{/volist}</div><div class="pagination">{$pagination|raw}</div>{else /}<div class="empty-state">暂时没有专题。</div>{/if}</section>
-{include file="layout/footer" /}

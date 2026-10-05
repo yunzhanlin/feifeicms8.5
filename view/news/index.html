@@ -1,4 +1,0 @@
-{include file="layout/header" /}
-<section class="section-block"><div class="section-heading"><div><p class="eyebrow">资讯</p><h1>{$category.name|htmlspecialchars|raw}</h1></div></div>
-{if !empty($items)}<div class="content-list">{volist name="items" id="item"}<article><a href="/news/{$item.id}"><h2>{$item.title|htmlspecialchars|raw}</h2><p>{$item.summary|default=''|strip_tags|htmlspecialchars|raw}</p><small>{$item.published_at|default=''|htmlspecialchars|raw}</small></a></article>{/volist}</div><div class="pagination">{$pagination|raw}</div>{else /}<div class="empty-state">暂时没有资讯。</div>{/if}</section>
-{include file="layout/footer" /}

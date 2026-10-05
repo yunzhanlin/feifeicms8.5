@@ -246,6 +246,10 @@ Route::group('admin', function (): void {
     Route::post('administrators/:id/delete', 'admin.Administrators/delete')->pattern(['id' => '\\d+']);
 
     Route::get('database', 'admin.Database/index');
+    Route::get('database/replace', 'admin.Database/replace');
+    Route::get('database/replace/fields', 'admin.Database/replacementFields');
+    Route::post('database/replace/preview', 'admin.Database/previewReplace');
+    Route::post('database/replace', 'admin.Database/runReplace');
     Route::post('database/backup', 'admin.Database/backup');
     Route::post('database/check', 'admin.Database/check');
     Route::post('database/repair', 'admin.Database/repair');

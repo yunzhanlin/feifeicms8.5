@@ -1,3 +1,0 @@
-{include file="layout/header" /}
-<article class="article-page"><p class="eyebrow">资讯</p><h1>{$item.title|htmlspecialchars|raw}</h1><p class="article-meta">{$item.author|default=''|htmlspecialchars|raw} · {$item.published_at|default=''|htmlspecialchars|raw}</p>{if !empty($item.cover_url)}<img class="article-cover" src="{$item.cover_url|htmlspecialchars|raw}" alt="">{/if}<div class="article-body">{$item.content|default=''|raw}</div></article>
-{include file="layout/footer" /}

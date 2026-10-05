@@ -1,7 +1,27 @@
-<IfModule mod_rewrite.c>
-  Options +FollowSymlinks -Multiviews
-  RewriteEngine On
+Options -Indexes -MultiViews
 
+<IfModule mod_authz_core.c>
+  Require all granted
+</IfModule>
+
+<FilesMatch "^(?:\.|composer\.(?:json|lock|phar)|phpunit\.xml|Dockerfile|docker-compose\.(?:yml|yaml)|think$)">
+  <IfModule mod_authz_core.c>
+    Require all denied
+  </IfModule>
+</FilesMatch>
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteCond %{REQUEST_FILENAME} -l
+  RewriteRule ^ - [F,END]
+  RewriteRule ^(?:(?:public|index\.php|admin\.php|api\.php|install\.php)/)*(?:view|tpl|template|templates|app|config|database|deploy|docker|docs|extend|plugins|route|runtime|scripts|tests|vendor|qa)(?:[/.]|$) - [F,END,NC]
+  RewriteRule ^legacy/(?:Lib|Tpl|Runtime|Uploads)(?:[/.]|$) - [F,END,NC]
+  RewriteRule ^(?:uploads|storage|static|mxstatic|player|legacy)/.*\.(?:php[0-9]?|phtml|phar|cgi|pl|py|sh)(?:/|$) - [F,END,NC]
+  RewriteRule (^|/)\.(?!well-known(?:/|$)) - [F,END]
+
+  # Aliases use index.php; only index.php and install.php execute directly.
+  RewriteRule ^(?:admin|api)\.php(?:/(.*))?$ index.php/$1 [QSA,PT,L]
+  RewriteRule ^(?!index\.php(?:/|$)|install\.php$).*\.(?:php[0-9]?|phtml|phar)(?:/|$) - [F,END,NC]
   RewriteCond %{REQUEST_FILENAME} !-d
   RewriteCond %{REQUEST_FILENAME} !-f
   RewriteRule ^(.*)$ index.php/$1 [QSA,PT,L]

@@ -22,7 +22,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: curl, fileinfo, json, mbstring, openssl, pdo_mysql
+          extensions: curl, fileinfo, json, mbstring, openssl, pdo_mysql, zip
           coverage: none
           tools: composer:v2
       - uses: actions/cache@v5
@@ -50,6 +50,10 @@ jobs:
   mysql-integration:
     name: MySQL ${{ matrix.mysql }} integration
     runs-on: ubuntu-latest
+    env:
+      FEIFEI_AUDIT_MYSQL_DSN: 'mysql:host=127.0.0.1;dbname=audit_feifeicms;charset=utf8mb4'
+      FEIFEI_AUDIT_MYSQL_USER: feifeicms
+      FEIFEI_AUDIT_MYSQL_PASS: feifeicms-test-password
     strategy:
       fail-fast: false
       matrix:
@@ -58,7 +62,7 @@ jobs:
       mysql:
         image: mysql:${{ matrix.mysql }}
         env:
-          MYSQL_DATABASE: feifeicms_test
+          MYSQL_DATABASE: audit_feifeicms
           MYSQL_USER: feifeicms
           MYSQL_PASSWORD: feifeicms-test-password
           MYSQL_ROOT_PASSWORD: root-test-password
@@ -83,7 +87,7 @@ jobs:
       - uses: shivammathur/setup-php@v2
         with:
           php-version: '8.5'
-          extensions: curl, fileinfo, json, mbstring, openssl, pdo_mysql, redis
+          extensions: curl, fileinfo, json, mbstring, openssl, pdo_mysql, redis, zip
           coverage: none
           tools: composer:v2
       - run: composer install --no-interaction --prefer-dist
@@ -93,7 +97,7 @@ jobs:
         run: |
           cp .example.env .env
           sed -i 's/^DB_HOST.*/DB_HOST = 127.0.0.1/' .env
-          sed -i 's/^DB_NAME.*/DB_NAME = feifeicms_test/' .env
+          sed -i 's/^DB_NAME.*/DB_NAME = audit_feifeicms/' .env
           sed -i 's/^DB_USER.*/DB_USER = feifeicms/' .env
           sed -i 's/^DB_PASS.*/DB_PASS = feifeicms-test-password/' .env
           sed -i 's/^CACHE_DRIVER.*/CACHE_DRIVER = redis/' .env
@@ -101,7 +105,7 @@ jobs:
           sed -i 's/^SEARCH_DRIVER.*/SEARCH_DRIVER = mysql/' .env
           mkdir -p runtime public/uploads
       - name: Load MySQL schema
-        run: mysql --protocol=TCP -h127.0.0.1 -ufeifeicms -pfeifeicms-test-password feifeicms_test < database/schema.sql
+        run: mysql --protocol=TCP -h127.0.0.1 -ufeifeicms -pfeifeicms-test-password audit_feifeicms < database/schema.sql
       - name: Permit trusted triggers in isolated CI MySQL
         run: mysql --protocol=TCP -h127.0.0.1 -uroot -proot-test-password -e 'SET GLOBAL log_bin_trust_function_creators=1'
       - name: Apply current schema migrations

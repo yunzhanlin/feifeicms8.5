@@ -12,6 +12,7 @@ use app\service\SearchIndexer;
 use app\service\SiteSettings;
 use app\service\SafeRemoteUrl;
 use app\service\ThemeRegistry;
+use app\service\TemplateFiles;
 use GuzzleHttp\Client;
 use think\exception\HttpException;
 use think\facade\Cache;
@@ -21,7 +22,7 @@ use Throwable;
 
 final class Tools extends BaseController
 {
-    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly SiteSettings $settings, private readonly SafeRemoteUrl $safeUrl, private readonly ThemeRegistry $themes, private readonly SearchIndexer $searchIndexer, private readonly FrontendCache $frontendCache, private readonly MeilisearchClientFactory $searchClient) { parent::__construct($app); }
+    public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly AuditLogger $audit, private readonly SiteSettings $settings, private readonly SafeRemoteUrl $safeUrl, private readonly ThemeRegistry $themes, private readonly SearchIndexer $searchIndexer, private readonly FrontendCache $frontendCache, private readonly MeilisearchClientFactory $searchClient, private readonly TemplateFiles $templateFiles) { parent::__construct($app); }
 
     public function cache(): Response
     {
@@ -134,6 +135,7 @@ final class Tools extends BaseController
         $selected = trim((string) $this->request->get('file', ''));
         if ($selected !== '') {
             $path = $this->templatePath($selected);
+            if (filesize($path) > 2_000_000) throw new HttpException(422, '模板文件过大');
             $content = file_get_contents($path) ?: '';
             $directory = dirname($this->normalizeTemplateRelative($selected));
             if ($directory === '.') $directory = '';
@@ -145,7 +147,7 @@ final class Tools extends BaseController
                 // the textarea so source code is displayed as source, not as &quot;/&lt;.
                 'editorContent' => htmlspecialchars($content, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
                 'csrf' => $this->csrf->get(),
-            ]);
+            ])->header(['Cache-Control' => 'no-store, private']);
         }
 
         $currentPath = $this->normalizeTemplateRelative((string) $this->request->get('path', ''), true);
@@ -153,9 +155,8 @@ final class Tools extends BaseController
         $entries = [];
 
         // The top level is a theme selector, not a raw view/ directory browser.
-        // Shared fallback views such as view/vod, view/news and view/layout are
-        // implementation details; only complete themes discovered by the same
-        // registry used by the frontend theme selector belong here.
+        // Only complete frontend themes belong here; admin/install are private
+        // system views and static resources are kept outside the view tree.
         $items = [];
         if ($currentPath === '') {
             foreach (array_keys($this->themes->options()) as $theme) {
@@ -166,7 +167,8 @@ final class Tools extends BaseController
             foreach (new \DirectoryIterator($directory) as $item) {
                 // DirectoryIterator reuses the same mutable iterator object. Store an
                 // immutable SplFileInfo snapshot or every row becomes the final item.
-                if (!$item->isDot() && !$item->isLink()) $items[] = new \SplFileInfo($item->getPathname());
+                if (!$item->isDot() && !$item->isLink() && !str_starts_with($item->getFilename(), '.')
+                    && ($item->isDir() || $item->getExtension() === 'html')) $items[] = new \SplFileInfo($item->getPathname());
             }
         }
 
@@ -206,7 +208,14 @@ final class Tools extends BaseController
         $before = file_get_contents($path);
         $content = (string) $this->request->post('content', '');
         if (strlen($content) > 2_000_000) throw new HttpException(422, '模板文件过大');
-        if (file_put_contents($path, $content, LOCK_EX) === false) throw new HttpException(500, '模板保存失败');
+        $temporary = tempnam(dirname($path), '.template-');
+        if ($temporary === false) throw new HttpException(500, '无法创建模板临时文件');
+        try {
+            if (file_put_contents($temporary, $content, LOCK_EX) !== strlen($content) || !chmod($temporary, 0644)
+                || !rename($temporary, $path)) throw new HttpException(500, '模板保存失败');
+        } finally {
+            if (is_file($temporary)) @unlink($temporary);
+        }
         $this->audit->record('template.update', 'template', $file, ['sha256' => hash('sha256', (string) $before)], ['sha256' => hash('sha256', $content)]);
         $directory = dirname($this->normalizeTemplateRelative($file));
         return redirect('/admin/tools/templates' . ($directory === '.' ? '' : '?path=' . rawurlencode($directory)));
@@ -220,11 +229,20 @@ final class Tools extends BaseController
         $file = ltrim($directory . '/' . $name, '/');
         $path = $this->newTemplatePath($file);
         if (file_exists($path)) throw new HttpException(409, '模板文件已存在');
-        $parent = dirname($path);
-        if (!is_dir($parent) && !mkdir($parent, 0755, true) && !is_dir($parent)) throw new HttpException(500, '模板目录创建失败');
         $content = (string) $this->request->post('content', "{include file=\"common/header\" /}\n{include file=\"common/footer\" /}\n");
         if ($content === '' || strlen($content) > 2_000_000) throw new HttpException(422, '模板内容不能为空且不能超过 2MB');
-        if (file_put_contents($path, $content, LOCK_EX) === false) throw new HttpException(500, '模板创建失败');
+        $parent = dirname($path);
+        if (!is_dir($parent) && !mkdir($parent, 0755, true) && !is_dir($parent)) throw new HttpException(500, '模板目录创建失败');
+        $handle = @fopen($path, 'xb');
+        if ($handle === false) throw new HttpException(409, '模板已存在或无法创建');
+        $complete = false;
+        try {
+            if (fwrite($handle, $content) !== strlen($content) || !fflush($handle)) throw new HttpException(500, '模板创建失败');
+            $complete = true;
+        } finally {
+            fclose($handle);
+            if (!$complete) @unlink($path);
+        }
         chmod($path, 0644);
         $this->audit->record('template.create', 'template', $file, null, ['sha256' => hash('sha256', $content)]);
         return redirect('/admin/tools/templates?path=' . rawurlencode($directory));
@@ -540,53 +558,14 @@ final class Tools extends BaseController
 
     public function replace(): Response
     {
-        return view('/admin/tools/replace', [
-            'message' => mb_substr((string) $this->request->get('message', ''), 0, 240),
-            'csrf' => $this->csrf->get(),
-        ]);
+        return redirect('/admin/database/replace');
     }
 
     public function runReplace(): Response
     {
         $this->guardCsrf();
-        $scope = (string) $this->request->post('scope', 'media');
-        $field = (string) $this->request->post('field', 'title');
-        $search = (string) $this->request->post('search', '');
-        $replacement = (string) $this->request->post('replacement', '');
-        $preview = (string) $this->request->post('preview', '') === '1';
-        $maps = [
-            'media' => ['ffx_media', ['title', 'subtitle', 'original_title', 'summary', 'content', 'area', 'language']],
-            'article' => ['ffx_articles', ['title', 'summary', 'content', 'author', 'source_url']],
-            'person' => ['ffx_people', ['name', 'aliases', 'summary', 'biography', 'nationality', 'profession']],
-            'topic' => ['ffx_topics', ['title', 'summary', 'content']],
-        ];
-        if (!isset($maps[$scope])) throw new HttpException(422, '内容类型无效');
-        [$table, $fields] = $maps[$scope];
-        if (!in_array($field, $fields, true)) throw new HttpException(422, '替换字段不在白名单中');
-        if ($search === '' || mb_strlen($search) > 500 || mb_strlen($replacement) > 5000) throw new HttpException(422, '查找内容不能为空，且内容长度必须合理');
-
-        $rows = Db::table($table)->field('id,' . $field)->whereNull('deleted_at')
-            ->whereLike($field, '%' . addcslashes($search, '%_\\') . '%')->order('id')->limit(5001)->select()->toArray();
-        if (count($rows) > 5000) throw new HttpException(422, '匹配超过 5000 条，请缩小查找范围后分批处理');
-        $changed = 0;
-        if (!$preview) {
-            Db::transaction(function () use ($rows, $table, $field, $search, $replacement, &$changed): void {
-                foreach ($rows as $row) {
-                    $old = (string) ($row[$field] ?? '');
-                    $new = str_replace($search, $replacement, $old);
-                    if ($new === $old) continue;
-                    Db::table($table)->where('id', (int) $row['id'])->update([$field => $new, 'updated_at' => gmdate('Y-m-d H:i:s')]);
-                    $changed++;
-                }
-            });
-            $this->audit->record('tools.data_replace', $scope, $field, null, [
-                'matched' => count($rows), 'changed' => $changed,
-                'search_sha256' => hash('sha256', $search), 'replacement_sha256' => hash('sha256', $replacement),
-            ]);
-            if ($changed > 0) $this->frontendCache->invalidateHome();
-        }
-        $message = $preview ? '预览完成：匹配 ' . count($rows) . ' 条，不会修改数据' : '替换完成：匹配 ' . count($rows) . ' 条，实际更新 ' . $changed . ' 条';
-        return redirect('/admin/tools/replace?message=' . rawurlencode($message));
+        // Older bookmarked forms must go through the new preview/confirmation flow.
+        return redirect('/admin/database/replace?message=' . rawurlencode('数据替换已移至数据库管理，请重新选择表和字段并预览。'), 303);
     }
 
     public function staticPages(): Response
@@ -716,56 +695,28 @@ final class Tools extends BaseController
 
     private function templatePath(string $relative): string
     {
-        $relative = $this->normalizeTemplateRelative($relative);
-        $extension = strtolower(pathinfo($relative, PATHINFO_EXTENSION));
-        if (!in_array($extension, $this->templateEditableExtensions(), true)) throw new HttpException(422, '该文件类型不允许在线编辑');
-        $root = $this->templateRoot();
-        $path = realpath($root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative));
-        if ($root === false || $path === false || !str_starts_with($path, $root . DIRECTORY_SEPARATOR) || !is_file($path)) throw new HttpException(404, '模板文件不存在');
-        return $path;
+        return $this->templateFiles->file($relative);
     }
 
     private function newTemplatePath(string $relative): string
     {
-        $relative = $this->normalizeTemplateRelative($relative);
-        $extension = strtolower(pathinfo($relative, PATHINFO_EXTENSION));
-        if (!in_array($extension, $this->templateEditableExtensions(), true)) throw new HttpException(422, '模板后缀不支持');
-        $root = $this->templateRoot();
-        return $root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative);
-    }
-
-    private function templateRoot(): string
-    {
-        $root = realpath(root_path() . 'view');
-        if ($root === false) throw new HttpException(500, '模板目录不存在');
-        return $root;
+        return $this->templateFiles->file($relative, true);
     }
 
     private function templateDirectoryPath(string $relative): string
     {
-        $root = $this->templateRoot();
-        if ($relative === '') return $root;
-        $path = realpath($root . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $relative));
-        if ($path === false || !str_starts_with($path, $root . DIRECTORY_SEPARATOR) || !is_dir($path)) throw new HttpException(404, '模板目录不存在');
-        return $path;
+        return $this->templateFiles->directory($relative);
     }
 
     private function normalizeTemplateRelative(string $relative, bool $allowEmpty = false): string
     {
-        $relative = trim(str_replace('\\', '/', rawurldecode($relative)), '/');
-        if ($relative === '') {
-            if ($allowEmpty) return '';
-            throw new HttpException(422, '模板路径无效');
-        }
-        if (str_contains($relative, "\0") || !preg_match('#^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$#', $relative)) throw new HttpException(422, '模板路径无效');
-        if ($relative === 'admin' || str_starts_with($relative, 'admin/')) throw new HttpException(403, '后台管理模板不允许在此编辑');
-        return $relative;
+        return $this->templateFiles->normalize($relative, $allowEmpty);
     }
 
     /** @return list<string> */
     private function templateEditableExtensions(): array
     {
-        return ['html', 'htm', 'shtml', 'shtm', 'xml', 'js', 'css', 'tpl', 'txt'];
+        return ['html'];
     }
 
     private function templateDescription(string $relative): string

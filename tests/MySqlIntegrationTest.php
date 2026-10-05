@@ -15,20 +15,16 @@ final class MySqlIntegrationTest extends TestCase
 
     protected function setUp(): void
     {
-        $path = dirname(__DIR__) . '/.env';
-        if (!is_file($path)) self::markTestSkipped('MySQL integration environment is not configured');
-        $env = parse_ini_file($path);
-        if (!is_array($env)) self::markTestSkipped('MySQL integration database is not configured');
-        $value = static function (string $key, string $default = '') use ($env): string {
-            $system = getenv($key);
-            return is_string($system) && $system !== '' ? $system : (string) ($env[$key] ?? $default);
-        };
-        if ($value('DB_NAME') === '') self::markTestSkipped('MySQL integration database is not configured');
+        // These tests write fixtures. Never infer authority to use the live
+        // website's .env merely because a developer runs composer test.
+        $dsn = getenv('FEIFEI_AUDIT_MYSQL_DSN');
+        if (!$dsn) self::markTestSkipped('Disposable MySQL audit database is not configured');
+        if (!preg_match('/;dbname=audit_[a-z0-9_]+(?:;|$)/D', $dsn)) self::fail('Refusing to modify a non-audit database');
         try {
             $this->pdo = new PDO(
-                sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $value('DB_HOST', '127.0.0.1'), (int) $value('DB_PORT', '3306'), $value('DB_NAME')),
-                $value('DB_USER', 'root'),
-                $value('DB_PASS'),
+                $dsn,
+                getenv('FEIFEI_AUDIT_MYSQL_USER') ?: 'root',
+                getenv('FEIFEI_AUDIT_MYSQL_PASS') ?: '',
                 [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
             );
         } catch (\Throwable $exception) {

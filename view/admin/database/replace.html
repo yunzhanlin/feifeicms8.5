@@ -1,0 +1,34 @@
+{include file="admin/layout/header" /}
+<div class="title"><div class="tabs"><a class="active" href="/admin/database/replace">数据批量替换</a></div><small>批量替换会直接修改数据库，请先备份，预览后再确认执行。</small></div>
+{if condition="$message neq ''"}<div class="notice {if condition='$isError'}danger{/if}" role="status">{$message|htmlspecialchars|raw}</div>{/if}
+<form class="legacy-settings-form database-replace-form" method="post" action="/admin/database/replace/preview" data-database-replace>
+    <input type="hidden" name="_token" value="{$csrf|htmlspecialchars|raw}">
+    <div class="legacy-form-row"><label for="exptable">选择数据表与字段：</label><div>
+        <select name="table" id="exptable" size="12" data-replace-table aria-describedby="replace-help">
+        {volist name="tables" id="table"}<option value="{$table.name|htmlspecialchars|raw}" {if condition="$table.name eq $input.table"}selected{/if}>{$table.name|htmlspecialchars|raw}（{$table.label|htmlspecialchars|raw}）{if condition="$table.reason neq ''"} [受保护]{/if}</option>{/volist}
+        </select>
+        <div class="database-replace-fields" data-replace-fields aria-live="polite">
+            {volist name="fields" id="field"}<button type="button" class="link-button" data-replace-field="{$field.name|htmlspecialchars|raw}" title="{$field.definition|htmlspecialchars|raw}{if condition='$field.reason neq ""'}；{$field.reason|htmlspecialchars|raw}{/if}" {if condition="!$field.editable"}disabled{/if}>{$field.name|htmlspecialchars|raw}</button>{/volist}
+        </div>
+        <p class="muted" id="replace-help">选择表后点击字段名。支持文本和 JSON；主键、数字、日期、生成字段及敏感系统数据不可替换。</p>
+    </div></div>
+    <div class="legacy-form-row"><label for="rpfield">要替换的字段：</label><div><input name="field" id="rpfield" value="{$input.field|htmlspecialchars|raw}" required maxlength="64" pattern="[a-z][a-z0-9_]*"><span class="red"> *</span></div></div>
+    <div class="legacy-form-row"><label for="rpstring">被替换的内容：</label><div><textarea name="search" id="rpstring" rows="4" required maxlength="500">{$input.search|htmlspecialchars|raw}</textarea><p class="muted">按原文替换，区分大小写；% 和 _ 按普通文字处理，不支持正则。包括归档或隐藏的记录。</p></div></div>
+    <div class="legacy-form-row"><label for="tostring">替换为的内容：</label><div><textarea name="replacement" id="tostring" rows="4" maxlength="5000">{$input.replacement|htmlspecialchars|raw}</textarea><p class="muted">留空表示删除匹配文字。JSON 字段必须保持合法 JSON，不能删除整段必需结构。</p></div></div>
+    <div class="legacy-form-row"><label for="condition">选择替换条件：</label><div><input name="condition" id="condition" value="{$input.condition|htmlspecialchars|raw}" maxlength="1024" placeholder="留空全部替换，例如 id&gt;=100 AND status='published'"><p class="muted">支持 =、!=、&lt;&gt;、&gt;、&gt;=、&lt;、&lt;=、IS NULL、IS NOT NULL，可用 AND 连接；文字用单引号或双引号包围。只接受字段比较，不执行任意 SQL。</p><p class="muted">每次最多 50000 条；数据较多时按 ID 范围分批。修改内容或条件后须重新预览。</p></div></div>
+    <div class="form-actions"><button type="submit">预览匹配数量</button><button type="reset">重置</button><a href="/admin/database">先备份数据库</a></div>
+</form>
+{if condition="!empty($preview)"}
+<section class="section-block database-replace-preview" data-replace-preview>
+    <div class="section-heading"><h2>替换预览：匹配 {$preview.matched} 条</h2><small>尚未修改数据；最多显示 10 条、每条匹配位置附近的部分内容。确认有效期 10 分钟。</small></div>
+    <div class="notice">当前目标：<strong>{$input.table|htmlspecialchars|raw}.{$input.field|htmlspecialchars|raw}</strong>。替换后将清理相关前台缓存；视频索引由搜索任务增量同步。静态生成页面须另行重新生成。</div>
+    <div class="table-wrap"><table class="data-table database-replace-samples"><thead><tr><th width="100">记录主键</th><th>替换前（节选）</th><th>替换后（节选）</th></tr></thead><tbody>
+    {volist name="preview.samples" id="sample"}<tr><td>{$sample.row_key|htmlspecialchars|raw}</td><td><pre>{$sample.original|htmlspecialchars|raw}</pre></td><td><pre>{$sample.replacement|htmlspecialchars|raw}</pre></td></tr>{/volist}
+    </tbody></table></div>
+    {if condition="$preview.matched gt 0"}<form method="post" action="/admin/database/replace" data-replace-confirm data-confirm="确定替换上述范围？请确认已备份数据库。执行成功后无法直接撤销。">
+        <input type="hidden" name="_token" value="{$csrf|htmlspecialchars|raw}"><input type="hidden" name="receipt" value="{$preview.receipt|htmlspecialchars|raw}"><input type="hidden" name="confirm" value="REPLACE">
+        <div class="form-actions"><button type="submit">确认执行替换（{$preview.matched} 条）</button></div>
+    </form>{/if}
+</section>
+{/if}
+{include file="admin/layout/footer" /}

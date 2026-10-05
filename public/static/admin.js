@@ -33,7 +33,9 @@
         const target = new URL(link.href, window.location.origin);
         return target.pathname.replace(/\/$/, '') === path && target.search === window.location.search;
     });
-    (exact || menuLinks[0])?.classList.add('active');
+    const replacementLink = section === 'database' && path.startsWith('/admin/database/replace')
+        ? menuLinks.find((link) => new URL(link.href, window.location.origin).pathname === '/admin/database/replace') : null;
+    (replacementLink || exact || menuLinks[0])?.classList.add('active');
 
     const statusLabels = {
         published: '已发布', draft: '草稿', enabled: '已启用', disabled: '已禁用',
@@ -324,6 +326,74 @@
         });
     });
 
+    document.querySelectorAll('[data-database-replace]').forEach((form) => {
+        const table = form.querySelector('[data-replace-table]');
+        const fields = form.querySelector('[data-replace-fields]');
+        const fieldInput = form.querySelector('[name="field"]');
+        const preview = document.querySelector('[data-replace-preview]');
+        const submit = form.querySelector('button[type="submit"]');
+        if (!(table instanceof HTMLSelectElement) || !(fieldInput instanceof HTMLInputElement) || !fields) return;
+        let pending;
+        const invalidate = () => {
+            if (preview) preview.hidden = true;
+        };
+        const selectField = (name) => {
+            fieldInput.value = name;
+            invalidate();
+            fields.querySelectorAll('[data-replace-field]').forEach((item) => {
+                item.classList.toggle('active', item.dataset.replaceField === name);
+            });
+            form.querySelector('[name="search"]')?.focus();
+        };
+        fields.addEventListener('click', (event) => {
+            const button = event.target instanceof Element ? event.target.closest('[data-replace-field]') : null;
+            if (button instanceof HTMLButtonElement && !button.disabled) selectField(button.dataset.replaceField || '');
+        });
+        const loadFields = async () => {
+            pending?.abort();
+            const request = new AbortController();
+            pending = request;
+            fieldInput.value = '';
+            fields.textContent = '正在读取字段……';
+            if (submit instanceof HTMLButtonElement) submit.disabled = true;
+            try {
+                const response = await fetch(`/admin/database/replace/fields?table=${encodeURIComponent(table.value)}`, {
+                    headers: { Accept: 'application/json' }, credentials: 'same-origin', cache: 'no-store', signal: request.signal
+                });
+                const payload = await response.json();
+                if (!response.ok) throw new Error(payload.error || '字段读取失败');
+                if (pending !== request) return;
+                fields.replaceChildren();
+                payload.fields.forEach((field) => {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.className = 'link-button';
+                    button.dataset.replaceField = field.name;
+                    button.textContent = field.name;
+                    button.title = `${field.definition}${field.reason ? `；${field.reason}` : ''}`;
+                    button.disabled = !field.editable;
+                    fields.appendChild(button);
+                });
+                if (!payload.fields.some((field) => field.editable)) {
+                    const note = document.createElement('p');
+                    note.textContent = '该表没有可替换字段，请使用对应业务管理功能。';
+                    fields.appendChild(note);
+                }
+            } catch (error) {
+                if (pending === request && !request.signal.aborted) fields.textContent = error instanceof Error ? error.message : '字段读取失败，请刷新后重试。';
+            } finally {
+                if (pending === request && submit instanceof HTMLButtonElement) submit.disabled = false;
+            }
+        };
+        form.addEventListener('input', invalidate);
+        form.addEventListener('change', invalidate);
+        table.addEventListener('change', loadFields);
+        form.addEventListener('reset', () => {
+            invalidate();
+            queueMicrotask(loadFields);
+        });
+    });
+
     document.addEventListener('click', (event) => {
         const target = event.target instanceof Element ? event.target : null;
         const confirmedButton = target?.closest('button[data-confirm]');
@@ -336,6 +406,9 @@
         const form = event.target instanceof HTMLFormElement ? event.target : null;
         if (form?.dataset.confirm && !window.confirm(form.dataset.confirm)) {
             event.preventDefault();
+        }
+        if (form?.hasAttribute('data-replace-confirm') && !event.defaultPrevented) {
+            form.querySelectorAll('button[type="submit"]').forEach((button) => { button.disabled = true; });
         }
     });
 })();

@@ -31,10 +31,17 @@ final class Tags extends BaseController
             $query->whereLike('name', '%' . $keyword . '%');
         }
         $items = $query->limit(500)->select()->toArray();
+        $ids = array_map('intval', array_column($items, 'id'));
+        $usage = [];
+        if ($ids !== []) {
+            foreach (['article' => 'ffx_article_tags', 'media' => 'ffx_media_tags'] as $tagScope => $table) {
+                foreach (Db::table($table)->whereIn('tag_id', $ids)->field('tag_id,COUNT(*) AS usage_count')->group('tag_id')->select()->toArray() as $row) {
+                    $usage[$tagScope][(int) $row['tag_id']] = (int) $row['usage_count'];
+                }
+            }
+        }
         foreach ($items as &$item) {
-            $item['usage_count'] = $item['scope'] === 'article'
-                ? Db::table('ffx_article_tags')->where('tag_id', (int) $item['id'])->count()
-                : Db::table('ffx_media_tags')->where('tag_id', (int) $item['id'])->count();
+            $item['usage_count'] = $usage[$item['scope'] === 'article' ? 'article' : 'media'][(int) $item['id']] ?? 0;
         }
         unset($item);
         return view('/admin/tags/index', ['items' => $items, 'scope' => $scope, 'keyword' => $keyword, 'csrf' => $this->csrf->get()]);
