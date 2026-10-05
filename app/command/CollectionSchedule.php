@@ -21,6 +21,12 @@ final class CollectionSchedule extends Command
         $tasks = Db::table('ffx_cron_tasks')->where('status', 'enabled')->whereNotNull('source_id')->where('next_run_at', '<=', $now)->order('id')->select()->toArray();
         foreach ($tasks as $task) {
             Db::transaction(function () use ($task, $now, $schedule, &$count): void {
+                // The initial due list is only a hint. Serialize schedulers on
+                // the task row, then recheck status/time instead of racing the
+                // unique job key or overwriting another scheduler's next run.
+                $task = Db::table('ffx_cron_tasks')->where('id', $task['id'])->lock(true)->find();
+                if ($task === null || $task['status'] !== 'enabled' || empty($task['source_id'])
+                    || empty($task['next_run_at']) || (string) $task['next_run_at'] > $now) return;
                 $scheduledAt = new DateTimeImmutable((string) $task['next_run_at'], new DateTimeZone('UTC'));
                 $key = 'cron-' . $task['id'] . '-' . $scheduledAt->format('YmdHi');
                 if (Db::table('ffx_collection_jobs')->where('idempotency_key', $key)->count() < 1) {

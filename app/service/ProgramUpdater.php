@@ -53,10 +53,20 @@ final class ProgramUpdater
 
     public function failQueued(string $id, string $reason): void
     {
-        $job = $this->state();
-        if ($job === null || ($job['id'] ?? '') !== $id || ($job['status'] ?? '') !== 'queued') return;
-        $job['status'] = 'failed';
-        $this->progress($job, $reason);
+        $lock = fopen($this->directory() . '/update.lock', 'c');
+        if ($lock === false) return;
+        try {
+            // A worker that already acquired the execution lock owns the state.
+            // A late launcher error must not overwrite its running progress.
+            if (!flock($lock, LOCK_EX | LOCK_NB)) return;
+            $job = $this->state();
+            if ($job === null || ($job['id'] ?? '') !== $id || ($job['status'] ?? '') !== 'queued') return;
+            $job['status'] = 'failed';
+            $this->progress($job, $reason);
+        } finally {
+            flock($lock, LOCK_UN);
+            fclose($lock);
+        }
     }
 
     public function run(string $id): void
@@ -145,7 +155,7 @@ final class ProgramUpdater
     private function allowed(string $path): bool
     {
         if ($path === '' || str_contains($path, '\\') || str_contains($path, "\0") || str_starts_with($path, '/') || preg_match('~(^|/)\.\.?(/|$)~', $path)) return false;
-        if (in_array($path, ['think','composer.json','composer.lock','public/index.php','public/install.php','public/router.php','public/.htaccess','public/favicon.ico','public/robots.txt'], true)) return true;
+        if (in_array($path, ['think','.htaccess','composer.json','composer.lock','public/index.php','public/install.php','public/router.php','public/.htaccess','public/favicon.ico','public/robots.txt'], true)) return true;
         foreach (['app/','config/','database/migrations/','extend/','route/','view/','vendor/','public/static/','public/legacy/','public/mxstatic/','public/player/'] as $prefix) if (str_starts_with($path, $prefix)) return true;
         return false;
     }
@@ -222,43 +232,16 @@ final class ProgramUpdater
         if (!$pdo instanceof \PDO) throw new \RuntimeException('无法连接数据库进行备份');
         $out = fopen($path, 'wb');
         if ($out === false) throw new \RuntimeException('无法建立数据库备份');
+        $complete = false;
         try {
-            fwrite($out, "SET NAMES utf8mb4;\nSET FOREIGN_KEY_CHECKS=0;\n");
-            foreach ($tables as $tableRow) {
-                $name = (string) ($tableRow['table_name'] ?? $tableRow['TABLE_NAME'] ?? '');
-                if (!preg_match('/^ffx_[a-z0-9_]+$/', $name)) continue;
-                $create = $pdo->query('SHOW CREATE TABLE `' . $name . '`')->fetch(\PDO::FETCH_ASSOC);
-                fwrite($out, 'DROP TABLE IF EXISTS `' . $name . "`;\n" . (string) ($create['Create Table'] ?? '') . ";\n");
-                $columns = Db::query('SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_SCHEMA=DATABASE() AND TABLE_NAME=? AND EXTRA NOT LIKE ?', [$name, '%GENERATED%']);
-                $names = array_map(static fn (array $row): string => (string) ($row['COLUMN_NAME'] ?? $row['column_name']), $columns);
-                if ($names === []) continue;
-                $escaped = implode(',', array_map(static fn (string $n): string => '`' . $n . '`', $names));
-                $cursor = $pdo->query('SELECT ' . $escaped . ' FROM `' . $name . '`');
-                while (($row = $cursor->fetch(\PDO::FETCH_NUM)) !== false) {
-                    $values = array_map(static fn (mixed $v): string => $v === null ? 'NULL' : $pdo->quote((string) $v), $row);
-                    if (fwrite($out, 'INSERT INTO `' . $name . '` (' . $escaped . ') VALUES (' . implode(',', $values) . ");\n") === false) throw new \RuntimeException('数据库备份写入失败');
-                }
-                $cursor->closeCursor();
-            }
-            $triggers = Db::query("SELECT TRIGGER_NAME,EVENT_MANIPULATION,EVENT_OBJECT_TABLE,ACTION_TIMING,ACTION_STATEMENT FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA=DATABASE() AND TRIGGER_NAME LIKE 'ffx\\_%' ORDER BY TRIGGER_NAME");
-            if ($triggers !== []) {
-                fwrite($out, "DELIMITER $$\n");
-                foreach ($triggers as $trigger) {
-                    $name = (string) ($trigger['TRIGGER_NAME'] ?? $trigger['trigger_name'] ?? '');
-                    $table = (string) ($trigger['EVENT_OBJECT_TABLE'] ?? $trigger['event_object_table'] ?? '');
-                    if (!preg_match('/^ffx_[a-z0-9_]+$/', $name) || !preg_match('/^ffx_[a-z0-9_]+$/', $table)) continue;
-                    $when = strtoupper((string) ($trigger['ACTION_TIMING'] ?? $trigger['action_timing'] ?? ''));
-                    $event = strtoupper((string) ($trigger['EVENT_MANIPULATION'] ?? $trigger['event_manipulation'] ?? ''));
-                    if (!in_array($when, ['BEFORE', 'AFTER'], true) || !in_array($event, ['INSERT', 'UPDATE', 'DELETE'], true)) continue;
-                    $body = (string) ($trigger['ACTION_STATEMENT'] ?? $trigger['action_statement'] ?? '');
-                    fwrite($out, 'CREATE TRIGGER `' . $name . '` ' . $when . ' ' . $event . ' ON `' . $table . '` FOR EACH ROW ' . $body . "$$\n");
-                }
-                fwrite($out, "DELIMITER ;\n");
-            }
-            fwrite($out, "SET FOREIGN_KEY_CHECKS=1;\n");
-            if (!fflush($out)) throw new \RuntimeException('数据库备份无法写完');
+            $names = array_map(static fn (array $row): string => (string) ($row['table_name'] ?? $row['TABLE_NAME'] ?? ''), $tables);
+            (new MySqlBackup())->dump($pdo, $out, $names);
+            $complete = true;
             chmod($path, 0600);
-        } finally { fclose($out); }
+        } finally {
+            fclose($out);
+            if (!$complete && is_file($path)) @unlink($path);
+        }
     }
 
     private function progress(array &$job, string $message): void

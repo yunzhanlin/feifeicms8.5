@@ -9,7 +9,9 @@ return [
     // 是否开启路由延迟解析
     'url_lazy_route'        => false,
     // 是否强制使用路由
-    'url_route_must'        => false,
+    // Never fall back to implicit controller/action dispatch. In particular,
+    // POST /admin.Tools/templates must not bypass the guarded admin group.
+    'url_route_must'        => true,
     // 是否区分大小写
     'url_case_sensitive'    => false,
     // 自动扫描子目录分组

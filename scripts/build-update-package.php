@@ -7,9 +7,9 @@ $release = require $root . '/config/version.php';
 $tag = (string) ($argv[1] ?? '');
 if ($tag !== 'v' . $release['version']) throw new RuntimeException('发布标签与 config/version.php 不一致');
 $target = (string) ($argv[2] ?? $root . '/feifeicms-update.zip');
-$roots = ['app', 'config', 'database/migrations', 'extend', 'route', 'view', 'vendor',
+$roots = ['app', 'config', 'database/migrations', 'extend', 'route', 'view/admin', 'view/install', 'view/mxone', 'vendor',
     'public/static', 'public/legacy', 'public/mxstatic', 'public/player'];
-$single = ['think', 'composer.json', 'composer.lock', 'public/index.php', 'public/install.php',
+$single = ['think', '.htaccess', 'composer.json', 'composer.lock', 'public/index.php', 'public/install.php',
     'public/router.php', 'public/.htaccess', 'public/favicon.ico', 'public/robots.txt'];
 $files = [];
 foreach ($roots as $directory) {
@@ -18,6 +18,8 @@ foreach ($roots as $directory) {
     foreach ($iterator as $file) {
         if (!$file->isFile() || $file->isLink()) continue;
         $relative = str_replace('\\', '/', substr($file->getPathname(), strlen($root) + 1));
+        // Local-only theme assets must not leak into an otherwise shared asset root.
+        if (preg_match('~(?:^|/)(?:qinxin|qingxin)(?:[./_-]|$)~i', $relative)) continue;
         $files[$relative] = hash_file('sha256', $file->getPathname());
     }
 }

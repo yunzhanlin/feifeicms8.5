@@ -22,12 +22,12 @@ final class ThemeRegistry
     /** @return array<string, string> */
     public function options(): array
     {
-        $root = rtrim(root_path(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'view';
+        $root = (new TemplateFiles())->root();
         $directories = glob($root . DIRECTORY_SEPARATOR . '*', GLOB_ONLYDIR) ?: [];
         $options = [];
         foreach ($directories as $directory) {
             $key = basename($directory);
-            if ($key === 'admin' || !$this->isComplete($directory)) continue;
+            if (in_array(strtolower($key), ['admin', 'install'], true) || is_link($directory) || !$this->isComplete($directory)) continue;
             $options[$key] = match (strtolower($key)) {
                 'mxone' => 'MXOne',
                 default => strtoupper($key),
@@ -40,21 +40,31 @@ final class ThemeRegistry
     public function template(string $relative): string
     {
         $relative = trim(str_replace('\\', '/', $relative), '/');
-        if ($relative === '' || str_contains($relative, '..')) return 'mxone/index/index';
+        if (!preg_match('#^[A-Za-z0-9_-]+(?:/[A-Za-z0-9_-]+)*$#D', $relative)) return 'mxone/index/index';
         $options = $this->options();
         $setting = $this->isMobileRequest() ? 'default_theme_m' : 'default_theme';
         $theme = $this->settings->string('admin.base.' . $setting, 'mxone');
         if (!isset($options[$theme])) $theme = isset($options['mxone']) ? 'mxone' : (string) array_key_first($options);
-        $root = rtrim(root_path(), DIRECTORY_SEPARATOR) . DIRECTORY_SEPARATOR . 'view' . DIRECTORY_SEPARATOR;
-        if ($theme !== '' && is_file($root . $theme . DIRECTORY_SEPARATOR . $relative . '.html')) return $theme . '/' . $relative;
-        if (is_file($root . 'mxone' . DIRECTORY_SEPARATOR . $relative . '.html')) return 'mxone/' . $relative;
-        return $relative;
+        $files = new TemplateFiles();
+        foreach (array_unique([$theme, 'mxone']) as $candidate) {
+            if ($candidate === '') continue;
+            try {
+                $files->file($candidate . '/' . $relative . '.html');
+                return $candidate . '/' . $relative;
+            } catch (\think\exception\HttpException) {}
+        }
+        throw new \think\exception\HttpException(404, '模板不存在');
     }
 
     private function isComplete(string $directory): bool
     {
         foreach (self::REQUIRED_TEMPLATES as $template) {
-            if (!is_file($directory . DIRECTORY_SEPARATOR . str_replace('/', DIRECTORY_SEPARATOR, $template))) return false;
+            $path = $directory;
+            foreach (explode('/', $template) as $part) {
+                $path .= DIRECTORY_SEPARATOR . $part;
+                if (is_link($path)) return false;
+            }
+            if (!is_file($path)) return false;
         }
         return true;
     }

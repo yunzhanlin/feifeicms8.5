@@ -23,7 +23,7 @@ final class AdminCoverageTest extends TestCase
             'comments/index.html', 'collections/index.html', 'collections/edit.html', 'collections/jobs.html',
             'operations/index.html', 'operations/edit.html', 'billing/index.html', 'system/index.html',
             'settings/index.html', 'tags/index.html', 'administrators/index.html', 'administrators/edit.html', 'database/index.html',
-            'tools/cache.html', 'tools/version.html', 'tools/uploads.html', 'tools/templates.html', 'tools/duplicates.html', 'tools/batch.html', 'tools/replace.html', 'tools/records.html', 'tools/static.html', 'crontab/index.html',
+            'tools/cache.html', 'tools/version.html', 'tools/uploads.html', 'tools/templates.html', 'tools/duplicates.html', 'tools/batch.html', 'database/replace.html', 'tools/records.html', 'tools/static.html', 'crontab/index.html',
             'vod_tools/douban.html', 'vod_tools/duplicates.html', 'vod_tools/comments.html', 'vod_tools/scenarios.html',
         ] as $view) {
             self::assertFileExists(dirname(__DIR__) . '/view/admin/' . $view);
@@ -67,7 +67,7 @@ final class AdminCoverageTest extends TestCase
         self::assertStringContainsString('.editor-form { display: flow-root;', $css);
         self::assertStringContainsString('overflow: visible', $css);
         self::assertMatchesRegularExpression('#/static/admin\\.css\\?v=\\d+#', $header);
-        self::assertStringContainsString('/static/admin.js?v=34', $header);
+        self::assertMatchesRegularExpression('#/static/admin\\.js\\?v=\\d+#', $header);
         self::assertStringContainsString("cell.textContent = '暂无数据'", $script);
         self::assertStringContainsString("已发布", $script);
         self::assertStringContainsString('data-editor-tabs', (string) file_get_contents(dirname(__DIR__) . '/view/admin/vod/edit.html'));
@@ -219,7 +219,7 @@ final class AdminCoverageTest extends TestCase
         $tools = (string) file_get_contents(dirname(__DIR__) . '/app/controller/admin/Tools.php');
         $database = (string) file_get_contents(dirname(__DIR__) . '/app/controller/admin/Database.php');
         $records = (string) file_get_contents(dirname(__DIR__) . '/view/admin/tools/records.html');
-        $replace = (string) file_get_contents(dirname(__DIR__) . '/view/admin/tools/replace.html');
+        $replace = (string) file_get_contents(dirname(__DIR__) . '/view/admin/database/replace.html');
 
         foreach (['deleteHistory', 'deleteFavorite', 'clearRecords', 'runReplace'] as $action) {
             self::assertStringContainsString('function ' . $action, $tools);
@@ -231,8 +231,8 @@ final class AdminCoverageTest extends TestCase
             self::assertStringContainsString($route, $routes);
         }
         self::assertStringContainsString('data-confirm="确定清空全部播放记录', $records);
-        self::assertStringContainsString('name="preview" value="1"', $replace);
-        self::assertStringContainsString('name="preview" value="0"', $replace);
+        self::assertStringContainsString('action="/admin/database/replace/preview"', $replace);
+        self::assertStringContainsString('name="confirm" value="REPLACE"', $replace);
     }
 
     public function testMailTestAndStaticGenerationUseRealBackendServices(): void

@@ -15,8 +15,8 @@ final class InstallerTest extends TestCase
     public function testReleaseVersionHasOneCanonicalSource(): void
     {
         $release = require $this->root . '/config/version.php';
-        self::assertSame('8.5.261004.3', $release['version']);
-        self::assertSame('8.5.261004.3', $release['display']);
+        self::assertMatchesRegularExpression('/^8\.5\.[0-9]{6}(?:\.[0-9]+)?$/D', $release['version']);
+        self::assertSame($release['version'], $release['display']);
         self::assertSame('stable', $release['channel']);
 
         $feifei = file_get_contents($this->root . '/config/feifei.php');

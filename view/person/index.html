@@ -1,4 +1,0 @@
-{include file="layout/header" /}
-<section class="section-block"><div class="section-heading"><div><p class="eyebrow">影人</p><h1>{$category.name|htmlspecialchars|raw}</h1></div></div>
-{if !empty($items)}<div class="people-grid">{volist name="items" id="item"}<article><a href="/star/{$item.id}"><div class="avatar-frame">{if !empty($item.avatar_url)}<img loading="lazy" src="{$item.avatar_url|htmlspecialchars|raw}" alt="{$item.name|htmlspecialchars|raw}">{else /}<span class="poster-placeholder">暂无头像</span>{/if}</div><h2>{$item.name|htmlspecialchars|raw}</h2><p>{$item.profession|default=''|htmlspecialchars|raw}</p></a></article>{/volist}</div><div class="pagination">{$pagination|raw}</div>{else /}<div class="empty-state">暂时没有人物资料。</div>{/if}</section>
-{include file="layout/footer" /}

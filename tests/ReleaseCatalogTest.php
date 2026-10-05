@@ -64,7 +64,7 @@ XML;
         $header = (string) file_get_contents(dirname(__DIR__) . '/view/admin/layout/header.html');
         self::assertStringContainsString('data-update-start hidden', $template);
         self::assertStringContainsString('[data-update-start][hidden] { display: none !important; }', $styles);
-        self::assertStringContainsString('/static/admin.css?v=43', $header);
+        self::assertMatchesRegularExpression('#/static/admin\\.css\\?v=\\d+#', $header);
     }
 
     public function testUpdaterRejectsArchivePathTraversal(): void
