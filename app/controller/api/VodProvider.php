@@ -33,7 +33,7 @@ final class VodProvider extends BaseController
     {
         $query = $this->filteredQuery();
         $total = (clone $query)->count();
-        $rows = $query->field('id,category_id,title,original_title,douban_id,imdb_id,poster_url,release_year,area,language,published_at,view_count,episode_label,is_completed')
+        $rows = $query->field('id,category_id,title,original_title,douban_id,imdb_id,poster_url,release_year,release_date,metadata,area,language,published_at,view_count,episode_label,is_completed')
             ->order('published_at', 'desc')->order('id', 'desc')->page($page, $limit)->select()->toArray();
 
         return $this->jsonEnvelope($this->envelope(array_map([$this, 'mapBase'], $rows), $total, $page, $limit));
@@ -114,6 +114,9 @@ final class VodProvider extends BaseController
     /** @param array<string, mixed> $row */
     private function mapBase(array $row): array
     {
+        $metadata = $row['metadata'] ?? [];
+        if (is_string($metadata)) $metadata = json_decode($metadata, true);
+        $metadata = is_array($metadata) ? $metadata : [];
         return [
             'vod_id' => (int) $row['id'],
             'type_id' => (int) ($row['category_id'] ?? 0),
@@ -125,6 +128,12 @@ final class VodProvider extends BaseController
             'vod_year' => (string) ($row['release_year'] ?? ''),
             'vod_area' => (string) ($row['area'] ?? ''),
             'vod_lang' => (string) ($row['language'] ?? ''),
+            'vod_actor' => (string) ($metadata['actor'] ?? ''),
+            'vod_director' => (string) ($metadata['director'] ?? ''),
+            'vod_keywords' => (string) ($metadata['keywords'] ?? ''),
+            'vod_tag' => (string) ($metadata['keywords'] ?? ''),
+            'vod_class' => (string) ($metadata['type'] ?? ''),
+            'vod_pubdate' => (string) (($row['release_date'] ?? '') ?: ($metadata['pubdate'] ?? '')),
             'vod_time' => (string) ($row['published_at'] ?? ''),
             'vod_hits' => (int) ($row['view_count'] ?? 0),
             'vod_remarks' => (string) ($row['episode_label'] ?? ((bool) ($row['is_completed'] ?? false) ? '已完结' : '')),

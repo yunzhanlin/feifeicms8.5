@@ -74,6 +74,23 @@ final class CollectionRunnerMergeTest extends TestCase
         }
     }
 
+    public function testDetailedCollectionFillsBlankMetadataWithoutOverwritingLocalEdits(): void
+    {
+        $result = $this->merge([
+            'metadata' => json_encode(['actor' => '', 'director' => '本地导演', 'keywords' => null, 'trysee' => 0, 'custom' => false]),
+        ], [
+            'metadata' => json_encode(['actor' => '源演员', 'director' => '源导演', 'keywords' => '源关键词', 'trysee' => 30, 'custom' => true]),
+            'release_date' => '2026-10-01',
+        ]);
+        $metadata = json_decode($result['metadata'], true);
+        self::assertSame('源演员', $metadata['actor']);
+        self::assertSame('本地导演', $metadata['director']);
+        self::assertSame('源关键词', $metadata['keywords']);
+        self::assertSame(0, $metadata['trysee']);
+        self::assertFalse($metadata['custom']);
+        self::assertSame('2026-10-01', $result['release_date']);
+    }
+
     /** @param array<string,mixed> $localOverrides @param array<string,mixed> $incomingOverrides */
     private function merge(array $localOverrides, array $incomingOverrides): array
     {

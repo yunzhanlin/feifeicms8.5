@@ -36,6 +36,17 @@ XML;
         ReleaseCatalog::assetUrl('../evil', ReleaseCatalog::PACKAGE);
     }
 
+    public function testMetadataRepairCommandIsIncludedInBackwardCompatibleUpdatePaths(): void
+    {
+        $builder = (string) file_get_contents(dirname(__DIR__) . '/scripts/build-update-package.php');
+        preg_match('/\$roots\s*=\s*\[(.*?)\];/s', $builder, $match);
+        self::assertStringContainsString("'app'", $match[1]);
+        self::assertStringContainsString("'config'", $match[1]);
+        self::assertStringNotContainsString("'scripts'", $match[1]);
+        self::assertFileExists(dirname(__DIR__) . '/app/command/CollectionRepairMetadata.php');
+        self::assertStringContainsString('feifei:collection:repair-metadata', (string) file_get_contents(dirname(__DIR__) . '/config/console.php'));
+    }
+
     public function testPatchReleaseIsNewerThanStableRelease(): void
     {
         $feed = <<<'XML'

@@ -44,7 +44,7 @@
                 {notempty name="vod.vod_imdb_id"}<span><b>IMDb ID</b><em>{$vod.vod_imdb_id}</em></span>{/notempty}
                 {notempty name="vod.vod_weekday"}<span><b>更新周期</b><em>{$vod.vod_weekday}</em></span>{/notempty}
                 {notempty name="vod.vod_tv"}<span><b>电视频道</b><em>{$vod.vod_tv}</em></span>{/notempty}
-                <span><b>上映/播出</b><em>{if $vod.vod_filmtime!=0}{$vod.vod_filmtime|date='Y-m-d'}{else /}暂无{/if}</em></span>
+                <span><b>上映/播出</b><em>{$vod.vod_pubdate|default='暂无'}</em></span>
                 <span><b>更新时间</b><em>{if $vod.vod_addtime>0}{$vod.vod_addtime|date='Y-m-d H:i'}{else /}暂无{/if}</em></span>
             </div>
             {notempty name="tags"}<div class="mx-chip-list mx-detail-tags">{volist name="tags" id="tag"}<a href="/search?wd={$tag.name|urlencode}">{$tag.name}</a>{/volist}</div>{/notempty}

@@ -70,6 +70,45 @@ final class CollectionPayloadNormalizerTest extends TestCase
         self::assertSame('演员甲', $mapped['metadata']['actor']);
     }
 
+    public function testMaccmsCastTagsAndReleaseDateArePreserved(): void
+    {
+        $mapped = $this->normalizer->media([
+            'vod_actor' => '演员&#x7532;,演员乙', 'vod_director' => '导演甲',
+            'vod_keywords' => '', 'vod_tag' => '悬疑,冒险', 'vod_pubdate' => '2026-10-01(中国大陆)',
+        ]);
+        self::assertSame('演员甲,演员乙', $mapped['metadata']['actor']);
+        self::assertSame('导演甲', $mapped['metadata']['director']);
+        self::assertSame('悬疑,冒险', $mapped['metadata']['keywords']);
+        self::assertSame('2026-10-01', $mapped['release_date']);
+        self::assertSame('2026-10-01(中国大陆)', $mapped['metadata']['pubdate']);
+        self::assertSame('原关键词', $this->normalizer->media(['vod_keywords' => '原关键词', 'vod_tag' => '另一组标签'])['metadata']['keywords']);
+    }
+
+    public function testFeifeiUnixReleaseDateAndFallbackDoNotUseUpdateTimestamp(): void
+    {
+        $timezone = date_default_timezone_get();
+        date_default_timezone_set('Asia/Shanghai');
+        try {
+            $timestamp = strtotime('2026-10-01 00:00:00');
+            self::assertSame('2026-10-01', $this->normalizer->media(['vod_filmtime' => $timestamp])['release_date']);
+            self::assertSame('2026-10-01', $this->normalizer->media(['vod_pubdate' => '未知', 'vod_filmtime' => (string) $timestamp])['release_date']);
+            self::assertSame('2026-09-01', $this->normalizer->media(['vod_pubdate' => '2026-09-01', 'vod_filmtime' => $timestamp])['release_date']);
+            self::assertNull($this->normalizer->media(['vod_pubdate' => '2026', 'vod_time' => '2026-10-01 12:00:00'])['release_date']);
+        } finally {
+            date_default_timezone_set($timezone);
+        }
+    }
+
+    public function testPartialInvalidOrStructuredDatesAreNotInvented(): void
+    {
+        foreach (['', '0', '2026', '2026-10', '2026-02-30', '2026-00-00', '99999999999'] as $value) {
+            self::assertNull($this->normalizer->media(['vod_pubdate' => $value])['release_date'], $value);
+        }
+        $mapped = $this->normalizer->media(['vod_pubdate' => '2026', 'vod_keywords' => [], 'vod_tag' => '标签']);
+        self::assertSame('2026', $mapped['metadata']['pubdate']);
+        self::assertSame('标签', $mapped['metadata']['keywords']);
+    }
+
     public function testFeifeiScenarioInfoBecomesIndependentEpisodeRows(): void
     {
         $rows = $this->normalizer->scenarios(['info' => [

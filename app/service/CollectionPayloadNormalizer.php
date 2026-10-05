@@ -74,6 +74,7 @@ final class CollectionPayloadNormalizer
     /** @return array<string, mixed> */
     public function media(array $row): array
     {
+        $pubdate = $this->plainText($row, ['vod_pubdate']);
         $metadata = [
             'actor' => $this->plainText($row, ['vod_actor']), 'director' => $this->plainText($row, ['vod_director']),
             'writer' => $this->plainText($row, ['vod_writer']), 'producer' => $this->plainText($row, ['vod_producer']),
@@ -81,7 +82,9 @@ final class CollectionPayloadNormalizer
             'music' => $this->plainText($row, ['vod_music']), 'art' => $this->plainText($row, ['vod_art']),
             'version' => $this->plainText($row, ['vod_version']), 'state' => $this->plainText($row, ['vod_state', 'vod_remarks']),
             'tv' => $this->plainText($row, ['vod_tv']), 'weekday' => $this->plainText($row, ['vod_weekday']),
-            'series' => $this->plainText($row, ['vod_series']), 'keywords' => $this->plainText($row, ['vod_keywords']),
+            'series' => $this->plainText($row, ['vod_series']), 'keywords' => $this->plainText($row, ['vod_keywords', 'vod_tag']),
+            // Retain a supplied year/month without inventing January 1st.
+            'pubdate' => $pubdate === '0' ? '' : mb_substr($pubdate, 0, 255),
             'type' => $this->normalizeList($this->plainText($row, ['vod_class', 'vod_type'])),
             'source_ref' => $this->text($row, ['vod_reurl']),
             'legacy_ename' => $this->plainText($row, ['vod_ename']), 'inputer' => $this->plainText($row, ['vod_inputer']),
@@ -103,7 +106,7 @@ final class CollectionPayloadNormalizer
             'area' => mb_substr($this->normalizeArea($this->text($row, ['vod_area'])), 0, 80),
             'language' => mb_substr($this->normalizeLanguage($this->text($row, ['vod_lang', 'vod_language'])), 0, 80),
             'release_year' => (($year = (int) $this->text($row, ['vod_year'])) > 0 && $year < 10000) ? $year : null,
-            'release_date' => $this->date($this->text($row, ['vod_pubdate', 'vod_filmtime'])),
+            'release_date' => $this->releaseDate($row),
             'episode_total' => (($total = (int) $this->text($row, ['vod_total'])) > 0) ? $total : null,
             'episode_label' => mb_substr($this->plainText($row, ['vod_remarks', 'vod_continu', 'vod_state']), 0, 50),
             'is_completed' => (int) ((bool) ($row['vod_isend'] ?? false)),
@@ -207,7 +210,7 @@ final class CollectionPayloadNormalizer
     /** @param array<int, string> $keys */
     private function text(array $row, array $keys): string
     {
-        foreach ($keys as $key) if (array_key_exists($key, $row) && trim((string) $row[$key]) !== '') return trim((string) $row[$key]);
+        foreach ($keys as $key) if (isset($row[$key]) && is_scalar($row[$key]) && trim((string) $row[$key]) !== '') return trim((string) $row[$key]);
         return '';
     }
 
@@ -225,9 +228,23 @@ final class CollectionPayloadNormalizer
         return trim((string) preg_replace('/\s+/u', ' ', strip_tags($value)));
     }
 
+    private function releaseDate(array $row): ?string
+    {
+        foreach (['vod_pubdate', 'vod_filmtime'] as $field) {
+            $date = $this->date($this->text($row, [$field]));
+            if ($date !== null) return $date;
+        }
+        return null;
+    }
+
     private function date(string $value): ?string
     {
         if ($value === '' || $value === '0') return null;
+        // FeiFeiCMS exports vod_filmtime as Unix seconds, in the site's timezone.
+        if (preg_match('/^\d{9,11}$/D', $value)) {
+            $date = date('Y-m-d', (int) $value);
+            return preg_match('/^(19|20)\d{2}-/', $date) ? $date : null;
+        }
         if (preg_match('/(19|20)\d{2}[-\/.年](\d{1,2})[-\/.月](\d{1,2})/u', $value, $m)) {
             $date = sprintf('%04d-%02d-%02d', (int) substr($m[0], 0, 4), (int) $m[2], (int) $m[3]);
             return checkdate((int) $m[2], (int) $m[3], (int) substr($m[0], 0, 4)) ? $date : null;

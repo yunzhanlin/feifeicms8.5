@@ -14,6 +14,7 @@ return [
         'feifei:update:apply' => app\command\UpdateApply::class,
         'feifei:collection:work' => app\command\CollectionWork::class,
         'feifei:collection:schedule' => app\command\CollectionSchedule::class,
+        'feifei:collection:repair-metadata' => app\command\CollectionRepairMetadata::class,
         'feifei:legacy43:upgrade' => app\command\Legacy43Upgrade::class,
     ],
 ];

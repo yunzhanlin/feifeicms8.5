@@ -19,6 +19,8 @@
 - 自定义 URL、伪静态、旧地址兼容、缓存和搜索索引。
 - 电脑、手机和平板自适应的 MXOne 示例模板。
 
+采集支持保存主演、导演、关键词及上映日期；兼容 MacCMS 的 `vod_tag` 和飞飞的 `vod_filmtime` 时间戳。来源只提供年份时保留年份，不补造月日。若历史采集记录遗漏了这些资料，可在项目目录执行 `php think feifei:collection:repair-metadata` 预览，再加 `--apply` 修复：只从已保存的来源快照补空值，不重新采集、不覆盖已有资料及锁定影片。原值备份保存在 `runtime/metadata-backups/`。
+
 #### 安装说明
 
 1. 下载本仓库代码，上传到网站目录；在项目目录执行 `composer install --no-dev --classmap-authoritative`。
