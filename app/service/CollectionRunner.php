@@ -472,7 +472,15 @@ final class CollectionRunner
         }
         $oldMeta = is_string($local['metadata'] ?? null) ? json_decode((string) $local['metadata'], true) : ($local['metadata'] ?? []);
         $newMeta = json_decode((string) $incoming['metadata'], true);
-        $mergedMeta = array_merge(is_array($newMeta) ? $newMeta : [], is_array($oldMeta) ? $oldMeta : []);
+        $mergedMeta = is_array($oldMeta) ? $oldMeta : [];
+        foreach (is_array($newMeta) ? $newMeta : [] as $key => $value) {
+            // Detailed responses can fill empty fields from an earlier import.
+            // Populated local values, including false/0, remain authoritative.
+            if (!array_key_exists($key, $mergedMeta) || $mergedMeta[$key] === null
+                || (is_string($mergedMeta[$key]) && trim($mergedMeta[$key]) === '')) {
+                $mergedMeta[$key] = $value;
+            }
+        }
         $mergedMeta['source_ref'] = $this->sourceIdentity->merge(
             (string) ((is_array($oldMeta) ? $oldMeta : [])['source_ref'] ?? ''),
             (string) ((is_array($newMeta) ? $newMeta : [])['source_ref'] ?? '')

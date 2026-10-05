@@ -154,6 +154,15 @@ final class FrontendData
         $release = $this->timestamp($media['release_date'] ?? null);
         $actor = trim((string) ($metadata['actor'] ?? ''));
         $director = trim((string) ($metadata['director'] ?? ''));
+        $keywords = '';
+        foreach ([$media['tags_text'] ?? '', $metadata['keywords'] ?? '', $metadata['type'] ?? ''] as $value) {
+            if (is_scalar($value) && trim((string) $value) !== '') {
+                $keywords = trim((string) $value);
+                break;
+            }
+        }
+        $pubdate = trim((string) ($media['release_date'] ?? ''));
+        if ($pubdate === '') $pubdate = trim((string) ($metadata['pubdate'] ?? ''));
         $content = (string) ($media['content'] ?? $media['summary'] ?? '');
         $remark = (string) ($media['episode_label'] ?? '');
         if ($remark === '') {
@@ -173,7 +182,8 @@ final class FrontendData
             'vod_actor' => $actor,
             'vod_director' => $director,
             'vod_type' => $categoryName,
-            'vod_keywords' => (string) ($media['tags_text'] ?? $metadata['keywords'] ?? $metadata['type'] ?? ''),
+            'vod_keywords' => $keywords,
+            'vod_tag' => $keywords,
             'vod_year' => (string) ($media['release_year'] ?? ''),
             'vod_area' => (string) ($media['area'] ?? ''),
             'vod_language' => (string) ($media['language'] ?? ''),
@@ -185,6 +195,7 @@ final class FrontendData
             'vod_down' => (int) ($media['dislike_count'] ?? 0),
             'vod_addtime' => $updated ?: $created,
             'vod_filmtime' => $release,
+            'vod_pubdate' => $pubdate,
             'vod_weekday' => (string) ($metadata['weekday'] ?? ''),
             'vod_state' => (string) ($metadata['state'] ?? ''),
             'vod_version' => (string) ($metadata['version'] ?? ''),
