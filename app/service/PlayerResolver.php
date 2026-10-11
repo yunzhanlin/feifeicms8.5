@@ -37,7 +37,7 @@ final class PlayerResolver
         $endpoint = str_replace('{url}', rawurlencode($url), $plan['endpoint']);
         $payload = $this->http->get($endpoint, str_contains($plan['endpoint'], '{url}') ? [] : ['url' => $url], [], 10, 1048576);
         $data = is_array($payload['data'] ?? null) ? $payload['data'] : $payload;
-        if (isset($payload['code']) && !in_array((int) $payload['code'], [0, 200], true)) throw new \RuntimeException('解析服务返回失败状态');
+        PublicJsonClient::assertSuccess($payload);
         $resolved = $this->guard->allow((string) ($data['url'] ?? '')) ?? throw new \RuntimeException('解析接口未返回有效播放地址');
         $type = strtolower((string) ($data['type'] ?? pathinfo((string) parse_url($resolved, PHP_URL_PATH), PATHINFO_EXTENSION)));
         if (!in_array($type, ['m3u8', 'mp4', 'webm', 'ogg'], true)) throw new \RuntimeException('解析接口未返回受支持的媒体类型');

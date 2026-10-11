@@ -227,6 +227,13 @@ final class Database extends BaseController
             $statementCount++;
         }
         if ($statementCount === 0) throw new HttpException(422, '备份文件为空');
+        // Must happen before search state changes and before the first DROP TABLE.
+        try {
+            Db::query('SELECT 1');
+            $this->app->make(\app\service\MySqlTriggerPreflight::class)->check(Db::connect()->getPdo());
+        } catch (\RuntimeException $error) {
+            throw new HttpException(422, $error->getMessage());
+        }
         $this->app->make(\app\service\SearchIndexer::class)->restore(function () use ($path): void {
             try {
                 foreach ($this->sql->fromFile($path, true) as $statement) Db::execute($statement);

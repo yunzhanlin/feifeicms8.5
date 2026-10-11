@@ -45,6 +45,9 @@ final class DoubanMetadata
                 throw new RuntimeException('豆瓣没有返回匹配该 ID 的有效资料');
             }
             $data = $this->mergeMissing($pageData, $this->mapPayload($subjectId, $payload));
+            if ($data['imdb_id'] === '' && microtime(true) < $deadline) {
+                $data['imdb_id'] = $this->supplementImdb($client, $subjectId, $payload, $deadline);
+            }
             if ($data['writer'] === '' && microtime(true) < $deadline) {
                 try {
                     [$credits] = $this->requestJson($client, $subjectId, $url . '/credits', $deadline);
@@ -143,10 +146,50 @@ final class DoubanMetadata
     private function needsFallback(array $data): bool
     {
         if ($data === []) return true;
-        foreach (['title', 'director', 'actor', 'writer', 'type', 'release_date', 'poster_url', 'area', 'release_year', 'length', 'language', 'content'] as $field) {
+        foreach (['title', 'director', 'actor', 'writer', 'type', 'release_date', 'poster_url', 'area', 'release_year', 'length', 'language', 'content', 'imdb_id'] as $field) {
             if (($data[$field] ?? '') === '' || ($data[$field] ?? 0) === 0) return true;
         }
         return false;
+    }
+
+    /** The official JSON response supplies its own app detail page, also for TV. */
+    private function supplementImdb(ClientInterface $client, string $subjectId, array $payload, float $deadline): string
+    {
+        $url = $payload['info_url'] ?? null;
+        if (!is_string($url)) return '';
+        $parts = parse_url($url);
+        if (!is_array($parts) || ($parts['scheme'] ?? '') !== 'https' || ($parts['host'] ?? '') !== 'www.douban.com'
+            || isset($parts['port']) || isset($parts['user']) || isset($parts['pass'])
+            || isset($parts['query']) || isset($parts['fragment'])
+            || !preg_match('#^/doubanapp/{1,2}h5/movie/' . $subjectId . '/desc$#D', (string) ($parts['path'] ?? ''))) return '';
+        try {
+            // Never follow a verification redirect or fetch a payload-supplied host.
+            $response = $this->request($client, 'https://www.douban.com/doubanapp//h5/movie/' . $subjectId . '/desc', false, $deadline, 5);
+            if ($response['status'] !== 200) return '';
+            return $this->mapAppImdb($response['body'], (string) $payload['title']);
+        } catch (RuntimeException) {
+            return ''; // Supplement failure must not discard already fetched metadata.
+        }
+    }
+
+    private function mapAppImdb(string $html, string $title): string
+    {
+        if ($html === '' || !class_exists(DOMDocument::class)) return '';
+        $previous = libxml_use_internal_errors(true);
+        $dom = new DOMDocument();
+        try { $loaded = $dom->loadHTML('<?xml encoding="UTF-8">' . $html, LIBXML_NONET | LIBXML_NOERROR | LIBXML_NOWARNING); }
+        finally { libxml_clear_errors(); libxml_use_internal_errors($previous); }
+        if (!$loaded) return '';
+        $xpath = new DOMXPath($dom);
+        $fields = [];
+        foreach ($xpath->query('//section[contains(concat(" ",normalize-space(@class)," ")," subject-desc ")]//tr') as $row) {
+            $cells = $xpath->query('./td', $row);
+            if ($cells->length !== 2) continue;
+            $fields[trim($cells->item(0)->textContent)] = trim($cells->item(1)->textContent);
+        }
+        if (($fields['片名'] ?? '') !== trim($title)) return '';
+        $imdb = strtolower($fields['IMDb'] ?? '');
+        return preg_match('/^tt\d{5,12}$/D', $imdb) ? $imdb : '';
     }
 
     private function mergeMissing(array $primary, array $fallback): array

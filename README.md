@@ -9,7 +9,7 @@
 - PHP 8.2～8.5，安装 `curl`、`dom`、`fileinfo`、`gd`、`intl`、`mbstring`、`openssl`、`pdo_mysql`、`xml`、`xmlwriter`、`zip` 扩展。
 - MySQL 5.7.13+ 或 8.x；不支持 MySQL 5.6、5.5 和 MariaDB。
 - Nginx 或 Apache、Composer 2。Redis 和 Meilisearch 为可选服务；未启用时可分别使用文件缓存和 MySQL 搜索。
-- 数据库账号在安装和升级时需要创建触发器的权限。如果 MySQL 开启二进制日志后报告 `1419`，请让数据库管理员临时处理 `log_bin_trust_function_creators` 或代为执行迁移。
+- 数据库账号需要建表、读写和创建触发器的权限。安装、升级和恢复会先检查权限；报告 `1419` 时，请数据库管理员处理二进制日志的触发器限制后重试。
 
 #### 主要功能
 
@@ -25,13 +25,28 @@
 
 #### 安装说明
 
-1. 下载本仓库代码，上传到网站目录；在项目目录执行 `composer install --no-dev --classmap-authoritative`。
+1. 从[最新正式版](https://github.com/yunzhanlin/feifeicms8.5/releases/latest)下载 `feifeicms8.5.zip` 完整安装包并解压到网站目录。该包已包含运行依赖；使用仓库源码时，须先执行 `composer install --no-dev --classmap-authoritative`。
 2. 将网站运行目录设为项目的 `public/`，不能指向项目根目录。让 PHP-FPM 用户能够写入 `runtime/` 和 `public/uploads/`。
 3. Nginx 使用 [`deploy/baota/thinkphp.conf`](deploy/baota/thinkphp.conf) 的伪静态规则；Apache 已提供 `public/.htaccess`，需开启 `mod_rewrite` 和 `AllowOverride All`。
 4. 浏览器访问 `https://您的域名/install.php`，按向导填写数据库、管理员账号和站点信息。安装程序只接受没有 `ffx_*` 表的空数据库，不会覆盖已有数据。
 5. 安装后访问 `https://您的域名/admin.php` 登录。管理员密码由安装时自行设置，没有通用默认密码。
 
-宝塔用户还可以参考 [`deploy/baota/`](deploy/baota/) 中的站点与计划任务示例。Docker 部署可复制 `.example.env` 为 `.env`，填写密钥和数据库信息后运行 `docker compose up -d --build`，再按安装向导完成初始化。
+宝塔用户还可以参考 [`deploy/baota/`](deploy/baota/) 中的站点与计划任务示例。
+
+Docker 部署先复制 `.example.env` 为 `.env`，替换其中的密码和密钥，并保留数据库、Redis、搜索主机名为相应容器名称。配置文件只读挂载且随容器重建保留，使用以下命令初始化，不使用网页安装向导：
+
+```bash
+docker compose up -d --build
+docker compose exec app php think feifei:schema:install
+read -rs -p '管理员密码（至少 12 位）：' CMS_ADMIN_PASSWORD
+export CMS_ADMIN_PASSWORD
+docker compose exec -e CMS_ADMIN_PASSWORD app php think feifei:admin:create admin
+unset CMS_ADMIN_PASSWORD
+```
+
+初始化后访问 `http://您的主机:8080/admin.php`。Docker 升级请更新源码并重新构建容器，再执行 `docker compose exec app php think feifei:schema:upgrade`；不要在只读配置的容器中使用在线覆盖更新。
+
+Docker 使用独立 MySQL 容器并允许站点创建触发器。不要把这里的配置直接用于共享数据库；共享数据库请由管理员按服务器策略授权。
 
 #### 模板使用
 
@@ -58,6 +73,8 @@ php think feifei:search:sync
 ```
 
 升级后会员旧会话需要重新登录。多个站点共用 Redis 时，请给每个站点配置不同的 `REDIS_PREFIX`。恢复数据库前请暂停网站写入；恢复后搜索暂时使用 MySQL，执行全量索引同步后再启用外部索引。
+
+豆瓣资料获取会优先读取作品页面，并按该条目官方接口补充资料及 IMDb。豆瓣未提供编号时不覆盖表单原值；遇到验证或访问限制，请更新后台豆瓣 Cookie 后重试，程序不会绕过验证。
 
 旧版审计日志可能含历史配置密钥。可执行 `php think feifei:audit:redact` 预览需要脱敏的记录，再加 `--apply` 处理。该命令不处理既有备份文件；曾进入日志的密钥建议更换。
 

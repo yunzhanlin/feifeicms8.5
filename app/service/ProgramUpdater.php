@@ -195,8 +195,13 @@ final class ProgramUpdater
             $schemaLock = (int) (Db::query("SELECT GET_LOCK('feifeicms_schema_upgrade', 0) AS acquired")[0]['acquired'] ?? 0) === 1;
             if (!$schemaLock) throw new \RuntimeException('另一项数据库升级正在执行');
             try {
+                $preflightChecked = false;
                 foreach (glob($root . '/database/migrations/[0-9][0-9][0-9]_*.sql') ?: [] as $migration) {
                     if (!preg_match('~/(\d{3})_~', $migration, $m) || (int) $m[1] <= $current) continue;
+                    if (!$preflightChecked) {
+                        (new MySqlTriggerPreflight())->check(Db::connect()->getPdo());
+                        $preflightChecked = true;
+                    }
                     $migrationStarted = true;
                     foreach ((new SqlStatementStream())->fromFile($migration) as $sql) Db::execute($sql);
                     $recorded = (int) Db::table('ffx_schema_versions')->where('version', (int) $m[1])->count();

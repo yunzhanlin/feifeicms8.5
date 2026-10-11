@@ -25,19 +25,30 @@ final class PublicJsonClient
             },
             'progress' => $guard->progress(...),
         ]);
-        if ($response->getStatusCode() !== 200) throw new \RuntimeException('远程服务返回 HTTP ' . $response->getStatusCode());
-        $body = '';
         $stream = $response->getBody();
-        while (!$stream->eof()) {
-            $chunk = $stream->read(min(65536, $maxBytes + 1 - strlen($body)));
-            if ($chunk === '') throw new \RuntimeException('远程响应读取中断');
-            $body .= $chunk;
+        try {
+            if ($response->getStatusCode() !== 200) throw new \RuntimeException('远程服务返回 HTTP ' . $response->getStatusCode());
+            $body = '';
+            while (!$stream->eof()) {
+                $chunk = $stream->read(min(65536, $maxBytes + 1 - strlen($body)));
+                if ($chunk === '') throw new \RuntimeException('远程响应读取中断');
+                $body .= $chunk;
+                $guard->assertBody($body);
+            }
             $guard->assertBody($body);
+            $decoded = json_decode($body, true, 64, JSON_THROW_ON_ERROR);
+            if (!is_array($decoded)) throw new \RuntimeException('远程服务未返回 JSON 数据');
+            return $decoded;
+        } finally {
+            $stream->close();
         }
-        $guard->assertBody($body);
-        $decoded = json_decode($body, true, 64, JSON_THROW_ON_ERROR);
-        if (!is_array($decoded)) throw new \RuntimeException('远程服务未返回 JSON 数据');
-        return $decoded;
+    }
+
+    public static function assertSuccess(array $payload): void
+    {
+        if (array_key_exists('code', $payload) && !in_array($payload['code'], [0, 200, '0', '200'], true)) {
+            throw new \RuntimeException('远程服务返回失败状态');
+        }
     }
 
     private function query(string $url): array { parse_str((string) parse_url($url, PHP_URL_QUERY), $query); return $query; }

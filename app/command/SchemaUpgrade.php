@@ -48,6 +48,7 @@ final class SchemaUpgrade extends Command
                 $output->writeln('[OK] 数据库已是最新结构，当前版本 ' . $current);
                 return 0;
             }
+            (new \app\service\MySqlTriggerPreflight())->check(Db::connect()->getPdo());
             foreach ($migrations as $migrationVersion => $path) {
                 $count = 0;
                 foreach ((new SqlStatementStream())->fromFile($path) as $statement) {

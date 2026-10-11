@@ -32,6 +32,7 @@ final class SchemaInstall extends Command
             return 1;
         }
 
+        (new \app\service\MySqlTriggerPreflight())->check(Db::connect()->getPdo());
         $executed = 0;
         foreach ((new SqlStatementStream())->fromFile($path) as $statement) {
             Db::execute($statement);

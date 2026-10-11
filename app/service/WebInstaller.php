@@ -90,6 +90,8 @@ final class WebInstaller
                 throw new RuntimeException('目标数据库已存在 ffx_ 数据表，为防止覆盖已停止安装。');
             }
 
+            (new MySqlTriggerPreflight())->check($pdo);
+
             $environment = $this->buildEnvironment($values);
             $temporaryEnvironment = root_path() . '.env.installing';
             if (file_put_contents($temporaryEnvironment, $environment, LOCK_EX) === false) {
@@ -203,9 +205,20 @@ final class WebInstaller
 
     private function executeSchema(PDO $pdo): void
     {
-        foreach ($this->sql->fromFile(root_path() . 'database/schema-v2.sql') as $statement) $pdo->exec($statement);
+        $this->executeStatements($pdo, $this->sql->fromFile(root_path() . 'database/schema-v2.sql'));
         foreach (array_merge(glob(root_path() . 'database/migrations/015_*.sql') ?: [], glob(root_path() . 'database/migrations/016_*.sql') ?: []) as $migration) {
-            foreach ($this->sql->fromFile($migration) as $statement) $pdo->exec($statement);
+            $this->executeStatements($pdo, $this->sql->fromFile($migration));
+        }
+    }
+
+    /** @param iterable<string> $statements */
+    private function executeStatements(PDO $pdo, iterable $statements): void
+    {
+        foreach ($statements as $statement) {
+            // EXECUTE may return rows for an idempotent migration's SELECT 1.
+            // Discard every result before the next statement, including DDL.
+            $cursor = $pdo->query($statement);
+            $cursor->closeCursor();
         }
     }
 

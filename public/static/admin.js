@@ -265,6 +265,7 @@
             try {
                 const payload = await requestJson('/admin/vod/metadata/douban', body);
                 Object.entries(payload.data || {}).forEach(([name, value]) => {
+                    if (name === 'imdb_id' && !value) return;
                     if (name === 'source_ref') writeValue(name, value, 'append');
                     else writeValue(name, value);
                 });

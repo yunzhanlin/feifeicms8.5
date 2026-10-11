@@ -245,7 +245,9 @@ final class Vod extends BaseController
             return json(['ok' => false, 'message' => mb_substr($exception->getMessage(), 0, 200)], 422);
         }
         $this->audit->record('media.douban_fetch', 'media', $subjectId, null, ['title' => $data['title'] ?? '']);
-        return json(['ok' => true, 'message' => '豆瓣资料已填入表单，请检查后提交保存。', 'data' => $data]);
+        $message = '豆瓣资料已填入表单，请检查后提交保存。';
+        if (($data['imdb_id'] ?? '') === '') $message .= '豆瓣未提供 IMDb 编号，表单原值保留，请人工核对。';
+        return json(['ok' => true, 'message' => $message, 'data' => $data]);
     }
 
     public function uploadImage(): Response

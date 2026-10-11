@@ -15,9 +15,9 @@ RUN apk add --no-cache \
 COPY --from=composer /usr/bin/composer /usr/local/bin/composer
 WORKDIR /var/www/html
 COPY composer.json composer.lock* ./
-RUN composer install --no-interaction --prefer-dist --no-scripts --no-autoloader
+RUN composer install --no-dev --no-interaction --prefer-dist --no-scripts --no-autoloader
 COPY . .
-RUN composer dump-autoload --optimize \
+RUN composer dump-autoload --no-dev --optimize \
     && mkdir -p runtime public/uploads \
     && chown -R www-data:www-data runtime public/uploads
 
