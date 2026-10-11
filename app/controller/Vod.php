@@ -43,9 +43,11 @@ final class Vod extends BaseController
             ->where('id', '<>', $id)->order('view_count', 'desc')->order('id', 'desc')->limit($this->settings->int('admin.content.related_limit', 12, 0, 50))->select()->toArray();
         $comments = Db::table('ffx_comments')->where('target_type', 'media')->where('target_id', $id)->where('status', 'approved')->order('created_at', 'desc')->limit(20)->select()->toArray();
         $scenarios = Db::table('ffx_scenarios')->where('media_id', $id)->where('status', 'published')->whereNull('deleted_at')->order('sort_order')->order('episode_no')->limit(6)->select()->toArray();
+        $access = $this->mediaAccess->status($mediaData, \app\service\UserSession::id());
         $assets = array_values(array_filter(
             Db::table('ffx_media_assets')->where('media_id', $id)->order('asset_type')->order('sort_order')->order('id')->select()->toArray(),
-            fn (array $asset): bool => $this->mediaUrlGuard->allow((string) ($asset['url'] ?? '')) !== null,
+            fn (array $asset): bool => $this->mediaUrlGuard->allow((string) ($asset['url'] ?? '')) !== null
+                && (($asset['asset_type'] ?? '') !== 'download' || $access['allowed']),
         ));
         $userId = \app\service\UserSession::id();
         $userScore = $userId > 0 ? Db::table('ffx_ratings')->where('user_id', $userId)->where('target_type', 'media')->where('target_id', $id)->value('score') : null;
@@ -55,7 +57,6 @@ final class Vod extends BaseController
             $sameActorItems = Db::table('ffx_media')->where('status', 'published')->whereNull('deleted_at')->where('id', '<>', $id)
                 ->whereLike('metadata', '%' . $actors[0] . '%')->order('view_count', 'desc')->limit(12)->select()->toArray();
         }
-        $access = $this->mediaAccess->status($mediaData, \app\service\UserSession::id());
         return view(ff_theme_view('vod/detail'), $this->frontend->shared($media->title . ' - ' . $this->settings->string('admin.base.site_name', (string) config('feifei.site_name'))) + [
             'media' => $mediaData,
             'vod' => $legacyVod,

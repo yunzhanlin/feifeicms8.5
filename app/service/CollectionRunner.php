@@ -377,7 +377,7 @@ final class CollectionRunner
                     $playSourceId = (int) $oldSource['id'];
                     Db::table('ffx_play_sources')->where('id', $playSourceId)->update([
                         'display_name' => mb_substr((string) $source['name'], 0, 120),
-                        'status' => 'enabled', 'updated_at' => $now,
+                        'updated_at' => $now,
                     ]);
                 } else {
                     $key = $this->uniqueSourceKey($mediaId, $parserKey, $sourceId, $usedKeys);
@@ -388,24 +388,7 @@ final class CollectionRunner
                         'sort_order' => $sortBase++, 'status' => 'enabled', 'created_at' => $now, 'updated_at' => $now,
                     ]);
                 }
-                $oldEpisodes = Db::table('ffx_episodes')->where('source_id', $playSourceId)->column('id', 'episode_no');
-                foreach ($source['episodes'] as $episodeIndex => $episode) {
-                    $episodeNo = $episodeIndex + 1;
-                    $episodeData = [
-                        'label' => mb_substr((string) $episode['label'], 0, 120),
-                        'media_url' => (string) $episode['url'], 'sort_order' => $episodeIndex,
-                        'status' => 'enabled', 'updated_at' => $now,
-                    ];
-                    $oldEpisodeId = (int) ($oldEpisodes[$episodeNo] ?? 0);
-                    if ($oldEpisodeId > 0) {
-                        Db::table('ffx_episodes')->where('id', $oldEpisodeId)->update($episodeData);
-                        continue;
-                    }
-                    Db::table('ffx_episodes')->insert($episodeData + [
-                        'media_id' => $mediaId, 'source_id' => $playSourceId,
-                        'episode_no' => $episodeNo, 'published_at' => $now, 'created_at' => $now,
-                    ]);
-                }
+                (new CollectedEpisodes())->sync($mediaId, (int) $playSourceId, $source['episodes'], $now);
             }
 
             if ($incoming['scenario'] !== null) $this->syncScenarioPayload($mediaId, $incoming['scenario'], $sourceId, $externalId);

@@ -55,8 +55,8 @@ final class Users extends BaseController
         $this->guardCsrf();
         $data = $this->payload();
         $password = (string) $this->request->post('password', '');
-        if ($data['username'] === '' || mb_strlen($password) < 8) {
-            return response('用户名不能为空，密码至少 8 位', 422);
+        if ($data['username'] === '' || mb_strlen($password) < 8 || strlen($password) > PasswordHasher::MAX_BYTES) {
+            return response('用户名不能为空，密码至少 8 位且不超过 200 字节', 422);
         }
         if ($this->duplicateExists((string) $data['username'], $data['email'], 0)) return response('用户名或邮箱已存在', 422);
         $data['password_hash'] = $this->hasher->hash($password);
@@ -78,8 +78,8 @@ final class Users extends BaseController
         if ($this->duplicateExists((string) $data['username'], $data['email'], $id)) return response('用户名或邮箱已存在', 422);
         $password = (string) $this->request->post('password', '');
         if ($password !== '') {
-            if (mb_strlen($password) < 8) {
-                return response('新密码至少 8 位', 422);
+            if (mb_strlen($password) < 8 || strlen($password) > PasswordHasher::MAX_BYTES) {
+                return response('新密码至少 8 位且不超过 200 字节', 422);
             }
             $data['password_hash'] = $this->hasher->hash($password);
         }

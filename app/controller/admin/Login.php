@@ -44,17 +44,15 @@ final class Login extends BaseController
             return view('/admin/login', ['csrf' => $this->csrf->get(), 'error' => '尝试次数过多，请 15 分钟后再试。', 'siteName' => $this->siteName()], 429);
         }
 
-        $username = mb_substr(trim((string) $this->request->post('username', '')), 0, 50);
+        $username = trim((string) $this->request->post('username', ''));
         $password = (string) $this->request->post('password', '');
-        $admin = $this->authenticator->attempt($username, $password, $ip);
+        $admin = mb_strlen($username) <= 80 ? $this->authenticator->attempt($username, $password, $ip) : null;
         if ($admin === null) {
             $this->limiter->hit($rateKey, 900);
             return view('/admin/login', ['csrf' => $this->csrf->get(), 'error' => '用户名或密码不正确。', 'siteName' => $this->siteName()], 422);
         }
 
-        Session::regenerate(true);
-        Session::set('admin_id', (int) $admin->id);
-        Session::set('admin_name', (string) $admin->username);
+        \app\service\AdminSession::establish($admin->getData());
         Session::set('update_notice_pending', true);
         $this->limiter->clear($rateKey);
         return redirect('/admin');

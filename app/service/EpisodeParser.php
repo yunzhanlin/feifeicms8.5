@@ -9,7 +9,7 @@ final class EpisodeParser
      * Preserve FeiFeiCMS' historical $$$ / # / $ playback contract.
      * The returned indexes are zero-based because the legacy sid/pid URLs are zero-based.
      *
-     * @return array<int, array{index:int,key:string,name:string,episodes:array<int,array{index:int,label:string,url:string}>}>
+     * @return array<int, array{index:int,key:string,name:string,episodes:array<int,array{index:int,label:string,url:string,label_explicit:bool}>}>
      */
     public function parse(?string $play, ?string $urls): array
     {
@@ -30,7 +30,7 @@ final class EpisodeParser
                     continue;
                 }
 
-                [$label, $url] = $this->splitEpisode($rawEpisode, $episodeIndex);
+                [$label, $url, $explicit] = $this->splitEpisode($rawEpisode, $episodeIndex);
                 if ($url === '') {
                     continue;
                 }
@@ -39,6 +39,7 @@ final class EpisodeParser
                     'index' => $episodeIndex,
                     'label' => $label,
                     'url' => $url,
+                    'label_explicit' => $explicit,
                 ];
             }
 
@@ -65,17 +66,17 @@ final class EpisodeParser
         return explode('$$$', $value);
     }
 
-    /** @return array{0:string,1:string} */
+    /** @return array{0:string,1:string,2:bool} */
     private function splitEpisode(string $rawEpisode, int $episodeIndex): array
     {
         $parts = explode('$', $rawEpisode, 2);
         if (count($parts) === 1) {
-            return ['第' . ($episodeIndex + 1) . '集', trim($parts[0])];
+            return ['第' . ($episodeIndex + 1) . '集', trim($parts[0]), false];
         }
 
         $label = trim($parts[0]);
         $url = trim($parts[1]);
 
-        return [$label !== '' ? $label : '第' . ($episodeIndex + 1) . '集', $url];
+        return [$label !== '' ? $label : '第' . ($episodeIndex + 1) . '集', $url, $label !== ''];
     }
 }

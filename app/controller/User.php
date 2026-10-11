@@ -39,10 +39,19 @@ final class User extends BaseController
                         'last_login_ip' => (string) $this->request->ip(), 'last_login_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s'),
                     ];
                     if ($this->passwordHasher->needsRehash((string) $user['password_hash'])) $loginUpdate['password_hash'] = $this->passwordHasher->hash($password);
-                    Db::table('ffx_users')->where('id', (int) $user['id'])->update($loginUpdate);
-                    \app\service\UserSession::establish(array_merge($user, $loginUpdate));
-                    $this->limiter->clear($rateKey);
-                    return redirect($redirect);
+                    $authenticated = Db::transaction(function () use ($user, $loginUpdate): ?array {
+                        $current = Db::table('ffx_users')->where('id', (int) $user['id'])->lock(true)->find();
+                        if ($current === null || $current['status'] !== 'active' || $current['deleted_at'] !== null
+                            || (int) $current['session_version'] !== (int) $user['session_version']
+                            || !hash_equals((string) $user['password_hash'], (string) $current['password_hash'])) return null;
+                        Db::table('ffx_users')->where('id', (int) $user['id'])->update($loginUpdate);
+                        return array_merge($current, $loginUpdate);
+                    });
+                    if ($authenticated !== null) {
+                        \app\service\UserSession::establish($authenticated);
+                        $this->limiter->clear($rateKey);
+                        return redirect($redirect);
+                    }
                 }
                 $this->limiter->hit($rateKey, 900);
                 $message = $attempts >= 10 ? '尝试次数过多，请 15 分钟后再试。' : '用户名或密码不正确。';
@@ -73,8 +82,8 @@ final class User extends BaseController
                     $message = '注册过于频繁，请稍后再试。';
                 } elseif (!preg_match('/^[\p{L}\p{N}_-]{' . $minName . ',' . $maxName . '}$/u', $username)) {
                     $message = '用户名需为 ' . $minName . '–' . $maxName . ' 个字符，只能使用文字、数字、下划线或短横线。';
-                } elseif (strlen($password) < $minPassword || strlen($password) > 200) {
-                    $message = '密码至少 ' . $minPassword . ' 个字符。';
+                } elseif (strlen($password) < $minPassword || strlen($password) > \app\service\PasswordHasher::MAX_BYTES) {
+                    $message = '密码至少 ' . $minPassword . ' 个字符，且不超过 200 字节。';
                 } elseif ($this->settings->bool('admin.register.email_required') && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
                     $message = '请填写有效邮箱地址。';
                 } elseif (Db::table('ffx_users')->where('username', $username)->count() > 0) {
@@ -85,7 +94,7 @@ final class User extends BaseController
                     $now = gmdate('Y-m-d H:i:s');
                     $vipDays = $this->settings->int('admin.register.user_register_vipday', 0, 0, 36500);
                     $id = Db::table('ffx_users')->insertGetId([
-                        'username' => $username, 'password_hash' => password_hash($password, PASSWORD_DEFAULT),
+                        'username' => $username, 'password_hash' => $this->passwordHasher->hash($password),
                         'email' => $email !== '' ? $email : null,
                         'points' => $this->settings->int('admin.register.user_register_score', 0, 0),
                         'group_key' => mb_substr($this->settings->string('admin.register.default_group', 'member'), 0, 50),

@@ -76,7 +76,11 @@ final class SiteSettings
             return $values;
         };
         $values = $this->cache->settings($loader);
-        $this->values = is_array($values) ? $values : [];
+        if (!is_array($values)) {
+            $this->cache->invalidateSettings();
+            throw new \think\exception\HttpException(503, '站点配置暂不可用，请稍后重试');
+        }
+        $this->values = $values;
         return $this->values;
     }
 }

@@ -37,10 +37,10 @@ final class Administrators extends BaseController
     public function store(): Response
     {
         $this->guardCsrf();
-        $username = mb_substr(trim((string) $this->request->post('username', '')), 0, 80);
+        $username = trim((string) $this->request->post('username', ''));
         $password = (string) $this->request->post('password', '');
-        if ($username === '' || mb_strlen($password) < 12) {
-            return response('管理员名不能为空，密码至少 12 位', 422);
+        if ($username === '' || mb_strlen($username) > 80 || mb_strlen($password) < 12 || strlen($password) > PasswordHasher::MAX_BYTES) {
+            return response('管理员名需为 1–80 个字符，密码至少 12 位且不超过 200 字节', 422);
         }
         if (Db::table('ffx_admins')->where('username', $username)->count() > 0) {
             return response('管理员名已存在', 422);
@@ -61,8 +61,8 @@ final class Administrators extends BaseController
     {
         $this->guardCsrf();
         $before = $this->requireAdmin($id);
-        $username = mb_substr(trim((string) $this->request->post('username', '')), 0, 80);
-        if ($username === '' || Db::table('ffx_admins')->where('username', $username)->where('id', '<>', $id)->count() > 0) {
+        $username = trim((string) $this->request->post('username', ''));
+        if ($username === '' || mb_strlen($username) > 80 || Db::table('ffx_admins')->where('username', $username)->where('id', '<>', $id)->count() > 0) {
             return response('管理员名不正确或已存在', 422);
         }
         $status = $this->request->post('status', 'active') === 'disabled' ? 'disabled' : 'active';
@@ -72,15 +72,20 @@ final class Administrators extends BaseController
         $data = ['username' => $username, 'email' => $this->email(), 'status' => $status, 'updated_at' => gmdate('Y-m-d H:i:s')];
         $password = (string) $this->request->post('password', '');
         if ($password !== '') {
-            if (mb_strlen($password) < 12) {
-                return response('新密码至少 12 位', 422);
+            if (mb_strlen($password) < 12 || strlen($password) > PasswordHasher::MAX_BYTES) {
+                return response('新密码至少 12 位且不超过 200 字节', 422);
             }
             $data['password_hash'] = $this->hasher->hash($password);
         }
         $roleId = $this->roleId();
         Db::transaction(function () use ($id, $data, $roleId): void {
             $this->protectSuperAdmin($id, $data['status'] === 'active' && Db::table('ffx_roles')->where('id', $roleId)->value('role_key') === 'super_admin');
-            Db::table('ffx_admins')->where('id', $id)->update($data);
+            $oldRoleId = (int) Db::table('ffx_admin_roles')->where('admin_id', $id)->value('role_id');
+            $previous = Db::table('ffx_admins')->where('id', $id)->lock(true)->find();
+            $update = Db::table('ffx_admins')->where('id', $id);
+            if (isset($data['password_hash']) || $previous['status'] !== $data['status']
+                || $previous['username'] !== $data['username'] || $oldRoleId !== $roleId) $update->inc('session_version');
+            $update->update($data);
             Db::table('ffx_admin_roles')->where('admin_id', $id)->delete();
             Db::table('ffx_admin_roles')->insert(['admin_id' => $id, 'role_id' => $roleId]);
         });

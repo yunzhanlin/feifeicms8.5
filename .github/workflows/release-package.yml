@@ -20,7 +20,7 @@ jobs:
           php-version: '8.5'
           extensions: curl, fileinfo, mbstring, openssl, pdo_mysql, zip
           tools: composer:v2
-      - run: composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+      - run: composer install --no-dev --no-interaction --prefer-dist --classmap-authoritative
       - run: php scripts/build-update-package.php "${{ github.event.release.tag_name || github.ref_name }}"
       - run: php scripts/build-update-package.php "${{ github.event.release.tag_name || github.ref_name }}" feifeicms8.5.zip install
       - run: |
@@ -29,7 +29,7 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.release.tag_name || github.ref_name }}
-          overwrite_files: true
+          overwrite_files: false
           files: |
             feifeicms-update.zip
             feifeicms-update.zip.sha256

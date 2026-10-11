@@ -95,8 +95,14 @@ final class ProgramUpdater
             $this->progress($job, '正在备份程序和数据库');
             $backup = $work . '/backup';
             mkdir($backup, 0700);
-            $this->backupDatabase($backup . '/database.sql');
-            $this->install($stage, $backup, array_keys($manifest['files']), $job);
+            $lease = UpdateMaintenance::begin(root_path(), $id);
+            $consistent = true;
+            try {
+                $this->backupDatabase($backup . '/database.sql');
+                $this->install($stage, $backup, array_keys($manifest['files']), $job, $consistent);
+            } finally {
+                UpdateMaintenance::finish(root_path(), $lease, $consistent);
+            }
             $job['status'] = 'succeeded';
             $this->progress($job, '程序已更新到 ' . $job['version'] . '，请重新登录后台');
         } catch (\Throwable $e) {
@@ -161,7 +167,7 @@ final class ProgramUpdater
     }
 
     /** @param list<string> $files */
-    private function install(string $stage, string $backup, array $files, array &$job): void
+    private function install(string $stage, string $backup, array $files, array &$job, bool &$consistent = true): void
     {
         $root = rtrim(root_path(), '/');
         $changed = [];
@@ -216,13 +222,15 @@ final class ProgramUpdater
             (new ResilientCache())->clear();
             app(SiteSettings::class)->forget();
         } catch (\Throwable $e) {
+            $consistent = !$migrationStarted;
             // MySQL DDL implicitly commits. Once any migration has begun, a
             // file-only rollback would leave old PHP against a newer schema.
             if (!$migrationStarted) {
                 foreach (array_reverse($changed) as [$relative, $existed]) {
                     $target = $root . '/' . $relative;
-                    if ($existed) copy($backup . '/' . $relative, $target);
-                    else @unlink($target);
+                    if ($existed) {
+                        if (!copy($backup . '/' . $relative, $target)) $consistent = false;
+                    } elseif (is_file($target) && !unlink($target)) $consistent = false;
                 }
             }
             if (function_exists('opcache_reset')) opcache_reset();

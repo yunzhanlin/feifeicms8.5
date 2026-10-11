@@ -96,7 +96,7 @@ final class VodProvider extends BaseController
             'limit' => $limit,
             'total' => $total,
             'list' => $rows,
-            'class' => $this->cache->remember('api:vod-provider:categories:v1', 300, static fn (): array => Category::where('status', 'published')->where('content_type', 'media')
+            'class' => $this->cache->remember(\app\service\FrontendCache::API_CATEGORIES_KEY, 300, static fn (): array => Category::where('status', 'published')->whereNull('deleted_at')->where('content_type', 'media')
                 ->field('id as type_id,parent_id as type_pid,name as type_name')->order('sort_order')->select()->toArray()),
         ];
     }

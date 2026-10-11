@@ -22,14 +22,14 @@ final class AdminCreate extends Command
     protected function execute(Input $input, Output $output): int
     {
         $hasher = new PasswordHasher();
-        $username = mb_substr(trim((string) $input->getArgument('username')), 0, 80);
+        $username = trim((string) $input->getArgument('username'));
         $password = (string) getenv('CMS_ADMIN_PASSWORD');
         if (!preg_match('/^[A-Za-z0-9_.@-]{3,80}$/', $username)) {
             $output->writeln('[FAIL] 用户名需为 3-80 位字母、数字或 _ . @ -');
             return 1;
         }
-        if (mb_strlen($password) < 12) {
-            $output->writeln('[FAIL] 请通过 CMS_ADMIN_PASSWORD 提供至少 12 位密码');
+        if (mb_strlen($password) < 12 || strlen($password) > PasswordHasher::MAX_BYTES) {
+            $output->writeln('[FAIL] 请通过 CMS_ADMIN_PASSWORD 提供至少 12 位且不超过 200 字节的密码');
             return 1;
         }
 
@@ -46,7 +46,7 @@ final class AdminCreate extends Command
                 ]);
             } else {
                 $adminId = (int) $existing['id'];
-                Db::table('ffx_admins')->where('id', $adminId)->update([
+                Db::table('ffx_admins')->where('id', $adminId)->inc('session_version')->update([
                     'password_hash' => $hasher->hash($password),
                     'status' => 'active',
                     'updated_at' => $now,

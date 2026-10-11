@@ -53,16 +53,12 @@ final class ResilientCache
         $memo = self::$memo[$key] ?? null;
         if ($memo !== null && $memo['expires'] >= time()) return $memo['value'];
         unset(self::$memo[$key]);
-        try {
-            if (Cache::has($key)) {
-                $value = Cache::get($key);
-                self::$memo[$key] = ['value' => $value, 'expires' => time() + max(1, $ttl)];
-                return $value;
-            }
-
-        } catch (Throwable) {
-            $cached = $this->get($key, null);
-            if ($cached !== null) return $cached;
+        // One GET avoids a HAS/GET expiration race; null/false remain valid values.
+        $missing = new \stdClass();
+        $value = $this->get($key, $missing);
+        if ($value !== $missing) {
+            self::$memo[$key] = ['value' => $value, 'expires' => time() + max(1, $ttl)];
+            return $value;
         }
         // Only cache failures are resilient. Business-loader exceptions must
         // propagate once and must never be converted into permissive defaults.

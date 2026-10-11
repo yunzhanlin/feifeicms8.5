@@ -99,7 +99,6 @@ final class Categories extends BaseController
         Db::table('ffx_categories')->where('id', $id)->update($data);
         $this->audit->record('category.archive', 'category', $id, $before, $data);
         $this->frontendCache->invalidateCategories();
-        $this->frontendCache->invalidateCategories();
         return redirect('/admin/categories');
     }
 
@@ -111,30 +110,33 @@ final class Categories extends BaseController
         if ($ids === []) {
             return response('请选择分类', 422);
         }
-        if ($action === 'update') {
-            $names = (array) $this->request->post('names', []);
-            $sortOrders = (array) $this->request->post('sort_orders', []);
-            $statuses = (array) $this->request->post('statuses', []);
-            foreach ($ids as $id) {
-                $before = $this->requireCategory($id);
-                $name = mb_substr(trim((string) ($names[$id] ?? $before['name'])), 0, 100);
-                $data = ['name' => $name !== '' ? $name : $before['name'], 'sort_order' => (int) ($sortOrders[$id] ?? $before['sort_order']), 'status' => ($statuses[$id] ?? '') === 'published' ? 'published' : 'draft', 'updated_at' => gmdate('Y-m-d H:i:s')];
-                Db::table('ffx_categories')->where('id', $id)->update($data);
-                $this->audit->record('category.batch_update', 'category', $id, $before, $data);
+        Db::transaction(function () use ($ids, $action): void {
+            if ($action === 'update') {
+                $names = (array) $this->request->post('names', []);
+                $sortOrders = (array) $this->request->post('sort_orders', []);
+                $statuses = (array) $this->request->post('statuses', []);
+                foreach ($ids as $id) {
+                    $before = $this->requireCategory($id);
+                    $name = mb_substr(trim((string) ($names[$id] ?? $before['name'])), 0, 100);
+                    $data = ['name' => $name !== '' ? $name : $before['name'], 'sort_order' => (int) ($sortOrders[$id] ?? $before['sort_order']), 'status' => ($statuses[$id] ?? '') === 'published' ? 'published' : 'draft', 'updated_at' => gmdate('Y-m-d H:i:s')];
+                    Db::table('ffx_categories')->where('id', $id)->update($data);
+                    $this->audit->record('category.batch_update', 'category', $id, $before, $data);
+                }
+            } elseif ($action === 'delete') {
+                foreach ($ids as $id) {
+                    $before = $this->requireCategory($id);
+                    $used = Db::table('ffx_categories')->where('parent_id', $id)->whereNull('deleted_at')->count()
+                        + Db::table('ffx_media')->where('category_id', $id)->whereNull('deleted_at')->count()
+                        + Db::table('ffx_articles')->where('category_id', $id)->whereNull('deleted_at')->count()
+                        + Db::table('ffx_topics')->where('category_id', $id)->whereNull('deleted_at')->count();
+                    if ($used > 0) continue;
+                    $data = ['status' => 'archived', 'deleted_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s')];
+                    Db::table('ffx_categories')->where('id', $id)->update($data);
+                    $this->audit->record('category.batch_archive', 'category', $id, $before, $data);
+                }
             }
-        } elseif ($action === 'delete') {
-            foreach ($ids as $id) {
-                $before = $this->requireCategory($id);
-                $used = Db::table('ffx_categories')->where('parent_id', $id)->whereNull('deleted_at')->count()
-                    + Db::table('ffx_media')->where('category_id', $id)->whereNull('deleted_at')->count()
-                    + Db::table('ffx_articles')->where('category_id', $id)->whereNull('deleted_at')->count()
-                    + Db::table('ffx_topics')->where('category_id', $id)->whereNull('deleted_at')->count();
-                if ($used > 0) continue;
-                $data = ['status' => 'archived', 'deleted_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s')];
-                Db::table('ffx_categories')->where('id', $id)->update($data);
-                $this->audit->record('category.batch_archive', 'category', $id, $before, $data);
-            }
-        }
+        });
+        $this->frontendCache->invalidateCategories();
         return redirect('/admin/categories');
     }
 

@@ -17,6 +17,7 @@ final class FrontendCache
     public const SHARED_KEY = 'frontend:shared:v1';
     public const HOME_KEY = 'frontend:home:v3';
     public const SETTINGS_KEY = 'frontend:settings:v2';
+    public const API_CATEGORIES_KEY = 'api:vod-provider:categories:v1';
 
     public const CATEGORIES_TTL = 600;
     public const SHARED_TTL = 300;
@@ -50,6 +51,7 @@ final class FrontendCache
         $this->cache->delete(self::CATEGORIES_KEY);
         $this->cache->delete(self::SHARED_KEY);
         $this->cache->delete(self::HOME_KEY);
+        $this->cache->delete(self::API_CATEGORIES_KEY);
     }
 
     public function invalidateShared(): void

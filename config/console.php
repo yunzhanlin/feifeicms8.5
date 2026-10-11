@@ -13,6 +13,7 @@ return [
         'feifei:search:sync' => app\command\SearchSync::class,
         'feifei:search:work' => app\command\SearchWork::class,
         'feifei:update:apply' => app\command\UpdateApply::class,
+        'feifei:update:resume' => app\command\UpdateResume::class,
         'feifei:collection:work' => app\command\CollectionWork::class,
         'feifei:collection:schedule' => app\command\CollectionSchedule::class,
         'feifei:collection:repair-metadata' => app\command\CollectionRepairMetadata::class,

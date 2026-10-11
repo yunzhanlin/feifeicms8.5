@@ -161,6 +161,7 @@ final class WebInstaller
         if (!preg_match('/^[A-Za-z0-9_.@-]{3,80}$/', $values['admin_username'])) throw new RuntimeException('管理员用户名需为 3-80 位字母、数字或 _ . @ -。');
         if ($values['admin_email'] !== '' && filter_var($values['admin_email'], FILTER_VALIDATE_EMAIL) === false) throw new RuntimeException('管理员邮箱格式不正确。');
         if (mb_strlen($values['admin_password']) < 12) throw new RuntimeException('管理员密码至少 12 位。');
+        if (strlen($values['admin_password']) > PasswordHasher::MAX_BYTES) throw new RuntimeException('管理员密码不得超过 200 字节。');
         if (!hash_equals($values['admin_password'], $values['admin_password_confirm'])) throw new RuntimeException('两次输入的管理员密码不一致。');
         if (!in_array($values['cache_driver'], ['file', 'redis'], true)) throw new RuntimeException('缓存驱动不正确。');
         if (!in_array($values['search_driver'], ['mysql', 'meilisearch'], true)) throw new RuntimeException('搜索驱动不正确。');
@@ -206,7 +207,8 @@ final class WebInstaller
     private function executeSchema(PDO $pdo): void
     {
         $this->executeStatements($pdo, $this->sql->fromFile(root_path() . 'database/schema-v2.sql'));
-        foreach (array_merge(glob(root_path() . 'database/migrations/015_*.sql') ?: [], glob(root_path() . 'database/migrations/016_*.sql') ?: []) as $migration) {
+        foreach (glob(root_path() . 'database/migrations/[0-9][0-9][0-9]_*.sql') ?: [] as $migration) {
+            if ((int) substr(basename($migration), 0, 3) < 15) continue;
             $this->executeStatements($pdo, $this->sql->fromFile($migration));
         }
     }

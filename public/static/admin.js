@@ -436,6 +436,7 @@
     const check = async () => {
         try {
             const response = await fetch('/admin/tools/version/status', { credentials: 'same-origin' });
+            if (response.status === 503) { say('更新维护中，完成后自动重试…'); watch(); return; }
             const data = await response.json();
             if (data.job && ['queued', 'running'].includes(data.job.status)) { say(data.job.message); watch(); return; }
             if (data.job?.status === 'failed') say('上次更新失败：' + data.job.message);
@@ -485,6 +486,7 @@
         timer = setInterval(async () => {
             try {
                 const response = await fetch('/admin/tools/version/status', { credentials: 'same-origin', cache: 'no-store' });
+                if (response.status === 503) { say('更新维护中，完成后自动重试；若持续维护，请检查更新日志。'); return; }
                 const data = await response.json();
                 if (data.job) say(data.job.message);
                 if (data.job && ['succeeded', 'failed'].includes(data.job.status)) {
