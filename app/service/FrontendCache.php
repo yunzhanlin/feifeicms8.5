@@ -16,7 +16,7 @@ final class FrontendCache
     public const CATEGORIES_KEY = 'frontend:categories:v1';
     public const SHARED_KEY = 'frontend:shared:v1';
     public const HOME_KEY = 'frontend:home:v3';
-    public const SETTINGS_KEY = 'frontend:settings:v1';
+    public const SETTINGS_KEY = 'frontend:settings:v2';
 
     public const CATEGORIES_TTL = 600;
     public const SHARED_TTL = 300;

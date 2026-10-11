@@ -21,7 +21,7 @@ final class MediaAccess
         $user = Db::table('ffx_users')->where('id', $userId)->where('status', 'active')->whereNull('deleted_at')->find();
         if ($user === null) return ['allowed' => false, 'mode' => $mode, 'message' => '会员状态不可用', 'price' => $price];
         if ($mode === 'member' || $mode === 'vip') {
-            $active = !empty($user['expires_at']) && strtotime((string) $user['expires_at']) >= time();
+            $active = \app\service\UtcClock::timestamp($user['expires_at']) > time();
             return ['allowed' => $active, 'mode' => 'member', 'message' => $active ? '' : '该影片需要有效 VIP 会员', 'price' => 0];
         }
         if ($mode === 'points') {

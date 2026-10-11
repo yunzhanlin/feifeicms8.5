@@ -155,6 +155,8 @@
 
     document.querySelectorAll('[data-legacy-vod-form]').forEach((form) => {
         const list = form.querySelector('[data-play-source-list]');
+        const playbackDirty = () => { const marker = form.querySelector('[name="playback_editor_present"]'); if (marker) marker.value = '1'; };
+        ['input', 'change'].forEach((name) => list?.addEventListener(name, playbackDirty));
         const token = form.querySelector('input[name="_token"]')?.value || '';
         const status = form.querySelector('[data-vod-status]');
         const setStatus = (message, isError = false) => {
@@ -191,6 +193,8 @@
                 if (label) label.innerHTML = `播放地址<strong>${index + 1}</strong>：`;
                 const suffix = row.querySelector('[data-play-group-no]');
                 if (suffix) suffix.textContent = `第${index + 1}组`;
+                const deletion = row.querySelector('[name="play_delete_missing[]"]');
+                if (deletion) deletion.value = String(index);
             });
         };
         form.querySelector('[data-add-play-source]')?.addEventListener('click', (event) => {
@@ -202,6 +206,7 @@
             row.className = 'legacy-play-source-row';
             row.innerHTML = `<td class="tl">播放地址<strong>${number}</strong>：</td><td class="tr"><input type="hidden" name="play_source_id[]" value="0"><p class="play_list"><select name="play_source_key[]" class="legacy-player-select"><option value="line-${number}" selected>${number}.line-${number}.自定义线路</option>${configuredOptions}</select> <input type="text" name="play_source_name[]" value="自定义线路" class="w150" aria-label="线路名称"> <input type="text" name="play_parser_key[]" class="w150" placeholder="解析器标识"> <a href="#" data-play-repair>检正格式</a> <span data-play-group-no>第${number}组</span></p><p class="play_url"><textarea name="play_urls[]"></textarea></p></td>`;
             list.appendChild(row);
+            playbackDirty();
             row.querySelector('textarea')?.focus();
             renumber();
         });
@@ -233,6 +238,7 @@
                 if (!value) return '';
                 return value.includes('$') ? value : `第${index + 1}集$${value}`;
             }).filter(Boolean).join('\n');
+            playbackDirty();
         });
 
         form.querySelector('[data-douban-open]')?.addEventListener('click', () => {
@@ -299,6 +305,7 @@
             if (name instanceof HTMLInputElement) name.value = sourceName;
             const urls = row?.querySelector('textarea[name="play_urls[]"]');
             if (urls instanceof HTMLTextAreaElement) urls.value = `正片$${url.toString()}`;
+            playbackDirty();
             setStatus(`已生成${sourceName}播放线路，请检查后提交保存。`);
         });
 

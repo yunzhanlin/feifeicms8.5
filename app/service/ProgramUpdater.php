@@ -208,6 +208,8 @@ final class ProgramUpdater
             }
             if (function_exists('opcache_reset')) opcache_reset();
             clearstatcache(true);
+            (new ResilientCache())->clear();
+            app(SiteSettings::class)->forget();
         } catch (\Throwable $e) {
             // MySQL DDL implicitly commits. Once any migration has begun, a
             // file-only rollback would leave old PHP against a newer schema.

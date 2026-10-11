@@ -112,7 +112,7 @@ final class Settings extends BaseController
                 if ($field['type'] === 'readonly') continue;
                 $settingKey = 'admin.' . $section . '.' . $key;
                 $stored = Db::table('ffx_site_settings')->where('setting_key', $settingKey)->value('setting_value');
-                $before[$key] = $stored;
+                $before[$key] = !empty($field['secret']) ? '[redacted]' : $stored;
                 $value = trim((string) $this->request->post($key, $field['default']));
                 if ($section === 'rewrite' && $key === 'url_router_on' && $forceRouterOff) $value = '0';
                 if (!empty($field['secret']) && ($value === '' || $value === '••••••••')) continue;

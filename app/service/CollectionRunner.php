@@ -55,6 +55,8 @@ final class CollectionRunner
             if (($source['resource_type'] ?? 'video') === 'scenario') {
                 return $this->runScenarioJob($jobId, $job, $source, $payload, $filters, $page, $pageEnd, $maxPages);
             }
+            // One registry read per job batch, not one query per imported video.
+            $allowedPlayers = $this->allowedPlayers();
             $mapping = json_decode((string) ($source['category_mapping'] ?? '{}'), true);
             $mapping = is_array($mapping) ? $mapping : [];
             $defaultCategory = (int) Db::table('ffx_categories')->where('content_type', 'media')->where('status', 'published')->order('sort_order')->value('id');
@@ -77,9 +79,10 @@ final class CollectionRunner
                 foreach ($rows as $row) {
                     $processed++;
                     try {
-                        $wasCreated = $this->importMedia((int) $source['id'], $row, $mapping, $defaultCategory, $newDataPolicy);
+                        $wasCreated = $this->importMedia((int) $source['id'], $row, $mapping, $defaultCategory, $newDataPolicy, $allowedPlayers);
                         $wasCreated ? $created++ : $updated++;
-                    } catch (CollectionSkipException) {
+                    } catch (CollectionSkipException $exception) {
+                        if (count($errorMessages) < 5) $errorMessages[] = '跳过：#' . $processed . ' ' . mb_substr($exception->getMessage(), 0, 260);
                         continue;
                     } catch (Throwable $exception) {
                         $errors++;
@@ -265,7 +268,16 @@ final class CollectionRunner
     /** @param array<string, mixed> $row
      *  @param array<string, mixed> $mapping
      */
-    private function importMedia(int $sourceId, array $row, array $mapping, int $defaultCategory, string $newDataPolicy = 'published'): bool
+    private function importMedia(int $sourceId, array $row, array $mapping, int $defaultCategory, string $newDataPolicy = 'published', ?array $allowedPlayers = null): bool
+    {
+        $incoming = $this->normalizer->media($row);
+        $identities = ['title:' . $this->normalizeTitle((string) $incoming['title']), 'ref:' . $sourceId . ':' . $incoming['external_id']];
+        foreach (['douban_id', 'imdb_id'] as $field) if (trim((string) $incoming[$field]) !== '') $identities[] = $field . ':' . strtolower(trim((string) $incoming[$field]));
+        return CollectionImportLock::run($identities, fn (): bool => $this->importMediaLocked($sourceId, $row, $mapping, $defaultCategory, $newDataPolicy, $allowedPlayers));
+    }
+
+    /** Lookup and insert both run while the cross-source identity lock is held. */
+    private function importMediaLocked(int $sourceId, array $row, array $mapping, int $defaultCategory, string $newDataPolicy, ?array $allowedPlayers): bool
     {
         $incoming = $this->normalizer->media($row);
         $externalId = (string) $incoming['external_id'];
@@ -296,15 +308,19 @@ final class CollectionRunner
         }
         $sourceSets = [[$incoming['play_from'], $incoming['play_url']]];
         if ((string) $incoming['down_url'] !== '') $sourceSets[] = [$incoming['down_from'] !== '' ? $incoming['down_from'] : 'down', $incoming['down_url']];
-        $allowedPlayers = $this->allowedPlayers();
+        $allowedPlayers ??= $this->allowedPlayers();
         $parsedSources = [];
         foreach ($sourceSets as [$play, $urls]) {
-            foreach ($this->episodeParser->parse((string) $play, (string) $urls) as $sourceIndex => $source) {
-                $parserKey = preg_replace('/[^a-zA-Z0-9_.-]+/', '-', strtolower((string) $source['key'])) ?: 'source-' . ($sourceIndex + 1);
-                if ($allowedPlayers !== [] && !in_array($parserKey, $allowedPlayers, true)) continue;
+            $rawKeys = explode('$$$', (string) $play);
+            foreach ($this->episodeParser->parse((string) $play, (string) $urls) as $source) {
+                $parserKey = PlaybackPlayerRegistry::normalizeKey((string) ($rawKeys[$source['index']] ?? ''));
+                if ($parserKey === '' || !in_array($parserKey, $allowedPlayers, true)) continue;
                 $parsedSources[] = ['parser_key' => $parserKey, 'source' => $source];
             }
         }
+        // Fail closed even with an empty registry or restriction. Do not create
+        // metadata/reference rows for a video whose playback was entirely rejected.
+        if ($parsedSources === []) throw new CollectionSkipException('播放来源未添加、未启用或不在采集白名单中，此影片跳过');
         Db::transaction(function () use ($sourceId, $externalId, $title, $categoryId, $row, $incoming, $existing, $mergeId, $newDataPolicy, $parsedSources): void {
             $now = gmdate('Y-m-d H:i:s');
             $newStatus = $newDataPolicy === 'draft' ? 'draft' : 'published';
@@ -567,12 +583,10 @@ final class CollectionRunner
         $rows = $this->normalizer->scenarios($payload);
         if ($rows === []) return 0;
         $sourceRef = mb_substr('collection:' . $sourceId . ':' . $externalId, 0, 500);
-        $seen = [];
         $synced = 0;
         $now = gmdate('Y-m-d H:i:s');
         foreach ($rows as $row) {
             $episode = (int) $row['episode_no'];
-            $seen[] = $episode;
             $existing = Db::table('ffx_scenarios')->where('media_id', $mediaId)->where('episode_no', $episode)->find();
             $data = ['title' => $row['title'], 'content' => $row['content'], 'source_ref' => $sourceRef, 'status' => 'published', 'updated_at' => $now, 'deleted_at' => null];
             if ($existing === null) {
@@ -583,7 +597,8 @@ final class CollectionRunner
                 $synced++;
             }
         }
-        Db::table('ffx_scenarios')->where('media_id', $mediaId)->where('source_ref', $sourceRef)->whereNotIn('episode_no', $seen)->delete();
+        // FeiFei/MacCMS responses may be incremental, paginated or partially
+        // filtered. Absence is never an instruction to delete existing plots.
         return $synced;
     }
 
@@ -627,10 +642,9 @@ final class CollectionRunner
     /** @return array<int, string> */
     private function allowedPlayers(): array
     {
-        return array_values(array_unique(array_filter(array_map(
-            static fn (string $item): string => strtolower(trim($item)),
-            preg_split('/[\s,\x{FF0C}]+/u', $this->settings->string('admin.collection.api_allowed_players')) ?: []
-        ))));
+        return PlaybackPlayerRegistry::collectionKeys(
+            PlaybackPlayerRegistry::enabledKeys(), $this->settings->string('admin.collection.api_allowed_players')
+        );
     }
 
     private function guardEnabled(): void

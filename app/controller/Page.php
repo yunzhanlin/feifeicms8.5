@@ -96,7 +96,7 @@ final class Page extends BaseController
     {
         return view(ff_theme_view('page/payment'), $this->frontend->shared('充值中心 - ' . $this->siteName()) + [
             'config' => $this->paymentConfig(), 'csrf' => $this->csrf->get(),
-            'isLoggedIn' => (int) Session::get('user_id', 0) > 0,
+            'isLoggedIn' => \app\service\UserSession::id() > 0,
             'message' => mb_substr(trim((string) $this->request->get('message', '')), 0, 200),
         ]);
     }

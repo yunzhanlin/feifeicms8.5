@@ -35,14 +35,12 @@ final class User extends BaseController
                 $attempts = $this->limiter->attempts($rateKey);
                 $user = $attempts >= 10 ? null : Db::table('ffx_users')->where('username', $username)->where('status', 'active')->whereNull('deleted_at')->find();
                 if ($user !== null && $this->passwordHasher->verify((string) $user['password_hash'], $password)) {
-                    Session::regenerate(true);
-                    Session::set('user_id', (int) $user['id']);
-                    Session::set('user_name', (string) $user['username']);
                     $loginUpdate = [
                         'last_login_ip' => (string) $this->request->ip(), 'last_login_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s'),
                     ];
                     if ($this->passwordHasher->needsRehash((string) $user['password_hash'])) $loginUpdate['password_hash'] = $this->passwordHasher->hash($password);
                     Db::table('ffx_users')->where('id', (int) $user['id'])->update($loginUpdate);
+                    \app\service\UserSession::establish(array_merge($user, $loginUpdate));
                     $this->limiter->clear($rateKey);
                     return redirect($redirect);
                 }
@@ -100,9 +98,7 @@ final class User extends BaseController
                     if ($this->settings->bool('admin.register.user_register_check')) {
                         $message = '注册成功，请等待账号审核或完成邮箱验证。';
                     } else {
-                        Session::regenerate(true);
-                        Session::set('user_id', $id);
-                        Session::set('user_name', $username);
+                        \app\service\UserSession::establish(Db::table('ffx_users')->where('id', $id)->find());
                         return redirect($redirect);
                     }
                 }
@@ -113,29 +109,33 @@ final class User extends BaseController
 
     public function center(): Response
     {
-        $id = (int) Session::get('user_id', 0);
+        $id = \app\service\UserSession::id();
         $user = $id > 0 ? Db::table('ffx_users')->where('id', $id)->where('status', 'active')->whereNull('deleted_at')->find() : null;
         $records = [];
         $legacy = null;
         if ($user !== null) {
             $legacy = [
                 'user_name' => $user['username'], 'user_score' => (int) $user['points'], 'user_lognum' => 0,
-                'user_deadtime' => $user['expires_at'] ? strtotime((string) $user['expires_at']) : 0,
+                'user_deadtime' => \app\service\UtcClock::timestamp($user['expires_at']),
                 'user_joinip' => (string) ($user['last_login_ip'] ?? ''), 'user_logip' => (string) ($user['last_login_ip'] ?? ''),
             ];
             $records = $this->watchHistory->records($id);
         }
         $favorites = [];
+        $favoritePager = '';
         if ($user !== null) {
-            $rows = Db::table('ffx_favorites')->alias('f')->join(['ffx_media' => 'm'], 'm.id=f.media_id')->where('f.user_id', $id)->where('m.status', 'published')->whereNull('m.deleted_at')->order('f.created_at', 'desc')->field('m.*')->select()->toArray();
-            $favorites = $this->frontend->vodList($rows);
+            $pager = Db::table('ffx_favorites')->alias('f')->join(['ffx_media' => 'm'], 'm.id=f.media_id')->where('f.user_id', $id)->where('m.status', 'published')->whereNull('m.deleted_at')->order('f.created_at', 'desc')->order('f.id', 'desc')
+                ->field('m.id,m.title,m.slug,m.category_id,m.poster_url,m.release_year,m.rating,m.area,m.language,m.episode_label,m.is_completed,m.view_count,m.media_type,m.status')
+                ->paginate(['list_rows' => 24, 'var_page' => 'favorite_page']);
+            $favorites = $this->frontend->vodList($pager->items());
+            $favoritePager = $pager->render();
         }
-        return view(ff_theme_view('user/center'), $this->frontend->shared('会员中心') + ['user' => $legacy, 'records' => $records, 'favorites' => $favorites, 'csrf' => $this->csrf->get()]);
+        return view(ff_theme_view('user/center'), $this->frontend->shared('会员中心') + ['user' => $legacy, 'records' => $records, 'favorites' => $favorites, 'favoritePager' => $favoritePager, 'csrf' => $this->csrf->get()]);
     }
 
     public function info(): Response
     {
-        $id = (int) Session::get('user_id', 0);
+        $id = \app\service\UserSession::id();
         if ($id < 1) return json(['logged' => 0]);
         $user = Db::table('ffx_users')->where('id', $id)->where('status', 'active')->whereNull('deleted_at')->find();
         return $user === null ? json(['logged' => 0]) : json(['logged' => 1, 'user_id' => $id, 'user_name' => $user['username']]);
@@ -150,7 +150,7 @@ final class User extends BaseController
 
     public function redeem(): Response
     {
-        $userId = (int) Session::get('user_id', 0);
+        $userId = \app\service\UserSession::id();
         if ($userId < 1) return redirect('/user/login?redirect=' . rawurlencode('/payment'));
         if (!$this->csrf->verify($this->request->post('_token'))) return response('请求已过期', 419);
         $plain = strtoupper(trim((string) $this->request->post('card_number', '')));
@@ -160,10 +160,11 @@ final class User extends BaseController
         Db::transaction(function () use ($hash, $userId, &$message): void {
             $card = Db::table('ffx_cards')->where('card_hash', $hash)->lock(true)->find();
             if ($card === null || $card['status'] !== 'unused') { $message = '卡密无效或已使用'; return; }
-            if (!empty($card['expires_at']) && strtotime((string) $card['expires_at']) < time()) { $message = '卡密已过期'; return; }
+            if (!empty($card['expires_at']) && \app\service\UtcClock::timestamp((string) $card['expires_at']) < time()) { $message = '卡密已过期'; return; }
+            $user = Db::table('ffx_users')->where('id', $userId)->where('status', 'active')->whereNull('deleted_at')->lock(true)->find();
+            if ($user === null || (int) $user['session_version'] !== (int) Session::get('user_session_version', 0)) { $message = '会员会话已失效'; return; }
             $now = gmdate('Y-m-d H:i:s');
             Db::table('ffx_cards')->where('id', (int) $card['id'])->update(['status' => 'used', 'used_by' => $userId, 'used_at' => $now]);
-            $user = Db::table('ffx_users')->where('id', $userId)->lock(true)->find();
             Db::table('ffx_users')->where('id', $userId)->update(['points' => (int) $user['points'] + (int) $card['face_value'], 'updated_at' => $now]);
             $message = '充值成功，已增加 ' . (int) $card['face_value'] . ' 积分';
         });
@@ -172,8 +173,6 @@ final class User extends BaseController
 
     private function safeRedirect(string $redirect): string
     {
-        $redirect = rawurldecode(trim($redirect));
-        if ($redirect === '' || !str_starts_with($redirect, '/') || str_starts_with($redirect, '//') || str_contains($redirect, "\0")) return '/user/center';
-        return mb_substr($redirect, 0, 1000);
+        return \app\service\LocalRedirect::allow($redirect);
     }
 }

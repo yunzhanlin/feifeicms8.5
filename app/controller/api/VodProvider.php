@@ -7,6 +7,7 @@ use app\BaseController;
 use app\model\Category;
 use app\model\Media;
 use app\service\ResilientCache;
+use app\service\PlaybackPlayerRegistry;
 use think\facade\Db;
 use think\Response;
 
@@ -150,6 +151,7 @@ final class VodProvider extends BaseController
 
         $sources = Db::table('ffx_play_sources')->whereIn('media_id', $mediaIds)->where('status', 'enabled')
             ->order('media_id')->order('sort_order')->order('id')->select()->toArray();
+        $sources = PlaybackPlayerRegistry::filterSources($sources);
         $sourceIds = array_column($sources, 'id');
         $episodes = $sourceIds === [] ? [] : Db::table('ffx_episodes')->whereIn('source_id', $sourceIds)->where('status', 'enabled')
             ->order('source_id')->order('sort_order')->order('episode_no')->select()->toArray();
@@ -168,11 +170,12 @@ final class VodProvider extends BaseController
             $keys = [];
             $groups = [];
             foreach ($sourcesByMedia[$mediaId] ?? [] as $source) {
-                $keys[] = (string) $source['source_key'];
                 $items = [];
                 foreach ($episodesBySource[(int) $source['id']] ?? [] as $episode) {
                     $items[] = (string) $episode['label'] . '$' . (string) $episode['media_url'];
                 }
+                if ($items === []) continue;
+                $keys[] = PlaybackPlayerRegistry::sourceKey($source);
                 $groups[] = implode('#', $items);
             }
             $result[$mediaId] = ['vod_play_from' => implode('$$$', $keys), 'vod_play_url' => implode('$$$', $groups)];

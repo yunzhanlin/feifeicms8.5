@@ -29,6 +29,8 @@
                     {/volist}
                 </div>
                 {/notempty}
+                <a href="{$item.reply_url|htmlentities}">查看全部回复</a>
+                <div class="mx-pager">{$item.replyPager|raw}</div>
             </div>
             {/volist}
         </div>

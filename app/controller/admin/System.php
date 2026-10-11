@@ -54,7 +54,8 @@ final class System extends BaseController
     public function clearCache(): Response
     {
         $this->guardCsrf();
-        Cache::clear();
+        $this->app->make(\app\service\ResilientCache::class)->clear();
+        $this->settings->forget();
         $this->audit->record('system.cache_clear', 'system', 'cache');
         return redirect('/admin/system');
     }

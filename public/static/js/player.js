@@ -164,14 +164,14 @@
 
     function resolvePlainSource(app) {
         var directType = mediaTypeFromUrl(app.videoUrl);
-        if (directType) {
+        if (directType && !app.forceParser) {
             return Promise.resolve({
                 url: app.videoUrl,
                 type: directType,
                 parsed: false
             });
         }
-        return fetchJson(endpoint(app.parseApi, {url: app.videoUrl})).then(function (result) {
+        return fetchJson(endpoint(app.parseApi, {url: app.videoUrl, media_id: app.mediaId, episode_id: app.episodeId})).then(function (result) {
             var data = result && result.data ? result.data : {};
             if (!data.url) {
                 throw new Error((result && result.message) || '解析接口未返回播放地址');
@@ -413,6 +413,9 @@
             recordApi: (options && options.recordApi) || box.getAttribute('data-record-api') || '',
             recordSid: (options && options.recordSid) || box.getAttribute('data-record-sid') || '1',
             recordDid: (options && options.recordDid) || box.getAttribute('data-record-did') || '',
+            mediaId: box.getAttribute('data-media-id') || '',
+            episodeId: box.getAttribute('data-episode-id') || '',
+            forceParser: box.getAttribute('data-force-parser') === '1',
             recordDidSid: (options && options.recordDidSid) || box.getAttribute('data-record-did-sid') || '',
             recordDidPid: (options && options.recordDidPid) || box.getAttribute('data-record-did-pid') || '',
             recordName: (options && options.recordName) || box.getAttribute('data-record-name') || '',
@@ -482,7 +485,8 @@
             tasks.push(fetchJson(endpoint(app.remoteDanmuApi, {
                 title: app.recordName || app.title,
                 episode: app.recordDidPid || 1,
-                category: app.recordCategory
+                category: app.recordCategory,
+                media_id: app.mediaId, episode_id: app.episodeId
             })));
             return Promise.allSettled(tasks).then(function (results) {
                 var danmuku = [];
@@ -529,6 +533,18 @@
 
         resolveSource(app).then(function (source) {
             app.resolvedVideoUrl = safeUrl(source.url) || app.videoUrl;
+            if (source.type === 'iframe') {
+                var iframe = document.createElement('iframe');
+                iframe.src = app.resolvedVideoUrl;
+                iframe.title = app.title || '视频播放器';
+                iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin allow-presentation');
+                iframe.setAttribute('allow', 'autoplay; fullscreen; picture-in-picture');
+                iframe.setAttribute('referrerpolicy', 'no-referrer');
+                iframe.allowFullscreen = true;
+                iframe.style.cssText = 'width:100%;height:100%;border:0;min-height:360px';
+                box.replaceChildren(iframe);
+                return;
+            }
             if (!window.Artplayer) {
                 renderFallback(box, source, app);
                 return;

@@ -20,10 +20,19 @@ final class AuditLogger
             'target_id' => mb_substr((string) $targetId, 0, 120),
             'request_id' => bin2hex(random_bytes(12)),
             'ip_address' => request()->ip(),
-            'before_data' => $before === null ? null : json_encode($before, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'after_data' => $after === null ? null : json_encode($after, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'before_data' => $before === null ? null : json_encode(self::redact($before), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'after_data' => $after === null ? null : json_encode(self::redact($after), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
             'result' => 'success',
             'created_at' => gmdate('Y-m-d H:i:s'),
         ]);
+    }
+
+    public static function redact(array $data): array
+    {
+        foreach ($data as $key => $value) {
+            if (is_string($key) && preg_match('/(?:password|passwd|(?:^|[_.])pass$|secret|token|cookie|appkey|api_?key|auth_?key|credential|(?:^|[_.])search_key$)/i', $key)) $data[$key] = '[redacted]';
+            elseif (is_array($value)) $data[$key] = self::redact($value);
+        }
+        return $data;
     }
 }

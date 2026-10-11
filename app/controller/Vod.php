@@ -13,6 +13,7 @@ use app\service\CsrfToken;
 use app\service\SiteSettings;
 use app\service\MediaAccess;
 use app\service\PlaybackPosition;
+use app\service\PlaybackPlayerRegistry;
 use think\exception\HttpException;
 use think\facade\Db;
 use think\facade\Session;
@@ -46,7 +47,7 @@ final class Vod extends BaseController
             Db::table('ffx_media_assets')->where('media_id', $id)->order('asset_type')->order('sort_order')->order('id')->select()->toArray(),
             fn (array $asset): bool => $this->mediaUrlGuard->allow((string) ($asset['url'] ?? '')) !== null,
         ));
-        $userId = (int) Session::get('user_id', 0);
+        $userId = \app\service\UserSession::id();
         $userScore = $userId > 0 ? Db::table('ffx_ratings')->where('user_id', $userId)->where('target_type', 'media')->where('target_id', $id)->value('score') : null;
         $actors = array_values(array_filter(array_map('trim', preg_split('/[,\/、|]+/u', (string) ($legacyVod['vod_actor'] ?? '')) ?: [])));
         $sameActorItems = [];
@@ -54,7 +55,7 @@ final class Vod extends BaseController
             $sameActorItems = Db::table('ffx_media')->where('status', 'published')->whereNull('deleted_at')->where('id', '<>', $id)
                 ->whereLike('metadata', '%' . $actors[0] . '%')->order('view_count', 'desc')->limit(12)->select()->toArray();
         }
-        $access = $this->mediaAccess->status($mediaData, (int) Session::get('user_id', 0));
+        $access = $this->mediaAccess->status($mediaData, \app\service\UserSession::id());
         return view(ff_theme_view('vod/detail'), $this->frontend->shared($media->title . ' - ' . $this->settings->string('admin.base.site_name', (string) config('feifei.site_name'))) + [
             'media' => $mediaData,
             'vod' => $legacyVod,
@@ -68,7 +69,7 @@ final class Vod extends BaseController
             'commentCount' => count($comments), 'commentHtml' => $this->commentHtml($comments),
             'commentLoginRequired' => $this->settings->bool('admin.comments.guest_enabled', true) ? 0 : 1,
             'commentsEnabled' => $this->settings->bool('admin.comments.user_forum', true) ? 1 : 0,
-            'isLoggedIn' => (int) Session::get('user_id', 0) > 0 ? 1 : 0,
+            'isLoggedIn' => \app\service\UserSession::id() > 0 ? 1 : 0,
             'csrf' => $this->csrf->get(),
             'related' => $this->frontend->vodList($related),
             'access' => $access,
@@ -84,7 +85,7 @@ final class Vod extends BaseController
             return redirect(ff_play_url($id, max(0, $sid - 1), max(0, $pid - 1)), 301);
         }
         $media = $this->findPublished($id);
-        $access = $this->mediaAccess->status($media->toArray(), (int) Session::get('user_id', 0));
+        $access = $this->mediaAccess->status($media->toArray(), \app\service\UserSession::id());
         if (!$access['allowed']) throw new HttpException(403, $access['message']);
         $sourceRows = $this->frontend->sources($this->sources($media));
         $source = $sourceRows[$sourceIndex] ?? null;
@@ -96,12 +97,17 @@ final class Vod extends BaseController
         $related = Db::table('ffx_media')->where('status', 'published')->whereNull('deleted_at')->where('category_id', (int) $media->category_id)
             ->where('id', '<>', $id)->order('view_count', 'desc')->order('id', 'desc')->limit($this->settings->int('admin.content.related_limit', 12, 0, 50))->select()->toArray();
         $currentUrl = $this->mediaUrlGuard->allow((string) $episode['url']);
+        $plan = $this->app->make(\app\service\PlayerResolver::class)->plan((string) $source['code']);
+        if ($plan['endpoint'] !== '' && $plan['mode'] === 'iframe') {
+            $this->request->withMiddleware(['feifei_frame_origin' => \app\service\PlayerResolver::origin($plan['endpoint'])]);
+        }
         return view(ff_theme_view('vod/play'), $this->frontend->shared($media->title . ' ' . $episode['title']) + [
             'media' => $media->toArray(), 'vod' => $legacyVod,
             'source' => $source, 'episode' => $episode,
             'sources' => $sourceRows, 'currentSource' => $source,
             'current' => ['title' => $episode['title'], 'url' => $currentUrl],
             'mediaUrl' => $currentUrl, 'sid' => $sourceIndex, 'pid' => $episodeIndex,
+            'playerForceParser' => $plan['force'] ? 1 : 0,
             'prevUrl' => $episodeIndex > 0 ? ff_play_url($id, $sourceIndex, $episodeIndex - 1) : '',
             'nextUrl' => isset($source['episodes'][$episodeIndex + 1]) ? ff_play_url($id, $sourceIndex, $episodeIndex + 1) : '',
             'playerAutoplay' => $this->settings->bool('admin.player.play_autoplay') ? 1 : 0,
@@ -150,6 +156,7 @@ final class Vod extends BaseController
     {
         $result = [];
         $sources = Db::table('ffx_play_sources')->where('media_id', (int) $media->id)->where('status', 'enabled')->order('sort_order')->order('id')->select()->toArray();
+        $sources = PlaybackPlayerRegistry::filterSources($sources);
         foreach ($sources as $source) {
             $row = $source;
             $row['episodes'] = Db::table('ffx_episodes')->where('media_id', (int) $media->id)->where('source_id', (int) $source['id'])
@@ -164,12 +171,13 @@ final class Vod extends BaseController
     {
         if ($comments === []) return '<p class="empty-note">暂无评论</p>';
         $html = '';
+        $replyGroups = \app\service\CommentReplies::recent(array_column($comments, 'id'), 20, 'media');
         foreach ($comments as $comment) {
             $name = htmlspecialchars((string) ($comment['author_name'] ?? '访客'), ENT_QUOTES, 'UTF-8');
             $body = nl2br(htmlspecialchars((string) ($comment['content'] ?? ''), ENT_QUOTES, 'UTF-8'));
             $time = htmlspecialchars((string) ($comment['created_at'] ?? ''), ENT_QUOTES, 'UTF-8');
             $html .= '<article class="mx-comment-item"><strong>' . $name . '</strong><p>' . $body . '</p><small>' . $time . '</small></article>';
-            $replies = Db::table('ffx_comments')->where('parent_id', (int) $comment['id'])->where('status', 'approved')->whereNull('deleted_at')->order('created_at')->select()->toArray();
+            $replies = $replyGroups[(int) $comment['id']] ?? [];
             foreach ($replies as $reply) {
                 $html .= '<article class="mx-comment-item mx-comment-reply"><strong>' . htmlspecialchars((string) ($reply['author_name'] ?: '管理员'), ENT_QUOTES, 'UTF-8') . '</strong><p>'
                     . nl2br(htmlspecialchars((string) $reply['content'], ENT_QUOTES, 'UTF-8')) . '</p><small>' . htmlspecialchars((string) $reply['created_at'], ENT_QUOTES, 'UTF-8') . '</small></article>';

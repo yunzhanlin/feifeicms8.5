@@ -13,12 +13,14 @@ final class SecurityHeaders
     {
         /** @var Response $response */
         $response = $next($request);
+        $frameOrigin = (string) $request->middleware('feifei_frame_origin', '');
+        if (!preg_match('~^https?://(?:[a-z0-9.-]+|\[[a-f0-9:]+\])(?::[0-9]{1,5})?$~D', $frameOrigin)) $frameOrigin = '';
         return $response->header([
             'X-Content-Type-Options' => 'nosniff',
             'X-Frame-Options' => 'SAMEORIGIN',
             'Referrer-Policy' => 'strict-origin-when-cross-origin',
             'Permissions-Policy' => 'camera=(), microphone=(), geolocation=()',
-            'Content-Security-Policy' => "default-src 'self'; img-src 'self' data: https: http:; media-src 'self' https: http: blob:; connect-src 'self' https: http:; worker-src 'self' blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'self'; base-uri 'self'; form-action 'self'",
+            'Content-Security-Policy' => "default-src 'self'; img-src 'self' data: https: http:; media-src 'self' https: http: blob:; connect-src 'self' https: http:; worker-src 'self' blob:; font-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-src 'self'" . ($frameOrigin === '' ? '' : ' ' . $frameOrigin) . "; frame-ancestors 'self'; base-uri 'self'; form-action 'self'",
         ]);
     }
 }

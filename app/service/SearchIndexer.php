@@ -22,6 +22,8 @@ final class SearchIndexer
         $temporary = '';
         $swapSubmitted = false;
         try {
+        $consistency = new SearchConsistency();
+        $generation = $consistency->generation();
         $client = $this->searchClient->client();
         $indexName = $this->searchClient->index();
         $temporary = $indexName . '_build_' . bin2hex(random_bytes(8));
@@ -65,6 +67,7 @@ final class SearchIndexer
         // Equal-time rows are retained for a harmless replay.
         Db::table('ffx_search_outbox')->where('updated_at', '<', $cutoff)->delete();
         $this->recordSuccess($count);
+        $consistency->complete($generation);
         try { $this->waitForTask($client, $client->deleteIndex($temporary)); } catch (\Throwable $e) { trace('旧搜索索引清理失败：' . $e->getMessage(), 'warning'); }
         return $count;
         } catch (\Throwable $e) {
@@ -81,6 +84,7 @@ final class SearchIndexer
     /** Bounded, retryable drain; never wait for another sync worker. */
     public function flushPending(int $batchSize = 100, int $taskTimeout = 1500): int
     {
+        if ((new SearchConsistency())->generation() !== '') throw new \RuntimeException('数据库已恢复，请先执行搜索全量同步');
         if ($this->pendingCount() === 0) return 0;
         $lock = $this->lockName();
         if (!$this->acquire($lock)) return 0;
@@ -109,7 +113,18 @@ final class SearchIndexer
 
     private function lockName(): string
     {
-        return 'ff_search_' . substr(hash('sha256', $this->searchClient->host() . '/' . $this->searchClient->index()), 0, 48);
+        $connection = (string) config('database.default', 'mysql');
+        return 'ff_search_' . substr(hash('sha256', (string) config('database.connections.' . $connection . '.database')), 0, 48);
+    }
+
+    public function restore(callable $operation): mixed
+    {
+        $lock = $this->lockName();
+        if ((int) (Db::query('SELECT GET_LOCK(?, 30) AS acquired', [$lock])[0]['acquired'] ?? 0) !== 1) throw new \RuntimeException('搜索正在同步，数据库恢复未开始，请稍后重试');
+        try {
+            (new SearchConsistency())->requireRebuild();
+            return $operation();
+        } finally { Db::query('SELECT RELEASE_LOCK(?)', [$lock]); }
     }
 
     private function acquire(string $lock): bool

@@ -18,6 +18,8 @@ foreach ($roots as $directory) {
     foreach ($iterator as $file) {
         if (!$file->isFile() || $file->isLink()) continue;
         $relative = str_replace('\\', '/', substr($file->getPathname(), strlen($root) + 1));
+        if (preg_match('~(?:^|/)(?:\.DS_Store|Thumbs\.db|\.env(?:\.[^/]+)?)$~i', $relative)) continue;
+        if (str_starts_with($relative, 'view/') && strtolower($file->getExtension()) !== 'html') continue;
         // Local-only theme assets must not leak into an otherwise shared asset root.
         if (preg_match('~(?:^|/)(?:qinxin|qingxin)(?:[./_-]|$)~i', $relative)) continue;
         $files[$relative] = hash_file('sha256', $file->getPathname());

@@ -40,6 +40,7 @@
         </div>
         <div class="mx-title"><h2>我的收藏</h2><span>Favorites</span></div>
         <div class="mx-grid">{volist name="favorites" id="item"}{include file="mxone/module/vod_card" /}{/volist}</div>
+        <div class="mx-pager">{$favoritePager|raw}</div>
         {/empty}
     </section>
 </main>

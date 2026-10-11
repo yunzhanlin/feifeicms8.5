@@ -18,12 +18,13 @@ final class SearchManager
     public function search(string $keyword, int $page, int $pageSize): SearchResult
     {
         $driver = $this->settings->string('admin.cache.search_driver', (string) config('feifei.search.driver', 'mysql'));
-        if ($driver !== 'meilisearch') {
+        if ($driver !== 'meilisearch' || (new \app\service\SearchConsistency())->generation() !== '') {
             return $this->mysql->search($keyword, $page, $pageSize);
         }
 
         try {
             $result = $this->meilisearch->search($keyword, $page, $pageSize);
+            if ((new \app\service\SearchConsistency())->generation() !== '') return $this->mysql->search($keyword, $page, $pageSize);
             // A healthy but stale/empty external index must not hide records that
             // are already published in MySQL. This also keeps search usable before
             // the first index rebuild on a newly installed or upgraded site.
@@ -33,6 +34,9 @@ final class SearchManager
             $fallback = $this->mysql->search($keyword, $page, $pageSize);
             return $fallback->total > 0 ? $fallback : $result;
         } catch (Throwable $exception) {
+            if ((new \app\service\SearchConsistency())->generation() !== '') {
+                return $this->mysql->search($keyword, $page, $pageSize);
+            }
             if ($this->settings->string('admin.cache.search_fallback', (string) config('feifei.search.fallback', 'mysql')) !== 'mysql') {
                 throw $exception;
             }

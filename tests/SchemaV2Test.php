@@ -117,7 +117,7 @@ final class SchemaV2Test extends TestCase
 
     public function testLegacyIdsAreKeptOnlyInTheOptionalImportMap(): void
     {
-        self::assertStringNotContainsString('legacy_id BIGINT UNSIGNED NULL', $this->schema);
+        self::assertDoesNotMatchRegularExpression('/^\s+legacy_id BIGINT UNSIGNED NULL/m', $this->schema);
         self::assertMatchesRegularExpression(
             '/CREATE TABLE IF NOT EXISTS ffx_legacy_map \([\s\S]*legacy_id BIGINT UNSIGNED NOT NULL/',
             $this->schema

@@ -68,8 +68,10 @@ final class SiteSettings
                     $decoded = is_string($raw) ? json_decode($raw, true) : $raw;
                     $values[(string) $row['setting_key']] = json_last_error() === JSON_ERROR_NONE ? $decoded : $raw;
                 }
-            } catch (\Throwable) {
-                // Fresh installs may render the installer before the settings table exists.
+            } catch (\Throwable $exception) {
+                // Installer routes bypass site settings. A broken settings table
+                // is never evidence that payment/registration gates are disabled.
+                throw new \think\exception\HttpException(503, '站点配置暂不可用，请稍后重试', $exception);
             }
             return $values;
         };

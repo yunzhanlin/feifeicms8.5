@@ -6,6 +6,7 @@ return [
     // 指令定义
     'commands' => [
         'feifei:doctor' => app\command\Doctor::class,
+        'feifei:audit:redact' => app\command\AuditRedact::class,
         'feifei:schema:install' => app\command\SchemaInstall::class,
         'feifei:schema:upgrade' => app\command\SchemaUpgrade::class,
         'feifei:admin:create' => app\command\AdminCreate::class,

@@ -227,10 +227,19 @@ final class Database extends BaseController
             $statementCount++;
         }
         if ($statementCount === 0) throw new HttpException(422, '备份文件为空');
-        foreach ($this->sql->fromFile($path, true) as $statement) Db::execute($statement);
-        SearchOutboxTriggers::ensure();
+        $this->app->make(\app\service\SearchIndexer::class)->restore(function () use ($path): void {
+            try {
+                foreach ($this->sql->fromFile($path, true) as $statement) Db::execute($statement);
+                foreach ($this->sql->fromFile(root_path() . 'database/migrations/016_audit_integrity.sql') as $statement) Db::execute($statement);
+                SearchOutboxTriggers::ensure();
+            } finally {
+                $this->app->make(\app\service\ResilientCache::class)->clear();
+                $this->app->make(\app\service\SiteSettings::class)->forget();
+                $this->frontendCache->invalidateCategories();
+            }
+        });
         $this->audit->record('database.restore', 'database', $name, null, ['statements' => $statementCount, 'bytes' => $size]);
-        return redirect('/admin/database#backups');
+        return redirect('/admin/database?message=' . rawurlencode('恢复完成；本站缓存已清理，搜索暂使用数据库，请到缓存管理执行全量同步') . '#backups');
     }
 
     public function delete(string $name): Response

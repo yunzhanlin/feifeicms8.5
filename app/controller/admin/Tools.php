@@ -117,7 +117,14 @@ final class Tools extends BaseController
         $deleted = 0;
         if (in_array($scope, ['templates', 'all'], true)) $deleted += $this->clearDirectory(runtime_path() . 'temp');
         if (in_array($scope, ['page', 'all'], true)) $deleted += $this->clearDirectory(public_path() . 'generated');
-        if (in_array($scope, ['data', 'today_video', 'today_article', 'today_topic', 'all'], true)) Cache::clear();
+        if (in_array($scope, ['data', 'all'], true)) {
+            $this->app->make(\app\service\ResilientCache::class)->clear();
+            $this->settings->forget();
+        } elseif (in_array($scope, ['today_video', 'today_article', 'today_topic'], true)) {
+            $frontend = $this->app->make(\app\service\FrontendCache::class);
+            $frontend->invalidateHome();
+            $frontend->invalidateShared();
+        }
         if (function_exists('opcache_reset')) @opcache_reset();
         clearstatcache(true);
 
@@ -795,6 +802,10 @@ final class Tools extends BaseController
             $stats = $client->index($indexName)->stats();
             $search['ok'] = ($health['status'] ?? null) === 'available';
             $search['indexed'] = (int) ($stats['numberOfDocuments'] ?? 0);
+            if ((new \app\service\SearchConsistency())->generation() !== '') {
+                $search['ok'] = false;
+                $search['error'] = '数据库已恢复，请执行全量同步；前台正在使用 MySQL 搜索';
+            }
         } catch (Throwable $exception) {
             $search['ok'] = false;
             $search['indexed'] = 0;

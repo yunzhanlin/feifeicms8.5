@@ -23,7 +23,7 @@ final class Interaction extends BaseController
         $id = max(0, (int) $this->request->post('id', 0));
         $score = max(1, min(10, (float) $this->request->post('score', 0)));
         if ($id < 1 || Db::table('ffx_media')->where('id', $id)->where('status', 'published')->whereNull('deleted_at')->count() < 1) return json(['status' => 0, 'message' => '影片不存在'], 404);
-        $userId = (int) Session::get('user_id', 0);
+        $userId = \app\service\UserSession::id();
         $sessionKey = 'rated_media_' . $id;
         if ($userId < 1 && Session::get($sessionKey, false)) return json(['status' => 0, 'message' => '你已经评过分了'], 422);
         $now = gmdate('Y-m-d H:i:s');
@@ -60,7 +60,7 @@ final class Interaction extends BaseController
     public function unlock(): Response
     {
         if (!$this->csrf->verify($this->request->post('_token'))) return response('请求已过期', 419);
-        $userId = (int) Session::get('user_id', 0);
+        $userId = \app\service\UserSession::id();
         $mediaId = max(0, (int) $this->request->post('id', 0));
         if ($userId < 1) return redirect('/user/login?redirect=' . rawurlencode('/vod/' . $mediaId));
         $media = Db::table('ffx_media')->where('id', $mediaId)->where('status', 'published')->whereNull('deleted_at')->find();
@@ -79,13 +79,13 @@ final class Interaction extends BaseController
         $content = mb_substr(trim((string) $this->request->post('content', '')), 0, $this->settings->int('admin.comments.max_length', 1000, 1, 10000));
         $rateKey = 'rate:comment:' . hash('sha256', (string) $this->request->ip());
         if ($content === '') return $this->commentResult(422, '评论内容不能为空');
-        if ($this->blockedCommentIp()) return $this->commentResult(403, '当前网络地址不能发表评论');
-        $userId = (int) Session::get('user_id', 0);
+        $userId = \app\service\UserSession::id();
         if ($userId < 1 && !$this->settings->bool('admin.comments.guest_enabled', true)) return $this->commentResult(401, '请先登录后再评论');
+        try { $content = (new \app\service\CommentPolicy($this->settings))->content($content, (string) $this->request->ip(), $userId); }
+        catch (\think\exception\HttpException $error) { return $this->commentResult($error->getStatusCode(), $error->getMessage()); }
         if ((int) $this->cache->get($rateKey, 0) > 0) return $this->commentResult(429, '提交过于频繁');
         if (Db::table('ffx_media')->where('id', $mediaId)->where('status', 'published')->whereNull('deleted_at')->count() < 1) return $this->commentResult(404, '影片不存在');
         if ($parentId > 0 && Db::table('ffx_comments')->where('id', $parentId)->where('target_type', 'media')->where('target_id', $mediaId)->count() < 1) $parentId = 0;
-        $content = $this->filterComment($content);
         Db::table('ffx_comments')->insert([
             'user_id' => $userId > 0 ? $userId : null, 'parent_id' => $parentId > 0 ? $parentId : null,
             'target_type' => 'media', 'target_id' => $mediaId, 'title' => '', 'content' => $content,
@@ -114,14 +114,14 @@ final class Interaction extends BaseController
             'vod' => $vod, 'commentCount' => $pager->total(), 'commentHtml' => $html ?: '<p class="empty-note">暂无评论</p>',
             'commentLoginRequired' => $this->settings->bool('admin.comments.guest_enabled', true) ? 0 : 1,
             'commentsEnabled' => $this->settings->bool('admin.comments.user_forum', true) ? 1 : 0,
-            'isLoggedIn' => (int) Session::get('user_id', 0) > 0 ? 1 : 0,
+            'isLoggedIn' => \app\service\UserSession::id() > 0 ? 1 : 0,
             'fullComments' => 1, 'csrf' => $this->csrf->get(), 'pager' => $pager->render(),
         ]);
     }
 
     public function favorite(): Response
     {
-        $userId = (int) Session::get('user_id', 0);
+        $userId = \app\service\UserSession::id();
         if ($userId < 1) return json(['status' => 5001, 'info' => '请先登录']);
         $mediaId = max(0, (int) $this->request->param('id', 0));
         if ($mediaId < 1 || Db::table('ffx_media')->where('id', $mediaId)->where('status', 'published')->whereNull('deleted_at')->count() < 1) {
@@ -142,7 +142,7 @@ final class Interaction extends BaseController
 
     public function history(): Response
     {
-        $userId = (int) Session::get('user_id', 0);
+        $userId = \app\service\UserSession::id();
         if ($userId < 1) return json(['status' => 5001, 'info' => '未登录']);
         if (!$this->csrf->verify($this->request->post('_token'))) return json(['status' => 419, 'info' => '请求已过期'], 419);
         $mediaId = max(0, (int) $this->request->post('id', 0));
@@ -162,22 +162,7 @@ final class Interaction extends BaseController
     private function commentResult(int $code, string $message, bool $success = false): Response
     {
         if ($this->request->isAjax() || str_contains((string) $this->request->header('accept', ''), 'json')) return json(['status' => $success ? 1 : 0, 'info' => $message], $code);
-        return $success ? redirect((string) $this->request->header('referer', '/')) : response($message, $code);
+        return $success ? redirect(\app\service\LocalRedirect::allow((string) $this->request->header('referer', '/'), '/')) : response($message, $code);
     }
 
-    private function blockedCommentIp(): bool
-    {
-        $blocked = preg_split('/[\s,]+/', $this->settings->string('admin.comments.blocked_ips'), -1, PREG_SPLIT_NO_EMPTY) ?: [];
-        return in_array((string) $this->request->ip(), $blocked, true);
-    }
-
-    private function filterComment(string $content): string
-    {
-        $words = preg_split('/\R+/', $this->settings->string('admin.comments.user_replace'), -1, PREG_SPLIT_NO_EMPTY) ?: [];
-        foreach ($words as $word) {
-            $word = trim($word);
-            if ($word !== '') $content = str_ireplace($word, '***', $content);
-        }
-        return $content;
-    }
 }

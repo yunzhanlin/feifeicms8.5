@@ -8,6 +8,8 @@
     <section class="mx-player-card">
         <div class="mx-player"
              data-ff-player
+             data-media-id="{$vod.vod_id}" data-episode-id="{$episode.id}"
+             data-force-parser="{$playerForceParser|default=0}"
              data-url="{$current.url|htmlentities}"
              data-type="{$currentSource.code|default=''|htmlentities}"
              data-title="{$vod.vod_name|htmlentities} {$current.title|htmlentities}"

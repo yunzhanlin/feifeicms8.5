@@ -32,7 +32,7 @@ final class CollectionMetadataIntegrationTest extends TestCase
         $this->sourceId = (int) $this->pdo->lastInsertId();
         $this->pdo->prepare("INSERT INTO ffx_media(title,slug,status,metadata,updated_at) VALUES (?,?,'published',?,'2026-01-01 00:00:00')")->execute(['metadata-' . $suffix, 'metadata-' . $suffix, '{"actor":"","director":null,"keywords":"","inputer":"json_2"}']);
         $this->mediaId = (int) $this->pdo->lastInsertId();
-        $payload = ['vod_id' => 7, 'vod_name' => '测试视频', 'type_id' => 1, 'vod_actor' => '演员甲,演员乙', 'vod_director' => '导演甲', 'vod_keywords' => '', 'vod_tag' => '悬疑', 'vod_class' => '剧情', 'vod_pubdate' => '2026-10-01'];
+        $payload = ['vod_id' => 7, 'vod_name' => '测试视频', 'type_id' => 1, 'vod_actor' => '演员甲,演员乙', 'vod_director' => '导演甲', 'vod_keywords' => '', 'vod_tag' => '悬疑', 'vod_class' => '剧情', 'vod_pubdate' => '2026-10-01', 'vod_play_from' => 'metadata-fixture-' . $suffix, 'vod_play_url' => '第1集$https://example.invalid/metadata.m3u8'];
         $this->env['FF_AUDIT_METADATA_PAYLOAD'] = json_encode($payload, JSON_UNESCAPED_UNICODE);
         $this->env['FF_AUDIT_METADATA_SOURCE'] = (string) $this->sourceId;
         $this->env['FF_AUDIT_METADATA_ID'] = (string) $this->mediaId;
@@ -66,16 +66,19 @@ final class CollectionMetadataIntegrationTest extends TestCase
 require 'vendor/autoload.php';
 $app = new think\App(); $app->initialize();
 $category = think\facade\Db::table('ffx_categories')->insertGetId(['name'=>'audit metadata','slug'=>'audit-metadata-'.bin2hex(random_bytes(8)),'content_type'=>'media']);
+$payload = json_decode(getenv('FF_AUDIT_METADATA_PAYLOAD'),true);
+$player = think\facade\Db::table('ffx_players')->insertGetId(['player_key'=>$payload['vod_play_from'],'name'=>'metadata fixture','status'=>'enabled']);
 try {
     $runner = $app->make(app\service\CollectionRunner::class);
     $method = new ReflectionMethod($runner, 'importMedia');
-    $created = $method->invoke($runner, (int)getenv('FF_AUDIT_METADATA_SOURCE'), json_decode(getenv('FF_AUDIT_METADATA_PAYLOAD'),true), ['1'=>$category], $category);
+    $created = $method->invoke($runner, (int)getenv('FF_AUDIT_METADATA_SOURCE'), $payload, ['1'=>$category], $category);
     $row = think\facade\Db::table('ffx_media')->where('id',(int)getenv('FF_AUDIT_METADATA_ID'))->find();
     $frontend = $app->make(app\service\FrontendData::class)->vod($row + ['category_name'=>'audit metadata']);
     $provider = (new ReflectionClass(app\controller\api\VodProvider::class))->newInstanceWithoutConstructor();
     $export = (new ReflectionMethod($provider,'mapBase'))->invoke($provider,$row);
     echo json_encode(['created'=>$created,'frontend'=>$frontend,'export'=>$export], JSON_UNESCAPED_UNICODE|JSON_THROW_ON_ERROR);
 } finally {
+    think\facade\Db::table('ffx_players')->where('id',$player)->delete();
     think\facade\Db::table('ffx_categories')->where('id',$category)->delete();
 }
 PHP]), true, 512, JSON_THROW_ON_ERROR);

@@ -10,6 +10,7 @@ use app\service\CollectionResponseSizeGuard;
 use app\service\CollectionRunner;
 use app\service\CollectionSourceIdentity;
 use app\service\EpisodeParser;
+use app\service\PlaybackPlayerRegistry;
 use app\service\SafeRemoteUrl;
 use app\service\SiteSettings;
 use PHPUnit\Framework\TestCase;
@@ -19,8 +20,8 @@ final class CollectionRunnerMergeTest extends TestCase
 {
     public function testAllowedPlayerParserUsesPcreUnicodeSyntax(): void
     {
-        $method = new ReflectionMethod($this->runner(), 'allowedPlayers');
-        self::assertSame([], $method->invoke($this->runner()));
+        self::assertSame(['bfzym3u8', 'mp4'], PlaybackPlayerRegistry::collectionKeys(['bfzym3u8', 'mp4'], " BFZYM3U8，mp4\nunknown "));
+        self::assertSame([], PlaybackPlayerRegistry::collectionKeys([], 'bfzym3u8'));
     }
 
     public function testMissingOrEmptyPlaybackIsNotTreatedAsAReplacementLine(): void

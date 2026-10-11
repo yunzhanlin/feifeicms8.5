@@ -234,7 +234,7 @@ final class FrontendData
             }
             return array_replace($source, [
                 'name' => (string) ($source['display_name'] ?? $source['source_key'] ?? ''),
-                'code' => (string) ($source['source_key'] ?? ''),
+                'code' => PlaybackPlayerRegistry::sourceKey($source),
                 'episodes' => $episodes,
             ]);
         }, $sources);

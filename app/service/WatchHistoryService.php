@@ -28,7 +28,8 @@ final class WatchHistoryService
         $sourcePositions = [];
         if ($mediaIds !== []) {
             $sourceRows = Db::table('ffx_play_sources')->whereIn('media_id', $mediaIds)->where('status', 'enabled')
-                ->order('media_id')->order('sort_order')->order('id')->field('id,media_id')->select()->toArray();
+                ->order('media_id')->order('sort_order')->order('id')->field('id,media_id,source_key,parser_key')->select()->toArray();
+            $sourceRows = PlaybackPlayerRegistry::filterSources($sourceRows);
             foreach ($sourceRows as $source) {
                 $mediaId = (int) $source['media_id'];
                 $sourcePositions[$mediaId][(int) $source['id']] = count($sourcePositions[$mediaId] ?? []);

@@ -82,6 +82,7 @@ final class Legacy43Migrator
             }
         }
         if (!$dryRun && $stats['processed'] > 0) {
+            if ($module === 'categories') $this->repairCategoryParents();
             $this->cache->invalidateCategories();
             $this->cache->invalidateShared();
             $this->cache->invalidateHome();
@@ -108,7 +109,35 @@ final class Legacy43Migrator
             'status' => (int) ($row['list_status'] ?? 1) === 1 ? 'published' : 'draft',
             'updated_at' => $this->now(), 'deleted_at' => null,
         ];
-        return $this->saveMapped('category', $id, 'ffx_categories', $data, $row);
+        $outcome = $this->saveMapped('category', $id, 'ffx_categories', $data, $row);
+        // Persist unresolved parents across batches and process restarts. This
+        // repair is independent of the row checksum/idempotency shortcut.
+        Db::table('ffx_legacy_map')->where('entity_type', 'category')->where('legacy_id', $id)->update(['parent_legacy_id' => max(0, (int) ($row['list_pid'] ?? 0))]);
+        $this->repairCategoryParents($id);
+        return $outcome;
+    }
+
+    private function repairCategoryParents(?int $resolvedLegacyId = null): void
+    {
+        $query = Db::table('ffx_legacy_map')->where('entity_type', 'category')->whereNotNull('parent_legacy_id');
+        // Old mappings have an unknown parent until their source row is read
+        // again. Do not turn existing parent links into root categories.
+        if ($resolvedLegacyId !== null) $query->where(function ($q) use ($resolvedLegacyId): void { $q->where('legacy_id', $resolvedLegacyId)->whereOr('parent_legacy_id', $resolvedLegacyId); });
+        $query->order('legacy_id')->chunk(500, function ($rows): void {
+            foreach ($rows as $mapping) {
+                $parent = $this->mappedId('category', (int) ($mapping['parent_legacy_id'] ?? 0));
+                $child = (int) $mapping['new_id'];
+                if ($parent === $child) continue;
+                $seen = [$child => true];
+                $cursor = $parent;
+                while ($cursor > 0 && !isset($seen[$cursor]) && count($seen) <= 100) {
+                    $seen[$cursor] = true;
+                    $cursor = (int) Db::table('ffx_categories')->where('id', $cursor)->value('parent_id');
+                }
+                if ($cursor > 0) continue; // Never introduce cyclic trees.
+                Db::table('ffx_categories')->where('id', $child)->update(['parent_id' => $parent ?: null]);
+            }
+        }, 'legacy_id');
     }
 
     /** @param array<string,mixed> $row */

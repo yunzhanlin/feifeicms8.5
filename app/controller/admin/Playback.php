@@ -7,6 +7,7 @@ use app\BaseController;
 use app\model\Media;
 use app\service\AuditLogger;
 use app\service\CsrfToken;
+use app\service\PlaybackPlayerRegistry;
 use think\exception\HttpException;
 use think\facade\Db;
 use think\Response;
@@ -47,14 +48,16 @@ final class Playback extends BaseController
         $this->guardCsrf();
         $this->requireMedia($id);
         $key = strtolower(trim((string) $this->request->post('source_key', '')));
-        if (!preg_match('/^[a-z0-9][a-z0-9_.-]{1,79}$/', $key)) {
-            return response('线路标识需为 2-80 位小写字母、数字、点、横线或下划线', 422);
+        if (!preg_match('/^[a-z0-9][a-z0-9_.-]{0,79}$/D', $key)) {
+            return response('线路标识需为 1-80 位小写字母、数字、点、横线或下划线', 422);
         }
+        $parserKey = PlaybackPlayerRegistry::sourceKey(['source_key' => $key, 'parser_key' => $this->request->post('parser_key', '')]);
+        if (!in_array($parserKey, PlaybackPlayerRegistry::enabledKeys(), true)) return response('请先在后台添加并启用对应播放器', 422);
         $row = [
             'media_id' => $id,
-            'source_key' => $key,
+            'source_key' => PlaybackPlayerRegistry::uniqueLineKey($id, $key),
             'display_name' => mb_substr(trim((string) $this->request->post('display_name', '')), 0, 120),
-            'parser_key' => mb_substr(trim((string) $this->request->post('parser_key', '')), 0, 80),
+            'parser_key' => $parserKey,
             'sort_order' => (int) $this->request->post('sort_order', 0),
             'status' => $this->request->post('status', 'enabled') === 'enabled' ? 'enabled' : 'disabled',
             'created_at' => gmdate('Y-m-d H:i:s'),
@@ -72,11 +75,14 @@ final class Playback extends BaseController
     {
         $this->guardCsrf();
         $source = $this->requireSource($id, $sourceId);
+        $parserKey = PlaybackPlayerRegistry::sourceKey(['source_key' => $source['source_key'], 'parser_key' => $this->request->post('parser_key', '')]);
+        $status = $this->request->post('status', 'disabled') === 'enabled' ? 'enabled' : 'disabled';
+        if ($status === 'enabled' && !in_array($parserKey, PlaybackPlayerRegistry::enabledKeys(), true)) return response('请先在后台添加并启用对应播放器', 422);
         $row = [
             'display_name' => mb_substr(trim((string) $this->request->post('display_name', '')), 0, 120),
-            'parser_key' => mb_substr(trim((string) $this->request->post('parser_key', '')), 0, 80),
+            'parser_key' => $parserKey,
             'sort_order' => (int) $this->request->post('sort_order', 0),
-            'status' => $this->request->post('status', 'disabled') === 'enabled' ? 'enabled' : 'disabled',
+            'status' => $status,
             'updated_at' => gmdate('Y-m-d H:i:s'),
         ];
         Db::table('ffx_play_sources')->where('id', $sourceId)->update($row);

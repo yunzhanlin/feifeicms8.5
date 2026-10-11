@@ -56,7 +56,7 @@ final class Billing extends BaseController
                             $metadata['fulfilled_points'] = $points;
                         } elseif ((string) $order['product_type'] === 'vip') {
                             $days = max(1, (int) $order['quantity']) * $this->settings->int('admin.pay.user_pay_vip_ext', 30, 1, 3650);
-                            $base = !empty($user['expires_at']) && strtotime((string) $user['expires_at']) > time() ? strtotime((string) $user['expires_at']) : time();
+                            $base = max(time(), \app\service\UtcClock::timestamp($user['expires_at']));
                             Db::table('ffx_users')->where('id', (int) $user['id'])->update(['expires_at' => gmdate('Y-m-d H:i:s', $base + ($days * 86400)), 'updated_at' => gmdate('Y-m-d H:i:s')]);
                             $metadata['fulfilled_vip_days'] = $days;
                         }
@@ -78,7 +78,7 @@ final class Billing extends BaseController
         $this->guardCsrf();
         $count = max(1, min(100, (int) $this->request->post('count', 1)));
         $faceValue = max(1, (int) $this->request->post('face_value', 100));
-        $expiresAt = (($expires = trim((string) $this->request->post('expires_at', ''))) !== '') ? str_replace('T', ' ', $expires) : null;
+        $expiresAt = \app\service\UtcClock::fromLocalInput(trim((string) $this->request->post('expires_at', '')));
         $plainCards = [];
         $ids = [];
         Db::transaction(function () use ($count, $faceValue, $expiresAt, &$plainCards, &$ids): void {

@@ -30,7 +30,7 @@ final class AdminVodQuery
         if (($filters['state'] ?? '') !== '') $query->where('admin_state', (string) $filters['state']);
         if (($filters['area'] ?? '') !== '') $query->where('area', (string) $filters['area']);
         if (($filters['type'] ?? '') !== '') $query->whereRaw("FIND_IN_SET(?, REPLACE(COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.type')), ''), '，', ',')) > 0", [(string) $filters['type']]);
-        if (($filters['play'] ?? '') !== '') $query->whereRaw("EXISTS (SELECT 1 FROM ffx_play_sources ps WHERE ps.media_id=ffx_media.id AND ps.status='enabled' AND ps.source_key=?)", [(string) $filters['play']]);
+        if (($filters['play'] ?? '') !== '') $query->whereRaw("EXISTS (SELECT 1 FROM ffx_play_sources ps WHERE ps.media_id=ffx_media.id AND ps.status='enabled' AND COALESCE(NULLIF(TRIM(ps.parser_key),''),ps.source_key)=?)", [(string) $filters['play']]);
         if (in_array($filters['access'] ?? '', ['member', 'points', 'free'], true)) $query->where('access_mode', (string) $filters['access']);
 
         match ($filters['missing'] ?? '') {

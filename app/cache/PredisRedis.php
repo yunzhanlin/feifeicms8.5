@@ -11,9 +11,38 @@ namespace app\cache;
  */
 final class PredisRedis extends \think\cache\driver\Redis
 {
+    private string $namespace;
+
     public function __construct(array $options = [])
     {
+        $this->namespace = (string) ($options['prefix'] ?? '');
+        if ($this->namespace === '' || preg_match('/[\x00-\x20*?\[\]\\\\]/', $this->namespace)) {
+            throw new \InvalidArgumentException('Redis 缓存必须配置非空、无通配符的独立前缀');
+        }
         parent::__construct($options);
         $this->handler();
+    }
+
+    /** Never FLUSHDB: other applications may share this Redis database. */
+    public function clear(): bool
+    {
+        $redis = $this->handler();
+        $cursor = '0';
+        do {
+            if ($redis instanceof \Predis\Client) {
+                // Raw commands avoid prefixing already-prefixed keys twice.
+                [$cursor, $keys] = $redis->executeRaw(['SCAN', $cursor, 'MATCH', $this->namespace . '*', 'COUNT', '500']);
+            } else {
+                $position = (int) $cursor;
+                $keys = $redis->scan($position, $this->namespace . '*', 500) ?: [];
+                $cursor = (string) $position;
+            }
+            $keys = array_values(array_filter($keys, fn (string $key): bool => str_starts_with($key, $this->namespace)));
+            if ($keys !== []) {
+                if ($redis instanceof \Predis\Client) $redis->executeRaw(array_merge(['DEL'], $keys));
+                else $redis->del($keys);
+            }
+        } while ((string) $cursor !== '0');
+        return true;
     }
 }

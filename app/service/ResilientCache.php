@@ -41,6 +41,13 @@ final class ResilientCache
         unset(self::$fallback[$key], self::$memo[$key]);
     }
 
+    public function clear(): void
+    {
+        // Report failures instead of claiming a successful administrative clear.
+        Cache::clear();
+        self::$fallback = self::$memo = [];
+    }
+
     public function remember(string $key, int $ttl, Closure $loader): mixed
     {
         $memo = self::$memo[$key] ?? null;
@@ -53,15 +60,14 @@ final class ResilientCache
                 return $value;
             }
 
-            $value = $loader();
-            $this->set($key, $value, $ttl);
-            return $value;
         } catch (Throwable) {
             $cached = $this->get($key, null);
             if ($cached !== null) return $cached;
-            $value = $loader();
-            $this->set($key, $value, $ttl);
-            return $value;
         }
+        // Only cache failures are resilient. Business-loader exceptions must
+        // propagate once and must never be converted into permissive defaults.
+        $value = $loader();
+        $this->set($key, $value, $ttl);
+        return $value;
     }
 }

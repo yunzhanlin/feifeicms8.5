@@ -314,6 +314,7 @@ CREATE TABLE IF NOT EXISTS ffx_users (
   id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
   username VARCHAR(80) NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
+  session_version BIGINT UNSIGNED NOT NULL DEFAULT 1,
   email VARCHAR(255) NULL,
   avatar_url VARCHAR(1000) NOT NULL DEFAULT '',
   points BIGINT NOT NULL DEFAULT 0,
@@ -350,6 +351,7 @@ CREATE TABLE IF NOT EXISTS ffx_comments (
   deleted_at DATETIME(6) NULL,
   KEY idx_ffx_comments_target (target_type, target_id, status, created_at),
   KEY idx_ffx_comments_user (user_id, created_at),
+  KEY idx_ffx_comments_replies (parent_id, target_type, status, id),
   CONSTRAINT fk_ffx_comments_user FOREIGN KEY (user_id) REFERENCES ffx_users(id) ON DELETE SET NULL,
   CONSTRAINT fk_ffx_comments_parent FOREIGN KEY (parent_id) REFERENCES ffx_comments(id) ON DELETE SET NULL,
   CONSTRAINT fk_ffx_comments_episode FOREIGN KEY (episode_id) REFERENCES ffx_episodes(id) ON DELETE SET NULL
@@ -691,6 +693,7 @@ CREATE TABLE IF NOT EXISTS ffx_legacy_map (
   legacy_id BIGINT UNSIGNED NOT NULL,
   new_id BIGINT UNSIGNED NOT NULL,
   checksum CHAR(64) NOT NULL DEFAULT '',
+  parent_legacy_id BIGINT UNSIGNED NULL,
   migrated_at DATETIME(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6),
   PRIMARY KEY (entity_type, legacy_id),
   UNIQUE KEY uk_ffx_legacy_map_new (entity_type, new_id)

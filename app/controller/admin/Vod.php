@@ -14,6 +14,8 @@ use app\service\CollectionSourceIdentity;
 use app\service\DoubanMetadata;
 use app\service\FrontendCache;
 use app\service\MediaMerge;
+use app\service\PlaybackPlayerRegistry;
+use app\service\PlaybackEditor;
 use app\service\Slugger;
 use app\service\SiteSettings;
 use think\exception\HttpException;
@@ -116,7 +118,7 @@ final class Vod extends BaseController
             'tags' => '',
             'credits' => '',
             'playSources' => [[
-                'id' => 0, 'source_key' => 'default', 'display_name' => '默认线路',
+                'id' => 0, 'source_key' => 'default', 'player_key' => 'default', 'display_name' => '默认线路',
                 'parser_key' => '', 'status' => 'enabled', 'legacy_urls' => '',
             ]],
             'players' => $this->players(),
@@ -468,8 +470,8 @@ final class Vod extends BaseController
         $categoryNames = [];
         foreach ($categories as $category) $categoryNames[(int) $category['id']] = (string) $category['name'];
         $sourceKeys = [];
-        foreach (Db::table('ffx_play_sources')->whereIn('media_id', $ids)->where('status', 'enabled')->order('sort_order')->order('id')->field('media_id,source_key')->select()->toArray() as $source) {
-            $sourceKeys[(int) $source['media_id']][] = (string) $source['source_key'];
+        foreach (Db::table('ffx_play_sources')->whereIn('media_id', $ids)->where('status', 'enabled')->order('sort_order')->order('id')->field('media_id,source_key,parser_key')->select()->toArray() as $source) {
+            $sourceKeys[(int) $source['media_id']][] = PlaybackPlayerRegistry::sourceKey($source);
         }
         $scenarioCounts = [];
         foreach (Db::table('ffx_scenarios')->whereIn('media_id', $ids)->whereNull('deleted_at')->field('media_id,COUNT(*) AS total')->group('media_id')->select()->toArray() as $row) {
@@ -609,19 +611,16 @@ final class Vod extends BaseController
     {
         $sources = Db::table('ffx_play_sources')->where('media_id', $mediaId)->order('sort_order')->order('id')->select()->toArray();
         foreach ($sources as &$source) {
+            $source['player_key'] = PlaybackPlayerRegistry::sourceKey($source);
             $episodes = Db::table('ffx_episodes')->where('source_id', (int) $source['id'])->order('sort_order')->order('episode_no')->select()->toArray();
             $source['legacy_urls'] = implode("\n", array_map(static function (array $episode): string {
                 $line = (string) $episode['label'] . '$' . (string) $episode['media_url'];
-                $metadata = is_string($episode['metadata'] ?? null) ? json_decode((string) $episode['metadata'], true) : ($episode['metadata'] ?? []);
-                if (is_array($metadata) && !empty($metadata['legacy_extra'])) {
-                    $line .= '$' . implode('$', (array) $metadata['legacy_extra']);
-                }
                 return $line;
             }, $episodes));
         }
         unset($source);
         return $sources === [] ? [[
-            'id' => 0, 'source_key' => 'default', 'display_name' => '默认线路',
+            'id' => 0, 'source_key' => 'default', 'player_key' => 'default', 'display_name' => '默认线路',
             'parser_key' => '', 'status' => 'enabled', 'legacy_urls' => '',
         ]] : $sources;
     }
@@ -636,30 +635,41 @@ final class Vod extends BaseController
         $names = (array) $this->request->post('play_source_name', []);
         $parsers = (array) $this->request->post('play_parser_key', []);
         $urlGroups = (array) $this->request->post('play_urls', []);
+        $deleteMissing = (array) $this->request->post('play_delete_missing', []);
+        // Validate every group before writing anything, including oversized tails.
+        $parsedGroups = array_map(static fn (mixed $text): array => PlaybackEditor::parse((string) $text), $urlGroups);
         $count = max(count($ids), count($keys), count($names), count($urlGroups));
         $now = gmdate('Y-m-d H:i:s');
+        $registeredPlayers = PlaybackPlayerRegistry::enabledKeys();
 
         for ($index = 0; $index < $count; $index++) {
             $sourceId = (int) ($ids[$index] ?? 0);
             $key = strtolower(trim((string) ($keys[$index] ?? '')));
             $name = mb_substr(trim((string) ($names[$index] ?? '')), 0, 120);
             $rawUrls = trim((string) ($urlGroups[$index] ?? ''));
-            if ($sourceId === 0 && $key === '' && $name === '' && $rawUrls === '') {
+            if ($sourceId === 0 && $rawUrls === '') {
                 continue;
             }
-            if (!preg_match('/^[a-z0-9][a-z0-9_.-]{1,79}$/', $key)) {
+            if (!preg_match('/^[a-z0-9][a-z0-9_.-]{0,79}$/D', $key)) {
                 $key = 'line-' . ($index + 1);
             }
             if ($name === '') {
                 $name = $key;
             }
+            // Selecting another registered player must not keep a stale parser
+            // from the old line. Internal collision keys still use parser_key.
+            $parserKey = in_array($key, $registeredPlayers, true) ? $key
+                : PlaybackPlayerRegistry::sourceKey(['source_key' => $key, 'parser_key' => $parsers[$index] ?? '']);
+            if (!in_array($parserKey, $registeredPlayers, true)) throw new HttpException(422, '请先在后台添加并启用对应播放器');
             $existing = $sourceId > 0
-                ? Db::table('ffx_play_sources')->where('id', $sourceId)->where('media_id', $mediaId)->find()
-                : Db::table('ffx_play_sources')->where('media_id', $mediaId)->where('source_key', $key)->find();
+                ? Db::table('ffx_play_sources')->where('id', $sourceId)->where('media_id', $mediaId)->lock(true)->find()
+                : null;
+            if ($sourceId > 0 && $existing === null) throw new HttpException(422, '播放线路不存在或不属于当前影片');
+            $key = PlaybackPlayerRegistry::uniqueLineKey($mediaId, $key, $sourceId);
             $sourceRow = [
                 'source_key' => $key, 'display_name' => $name,
-                'parser_key' => mb_substr(trim((string) ($parsers[$index] ?? '')), 0, 80),
-                'sort_order' => $index, 'status' => 'enabled', 'updated_at' => $now,
+                'parser_key' => $parserKey,
+                'sort_order' => $index, 'status' => $existing['status'] ?? 'enabled', 'updated_at' => $now,
             ];
             if ($existing === null) {
                 $sourceId = (int) Db::table('ffx_play_sources')->insertGetId($sourceRow + ['media_id' => $mediaId, 'created_at' => $now]);
@@ -668,27 +678,7 @@ final class Vod extends BaseController
                 Db::table('ffx_play_sources')->where('id', $sourceId)->update($sourceRow);
             }
 
-            Db::table('ffx_episodes')->where('source_id', $sourceId)->delete();
-            $lines = preg_split('/\r?\n/', $rawUrls, -1, PREG_SPLIT_NO_EMPTY) ?: [];
-            foreach (array_slice($lines, 0, 1000) as $episodeIndex => $line) {
-                $parts = array_map('trim', explode('$', $line));
-                $label = mb_substr((string) ($parts[0] ?? ''), 0, 120);
-                $url = (string) ($parts[1] ?? '');
-                if ($url === '') {
-                    $url = $label;
-                    $label = '第' . ($episodeIndex + 1) . '集';
-                }
-                if ($url === '') {
-                    continue;
-                }
-                Db::table('ffx_episodes')->insert([
-                    'media_id' => $mediaId, 'source_id' => $sourceId, 'season_id' => null,
-                    'episode_no' => $episodeIndex + 1, 'label' => $label, 'media_url' => $url,
-                    'duration_seconds' => null, 'sort_order' => $episodeIndex, 'status' => 'enabled',
-                    'published_at' => $now, 'created_at' => $now, 'updated_at' => $now,
-                    'metadata' => count($parts) > 2 ? json_encode(['legacy_extra' => array_slice($parts, 2)], JSON_UNESCAPED_UNICODE) : null,
-                ]);
-            }
+            (new PlaybackEditor())->sync($mediaId, $sourceId, $parsedGroups[$index] ?? [], in_array((string) $index, array_map('strval', $deleteMissing), true));
         }
     }
 }

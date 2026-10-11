@@ -84,7 +84,9 @@ final class Users extends BaseController
             $data['password_hash'] = $this->hasher->hash($password);
         }
         $data['updated_at'] = gmdate('Y-m-d H:i:s');
-        Db::table('ffx_users')->where('id', $id)->update($data);
+        $update = Db::table('ffx_users')->where('id', $id);
+        if ($password !== '' || $data['status'] !== $before['status']) $update->inc('session_version');
+        $update->update($data);
         $safe = $data;
         unset($safe['password_hash']);
         $this->audit->record('user.update', 'user', $id, $before, $safe);
@@ -97,7 +99,7 @@ final class Users extends BaseController
         $before = $this->requireUser($id);
         unset($before['password_hash']);
         $data = ['status' => 'disabled', 'deleted_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s')];
-        Db::table('ffx_users')->where('id', $id)->update($data);
+        Db::table('ffx_users')->where('id', $id)->inc('session_version')->update($data);
         $this->audit->record('user.archive', 'user', $id, $before, $data);
         return redirect('/admin/users');
     }
@@ -118,7 +120,7 @@ final class Users extends BaseController
             $status = match ($action) { 'enable' => 'active', 'ban' => 'banned', default => 'disabled' };
             $after = ['status' => $status, 'updated_at' => gmdate('Y-m-d H:i:s')];
             if ($action === 'archive') $after['deleted_at'] = gmdate('Y-m-d H:i:s');
-            Db::table('ffx_users')->whereIn('id', $ids)->whereNull('deleted_at')->update($after);
+            Db::table('ffx_users')->whereIn('id', $ids)->whereNull('deleted_at')->inc('session_version')->update($after);
         }
         $this->audit->record('user.batch.' . $action, 'user', implode(',', $ids), $before, $after);
         return redirect('/admin/users');
@@ -141,6 +143,7 @@ final class Users extends BaseController
     {
         if ($item !== null) {
             unset($item['password_hash']);
+            $item['expires_at'] = \app\service\UtcClock::localInput($item['expires_at']);
         }
         return view('/admin/users/edit', [
             'item' => $item ?? ['id' => 0, 'username' => '', 'email' => '', 'points' => 0, 'group_key' => 'member', 'status' => 'active', 'expires_at' => ''],
@@ -158,7 +161,7 @@ final class Users extends BaseController
             'points' => (int) $this->request->post('points', 0),
             'group_key' => mb_substr(trim((string) $this->request->post('group_key', 'member')), 0, 50),
             'status' => in_array($status, ['active', 'disabled', 'banned'], true) ? $status : 'active',
-            'expires_at' => (($expires = trim((string) $this->request->post('expires_at', ''))) !== '') ? str_replace('T', ' ', $expires) : null,
+            'expires_at' => \app\service\UtcClock::fromLocalInput(trim((string) $this->request->post('expires_at', ''))),
         ];
     }
 

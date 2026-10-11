@@ -37,7 +37,7 @@ final class SchemaInstall extends Command
             Db::execute($statement);
             $executed++;
         }
-        foreach (glob(root_path() . 'database/migrations/015_*.sql') ?: [] as $migration) {
+        foreach (array_merge(glob(root_path() . 'database/migrations/015_*.sql') ?: [], glob(root_path() . 'database/migrations/016_*.sql') ?: []) as $migration) {
             foreach ((new SqlStatementStream())->fromFile($migration) as $statement) {
                 Db::execute($statement);
                 $executed++;
