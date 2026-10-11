@@ -27,15 +27,15 @@ final class PredisRedis extends \think\cache\driver\Redis
     public function clear(): bool
     {
         $redis = $this->handler();
-        $cursor = '0';
+        // phpredis treats integer/string 0 as an already-completed scan.
+        // Only null starts a new iteration; Predis sends the raw cursor 0.
+        $cursor = $redis instanceof \Predis\Client ? '0' : null;
         do {
             if ($redis instanceof \Predis\Client) {
                 // Raw commands avoid prefixing already-prefixed keys twice.
                 [$cursor, $keys] = $redis->executeRaw(['SCAN', $cursor, 'MATCH', $this->namespace . '*', 'COUNT', '500']);
             } else {
-                $position = (int) $cursor;
-                $keys = $redis->scan($position, $this->namespace . '*', 500) ?: [];
-                $cursor = (string) $position;
+                $keys = $redis->scan($cursor, $this->namespace . '*', 500) ?: [];
             }
             $keys = array_values(array_filter($keys, fn (string $key): bool => str_starts_with($key, $this->namespace)));
             if ($keys !== []) {

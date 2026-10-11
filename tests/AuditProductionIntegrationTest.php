@@ -64,10 +64,16 @@ $raw->set($prefix.':foreign','keep');
 $cache=new app\cache\PredisRedis(['host'=>$host,'prefix'=>$prefix.':site:']);
 for($i=0;$i<1600;$i++) $cache->set('key'.$i,'remove');
 $cache->clear();
-echo json_encode(['foreign'=>$raw->get($prefix.':foreign'),'ours'=>$raw->keys($prefix.':site:*')]);
+$ours=$raw->keys($prefix.':site:*');
+$cache->clear(); // Empty namespaces must also terminate without touching neighbours.
+$cache->set('after-clear','roundtrip');
+$roundtrip=$cache->get('after-clear');
+$cache->clear();
+echo json_encode(['foreign'=>$raw->get($prefix.':foreign'),'ours'=>$ours,'roundtrip'=>$roundtrip,'remaining'=>$raw->keys($prefix.':site:*')]);
 $raw->del([$prefix.':foreign']);
 PHP);
         self::assertSame('keep',$result['foreign']); self::assertSame([],$result['ours']);
+        self::assertSame('roundtrip',$result['roundtrip']); self::assertSame([],$result['remaining']);
     }
 
     public function testParallelSourcesImportExactlyOneVideo(): void
