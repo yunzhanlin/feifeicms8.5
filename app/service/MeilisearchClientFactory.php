@@ -32,7 +32,7 @@ final class MeilisearchClientFactory
             $host = trim((string) ($defaults['host'] ?? ''));
         }
         if ($host === '') {
-            $host = 'http://127.0.0.1:7700';
+            throw new InvalidArgumentException('请先配置 Meilisearch 搜索服务地址，或使用 MySQL 搜索');
         }
 
         // Accept the common host:port form in the admin panel, while always

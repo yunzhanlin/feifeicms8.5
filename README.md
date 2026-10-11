@@ -33,7 +33,9 @@
 
 宝塔用户还可以参考 [`deploy/baota/`](deploy/baota/) 中的站点与计划任务示例。
 
-Docker 部署先复制 `.example.env` 为 `.env`，替换其中的密码和密钥，并保留数据库、Redis、搜索主机名为相应容器名称。配置文件只读挂载且随容器重建保留，使用以下命令初始化，不使用网页安装向导：
+发布包不包含站点数据、实际环境配置或第三方采集源，仅提供默认 MXOne 模板。默认使用文件缓存和 MySQL 搜索，播放器、采集源、支付、SMTP、第三方接口、Redis 和 Meilisearch 均由用户自行配置。
+
+Docker 部署先复制 `.example.env` 为 `.env`，替换必需的应用密钥和数据库密码，并保留数据库主机名为 `mysql`。配置文件只读挂载且随容器重建保留，使用以下命令初始化，不使用网页安装向导：
 
 ```bash
 docker compose up -d --build
@@ -44,7 +46,9 @@ docker compose exec -e CMS_ADMIN_PASSWORD app php think feifei:admin:create admi
 unset CMS_ADMIN_PASSWORD
 ```
 
-初始化后访问 `http://您的主机:8080/admin.php`。Docker 升级请更新源码并重新构建容器，再执行 `docker compose exec app php think feifei:schema:upgrade`；不要在只读配置的容器中使用在线覆盖更新。
+初始化后访问 `http://您的主机:8080/admin.php`。Redis 与 Meilisearch 默认不启动：需要 Redis 时配置 `CACHE_DRIVER=redis`、`REDIS_HOST=redis`，可另设 `SESSION_DRIVER=cache`、`SESSION_STORE=redis`，再执行 `docker compose --profile redis up -d`；需要搜索服务时填写 `SEARCH_DRIVER=meilisearch`、`MEILISEARCH_HOST=http://meilisearch:7700` 与自行生成的 `MEILISEARCH_KEY`，再执行 `docker compose --profile search up -d`。修改配置后重新创建 app 容器。
+
+Docker 升级请更新源码并重新构建容器，再执行 `docker compose exec app php think feifei:schema:upgrade`；不要在只读配置的容器中使用在线覆盖更新。
 
 Docker 使用独立 MySQL 容器并允许站点创建触发器。不要把这里的配置直接用于共享数据库；共享数据库请由管理员按服务器策略授权。
 

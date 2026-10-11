@@ -14,7 +14,7 @@ return [
         'driver' => env('SEARCH_DRIVER', 'mysql'),
         'fallback' => env('SEARCH_FALLBACK', 'mysql'),
         'meilisearch' => [
-            'host' => env('MEILISEARCH_HOST', 'http://127.0.0.1:7700'),
+            'host' => env('MEILISEARCH_HOST', ''),
             'key' => env('MEILISEARCH_KEY', ''),
             'index' => env('MEILISEARCH_INDEX', 'feifeicms_media'),
         ],

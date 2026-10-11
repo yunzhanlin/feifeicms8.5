@@ -227,7 +227,7 @@ return [
         'label' => '缓存设置',
         'groups' => [
             '缓存驱动' => [
-                'driver' => $field('缓存驱动', 'select', 'redis', ['redis' => 'Redis', 'file' => '文件']),
+                'driver' => $field('缓存驱动', 'select', (string) config('cache.default', 'file'), ['redis' => 'Redis', 'file' => '文件']),
                 'ttl' => $field('默认缓存秒数', 'number', '3600'),
                 'prefix' => $field('缓存前缀', 'text', 'feifeicms:'),
                 'cache_foreach' => $field('循环标签缓存秒数', 'number', '600'),
@@ -249,7 +249,7 @@ return [
             '搜索' => [
                 'search_driver' => $field('搜索驱动', 'select', 'mysql', ['mysql' => 'MySQL', 'meilisearch' => 'Meilisearch（推荐，替代 Xunsearch）']),
                 'search_fallback' => $field('搜索故障回退', 'select', 'mysql', ['mysql' => 'MySQL', 'none' => '不回退']),
-                'search_host' => $field('搜索服务地址', 'url', (string) config('feifei.search.meilisearch.host', 'http://127.0.0.1:7700')),
+                'search_host' => $field('搜索服务地址', 'url', (string) config('feifei.search.meilisearch.host', '')),
                 'search_index' => $field('索引名称', 'text', (string) config('feifei.search.meilisearch.index', 'feifeicms_media')),
                 'search_key' => $field('搜索服务密钥', 'password', (string) config('feifei.search.meilisearch.key', ''), secret: true),
             ],
@@ -289,15 +289,15 @@ return [
             ],
             '元数据服务' => [
                 'tmdb_api_key' => $field('TMDB API Key', 'password', '', secret: true),
-                'tmdb_api_base' => $field('TMDB API 地址', 'url', 'https://api.tmdb.org/3'),
+                'tmdb_api_base' => $field('TMDB API 地址', 'url', ''),
                 'torrent_enabled' => $field('启用种子补全', 'boolean', '0'),
-                'torrent_eztv_api' => $field('EZTV API', 'url', 'https://eztvx.to/api/get-torrents'),
-                'torrent_xlys_base' => $field('迅雷影视域名', 'url', 'https://www.xlys02.com'),
-                'torrent_xlys_reader' => $field('网页读取代理', 'url', 'https://r.jina.ai/'),
+                'torrent_eztv_api' => $field('EZTV API', 'url', ''),
+                'torrent_xlys_base' => $field('迅雷影视域名', 'url', ''),
+                'torrent_xlys_reader' => $field('网页读取代理', 'url', ''),
                 'torrent_sync_delay' => $field('种子同步间隔秒数', 'number', '3'),
                 'torrent_front_limit' => $field('前台种子数量', 'number', '30'),
                 'yyets_enabled' => $field('启用人人影视资源', 'boolean', '0'),
-                'yyets_api' => $field('人人影视 API', 'url', 'https://yyets.click/api/'),
+                'yyets_api' => $field('人人影视 API', 'url', ''),
                 'yyets_sync_delay' => $field('人人影视同步间隔秒数', 'number', '2'),
             ],
             'TV API' => [

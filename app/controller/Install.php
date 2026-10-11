@@ -69,8 +69,8 @@ final class Install extends BaseController
         return [
             'site_name' => '飞飞影视', 'app_url' => $host !== '' ? $scheme . '://' . $host : '',
             'db_host' => '127.0.0.1', 'db_port' => '3306', 'db_name' => 'feifeicms', 'db_user' => 'feifeicms',
-            'cache_driver' => 'file', 'redis_host' => '127.0.0.1', 'redis_port' => '6379', 'redis_db' => '0',
-            'search_driver' => 'mysql', 'meilisearch_host' => 'http://127.0.0.1:7700', 'admin_username' => 'admin', 'admin_email' => '',
+            'cache_driver' => 'file', 'redis_host' => '', 'redis_port' => '6379', 'redis_db' => '0',
+            'search_driver' => 'mysql', 'meilisearch_host' => '', 'admin_username' => 'admin', 'admin_email' => '',
         ];
     }
 

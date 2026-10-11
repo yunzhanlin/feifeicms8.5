@@ -144,12 +144,12 @@ final class WebInstaller
             'admin_password' => (string) ($input['admin_password'] ?? ''),
             'admin_password_confirm' => (string) ($input['admin_password_confirm'] ?? ''),
             'cache_driver' => $value('cache_driver', 'file'),
-            'redis_host' => $value('redis_host', '127.0.0.1'),
+            'redis_host' => $value('redis_host'),
             'redis_port' => $value('redis_port', '6379'),
             'redis_password' => (string) ($input['redis_password'] ?? ''),
             'redis_db' => $value('redis_db', '0'),
             'search_driver' => $value('search_driver', 'mysql'),
-            'meilisearch_host' => $value('meilisearch_host', 'http://127.0.0.1:7700'),
+            'meilisearch_host' => $value('meilisearch_host'),
             'meilisearch_key' => (string) ($input['meilisearch_key'] ?? ''),
         ];
 
@@ -165,6 +165,13 @@ final class WebInstaller
         if (!hash_equals($values['admin_password'], $values['admin_password_confirm'])) throw new RuntimeException('两次输入的管理员密码不一致。');
         if (!in_array($values['cache_driver'], ['file', 'redis'], true)) throw new RuntimeException('缓存驱动不正确。');
         if (!in_array($values['search_driver'], ['mysql', 'meilisearch'], true)) throw new RuntimeException('搜索驱动不正确。');
+        if ($values['cache_driver'] === 'redis' && $values['redis_host'] === '') throw new RuntimeException('启用 Redis 时请填写 Redis 主机。');
+        if ($values['search_driver'] === 'meilisearch') {
+            $parts = parse_url($values['meilisearch_host']);
+            if (!is_array($parts) || ($parts['host'] ?? '') === '' || !in_array(strtolower((string) ($parts['scheme'] ?? '')), ['http', 'https'], true)) {
+                throw new RuntimeException('启用 Meilisearch 时请填写完整的 HTTP/HTTPS 服务地址。');
+            }
+        }
         if (!preg_match('/^\d{1,5}$/', $values['redis_port']) || (int) $values['redis_port'] > 65535) throw new RuntimeException('Redis 端口不正确。');
         if (!preg_match('/^\d+$/', $values['redis_db']) || (int) $values['redis_db'] > 15) throw new RuntimeException('Redis 数据库需为 0-15。');
         return $values;
