@@ -32,7 +32,6 @@ final class SchemaInstall extends Command
             return 1;
         }
 
-        (new \app\service\MySqlTriggerPreflight())->check(Db::connect()->getPdo());
         $executed = 0;
         foreach ((new SqlStatementStream())->fromFile($path) as $statement) {
             Db::execute($statement);
@@ -47,6 +46,9 @@ final class SchemaInstall extends Command
         }
 
         $tableCount = (int) (Db::query("SELECT COUNT(*) AS total FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'ffx\\_%'")[0]['total'] ?? 0);
+        if (!$this->app->make(\app\service\WebInstaller::class)->finishCliInstallation($version)) {
+            $output->writeln('[WARN] 安装锁已生效，但无法自动删除 public/install.php，请检查文件权限');
+        }
         $output->writeln(sprintf('[OK] MySQL %s，执行 %d 条语句，当前 %d 张 ffx_ 表', $version, $executed, $tableCount));
         return 0;
     }

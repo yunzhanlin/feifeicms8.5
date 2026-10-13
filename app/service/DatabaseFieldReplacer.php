@@ -147,6 +147,7 @@ final class DatabaseFieldReplacer
                 return ['matched' => (int) $data['matched'], 'changed' => (int) $data['changed'], 'replayed' => true];
             }
             if ($this->count($pdo, $plan) !== $expected) throw new InvalidArgumentException('匹配数量已变化，请重新预览后再确认');
+            if ($input['table'] === 'ffx_media') MediaSearchOutbox::enqueueReplacement($pdo, $plan['where'], $plan['params']);
             $updatedAt = array_column($plan['fields'], 'type', 'name')['updated_at'] ?? '';
             $timestamp = in_array($updatedAt, ['datetime', 'timestamp'], true) ? ',`updated_at`=UTC_TIMESTAMP(6)' : '';
             $update = $pdo->prepare('UPDATE ' . $plan['table'] . ' SET ' . $plan['field'] . '=REPLACE(' . $plan['value'] . ',?,?)' . $timestamp . ' WHERE ' . $plan['where'] . ' LIMIT ' . (self::MAX_ROWS + 1));

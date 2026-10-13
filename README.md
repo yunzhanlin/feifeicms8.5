@@ -9,7 +9,7 @@
 - PHP 8.2～8.5，安装 `curl`、`dom`、`fileinfo`、`gd`、`intl`、`mbstring`、`openssl`、`pdo_mysql`、`xml`、`xmlwriter`、`zip` 扩展。
 - MySQL 5.7.13+ 或 8.x；不支持 MySQL 5.6、5.5 和 MariaDB。
 - Nginx 或 Apache、Composer 2。Redis 和 Meilisearch 为可选服务；未启用时可分别使用文件缓存和 MySQL 搜索。
-- 数据库账号需要建表、读写和创建触发器的权限。安装、升级和恢复会先检查权限；报告 `1419` 时，请数据库管理员处理二进制日志的触发器限制后重试。
+- 数据库账号需要对本站数据库具备建表、修改表结构和读写权限，不需要全局 `SUPER` 或创建触发器的权限，无需调整二进制日志。程序在影片写入事务中记录搜索变更，支持 MySQL 和 Meilisearch 搜索。
 
 #### 主要功能
 
@@ -28,10 +28,12 @@
 1. 从[最新正式版](https://github.com/yunzhanlin/feifeicms8.5/releases/latest)下载 `feifeicms8.5.zip` 完整安装包并解压到网站目录。该包已包含运行依赖；使用仓库源码时，须先执行 `composer install --no-dev --classmap-authoritative`。
 2. 将网站运行目录设为项目的 `public/`，不能指向项目根目录。让 PHP-FPM 用户能够写入 `runtime/` 和 `public/uploads/`。
 3. Nginx 使用 [`deploy/baota/thinkphp.conf`](deploy/baota/thinkphp.conf) 的伪静态规则；Apache 已提供 `public/.htaccess`，需开启 `mod_rewrite` 和 `AllowOverride All`。
-4. 浏览器访问 `https://您的域名/install.php`，按向导填写数据库、管理员账号和站点信息。安装程序只接受没有 `ffx_*` 表的空数据库，不会覆盖已有数据。
+4. 浏览器访问 `https://您的域名/install.php`，按向导填写数据库、管理员账号和站点信息。安装程序只接受没有 `ffx_*` 表的空数据库，不会覆盖已有数据。安装成功后自动删除 `public/install.php` 并保留安装锁；若文件权限阻止删除，成功页会提示手动删除，不会回滚已安装的数据。
 5. 安装后访问 `https://您的域名/admin.php` 登录。管理员密码由安装时自行设置，没有通用默认密码。
 
 宝塔用户还可以参考 [`deploy/baota/`](deploy/baota/) 中的站点与计划任务示例。
+
+普通站点数据库账号即可安装；二进制日志开启或关闭均可，不再因触发器限制 `1419` 中断安装。升级旧站时保留已有的搜索触发器；无触发器时由程序写入搜索队列。启用 Meilisearch 后建议每分钟运行 `php think feifei:search:work`，自动重试失败任务并处理批量变更；直接用其他工具执行数据库 SQL 后请运行 `php think feifei:search:sync` 全量同步。
 
 发布包不包含站点数据、实际环境配置或第三方采集源，仅提供默认 MXOne 模板。默认使用文件缓存和 MySQL 搜索，播放器、采集源、支付、SMTP、第三方接口、Redis 和 Meilisearch 均由用户自行配置。
 
@@ -50,7 +52,7 @@ unset CMS_ADMIN_PASSWORD
 
 Docker 升级请更新源码并重新构建容器，再执行 `docker compose exec app php think feifei:schema:upgrade`；不要在只读配置的容器中使用在线覆盖更新。
 
-Docker 使用独立 MySQL 容器并允许站点创建触发器。不要把这里的配置直接用于共享数据库；共享数据库请由管理员按服务器策略授权。
+Docker 使用独立 MySQL 容器；程序不需要调整 `log_bin_trust_function_creators`，也不要给站点账号授予全局 `SUPER` 权限。
 
 #### 模板使用
 

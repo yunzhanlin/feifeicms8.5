@@ -64,7 +64,7 @@ final class WebInstaller
 
     /**
      * @param array<string, mixed> $input
-     * @return array{database_version:string,tables:int,admin:string}
+     * @return array{database_version:string,tables:int,admin:string,installer_removed:bool}
      */
     public function install(array $input): array
     {
@@ -89,8 +89,6 @@ final class WebInstaller
             if ($existing > 0) {
                 throw new RuntimeException('目标数据库已存在 ffx_ 数据表，为防止覆盖已停止安装。');
             }
-
-            (new MySqlTriggerPreflight())->check($pdo);
 
             $environment = $this->buildEnvironment($values);
             $temporaryEnvironment = root_path() . '.env.installing';
@@ -120,7 +118,8 @@ final class WebInstaller
             }
 
             $tables = (int) $pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'ffx\\_%'")->fetchColumn();
-            return ['database_version' => $version, 'tables' => $tables, 'admin' => $values['admin_username']];
+            return ['database_version' => $version, 'tables' => $tables, 'admin' => $values['admin_username'],
+                'installer_removed' => $this->removeInstallerEntry()];
         } finally {
             flock($installGuard, LOCK_UN);
             fclose($installGuard);
@@ -296,5 +295,26 @@ final class WebInstaller
     private function lockPath(): string
     {
         return runtime_path() . 'install.lock';
+    }
+
+    /** Only a committed installation may remove this one shipped entry file. */
+    public function removeInstallerEntry(): bool
+    {
+        if (!$this->isLocked()) return false;
+        $entry = root_path() . 'public/install.php';
+        if (!is_file($entry) && !is_link($entry)) return true;
+        // Removal failures must not roll back a successful database installation.
+        if (is_link($entry)) return false;
+        if (function_exists('opcache_invalidate')) @opcache_invalidate($entry, true);
+        $removed = @unlink($entry);
+        clearstatcache(true, $entry);
+        return $removed;
+    }
+
+    /** CLI installation uses an existing .env, but shares the same installation lock. */
+    public function finishCliInstallation(string $databaseVersion): bool
+    {
+        $this->writeLock($databaseVersion);
+        return $this->removeInstallerEntry();
     }
 }

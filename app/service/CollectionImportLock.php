@@ -10,7 +10,7 @@ final class CollectionImportLock
     public static function run(array $identities, callable $operation): mixed
     {
         $connection = (string) config('database.default', 'mysql');
-        if ((string) config('database.connections.' . $connection . '.type', 'mysql') !== 'mysql') return $operation();
+        if (!in_array((string) config('database.connections.' . $connection . '.type', 'mysql'), ['mysql', \app\db\Mysql::class], true)) return $operation();
         $database = (string) config('database.connections.' . $connection . '.database');
         $locks = array_values(array_unique(array_map(static fn (string $id): string => 'ff_import_' . substr(hash('sha256', $database . '/' . $id), 0, 48), $identities)));
         sort($locks, SORT_STRING);

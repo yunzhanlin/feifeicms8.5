@@ -17,7 +17,8 @@ final class SearchWork extends Command
     protected function execute(Input $input, Output $output): int
     {
         $indexer = $this->app->make(SearchIndexer::class);
-        $count = $indexer->flushPending(500, 30000);
+        $count = $indexer->requiresFullSync() || (new \app\service\SearchConsistency())->generation() !== ''
+            ? $indexer->sync(500) : $indexer->flushPending(500, 30000);
         $output->writeln(sprintf('[OK] 同步 %d 条变更，剩余 %d 条', $count, $indexer->pendingCount()));
         return 0;
     }

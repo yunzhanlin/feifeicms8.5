@@ -85,6 +85,7 @@ final class SearchIndexer
     public function flushPending(int $batchSize = 100, int $taskTimeout = 1500): int
     {
         if ((new SearchConsistency())->generation() !== '') throw new \RuntimeException('数据库已恢复，请先执行搜索全量同步');
+        if ($this->requiresFullSync()) throw new \RuntimeException('批量影片变更需要搜索全量同步；前台暂使用数据库搜索');
         if ($this->pendingCount() === 0) return 0;
         $lock = $this->lockName();
         if (!$this->acquire($lock)) return 0;
@@ -109,6 +110,11 @@ final class SearchIndexer
     public function pendingCount(): int
     {
         return (int) Db::table('ffx_search_outbox')->count();
+    }
+
+    public function requiresFullSync(): bool
+    {
+        return Db::table('ffx_search_outbox')->where('media_id', 0)->count() > 0;
     }
 
     private function lockName(): string

@@ -23,7 +23,7 @@ final class Doctor extends Command
         'ffx_admin_roles', 'ffx_role_permissions', 'ffx_orders', 'ffx_cards',
         'ffx_collection_sources', 'ffx_external_refs', 'ffx_collection_jobs', 'ffx_cron_tasks', 'ffx_players', 'ffx_navigation',
         'ffx_slides', 'ffx_links', 'ffx_ads', 'ffx_jobs', 'ffx_audit_logs',
-        'ffx_search_state', 'ffx_legacy_map',
+        'ffx_search_state', 'ffx_search_outbox', 'ffx_legacy_map',
     ];
 
     protected function configure(): void

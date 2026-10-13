@@ -76,7 +76,11 @@ final class UpdateMaintenance
         if (is_file($receipt) && trim((string) file_get_contents($receipt)) === $generation) return;
         $prefix = rtrim((string) realpath($root), '/\\') . DIRECTORY_SEPARATOR;
         foreach (array_keys($status['scripts'] ?? []) as $file) {
-            if (str_starts_with($file, $prefix) && !opcache_invalidate($file, true)) throw new \RuntimeException('PHP 缓存刷新失败，请重载 PHP-FPM 后重试');
+            if (!str_starts_with($file, $prefix)) continue;
+            // A completed install/update may deliberately remove an entry.
+            // A stale opcode entry for a missing file is not a refresh failure.
+            if (!is_file($file)) { @opcache_invalidate($file, true); continue; }
+            if (!opcache_invalidate($file, true)) throw new \RuntimeException('PHP 缓存刷新失败，请重载 PHP-FPM 后重试');
         }
         self::write($receipt, $generation);
     }

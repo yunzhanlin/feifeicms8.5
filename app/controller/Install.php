@@ -76,6 +76,7 @@ final class Install extends BaseController
 
     private function installedResponse(): Response
     {
-        return view('/install/installed', ['version' => (string) config('feifei.version')], 403);
+        $removed = $this->installer->removeInstallerEntry();
+        return view('/install/installed', ['version' => (string) config('feifei.version'), 'installerRemoved' => $removed], 403);
     }
 }

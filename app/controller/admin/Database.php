@@ -222,23 +222,30 @@ final class Database extends BaseController
         $size = filesize($path);
         if ($size === false || $size < 1) throw new HttpException(422, '备份文件大小异常');
         $statementCount = 0;
+        $hasBackupTriggers = false;
         foreach ($this->sql->fromFile($path, true) as $statement) {
             if (!$this->isAllowedBackupStatement($statement)) throw new HttpException(422, '备份包含不允许执行的语句');
+            if (preg_match('/^CREATE\s+TRIGGER\b/i', $statement)) $hasBackupTriggers = true;
             $statementCount++;
         }
         if ($statementCount === 0) throw new HttpException(422, '备份文件为空');
         // Must happen before search state changes and before the first DROP TABLE.
         try {
             Db::query('SELECT 1');
-            $this->app->make(\app\service\MySqlTriggerPreflight::class)->check(Db::connect()->getPdo());
+            if ($hasBackupTriggers) $this->app->make(\app\service\MySqlTriggerPreflight::class)->check(Db::connect()->getPdo());
         } catch (\RuntimeException $error) {
             throw new HttpException(422, $error->getMessage());
         }
-        $this->app->make(\app\service\SearchIndexer::class)->restore(function () use ($path): void {
+        $this->app->make(\app\service\SearchIndexer::class)->restore(function () use ($path, $hasBackupTriggers): void {
             try {
-                foreach ($this->sql->fromFile($path, true) as $statement) Db::execute($statement);
-                foreach ($this->sql->fromFile(root_path() . 'database/migrations/016_audit_integrity.sql') as $statement) Db::execute($statement);
-                SearchOutboxTriggers::ensure();
+                $load = function () use ($path, $hasBackupTriggers): void {
+                    foreach ($this->sql->fromFile($path, true) as $statement) Db::execute($statement);
+                    foreach ($this->sql->fromFile(root_path() . 'database/migrations/016_audit_integrity.sql') as $statement) Db::execute($statement);
+                    if ($hasBackupTriggers) SearchOutboxTriggers::ensure();
+                };
+                $connection = Db::connect();
+                if ($connection instanceof \app\db\Mysql) $connection->withoutSearchJournal($load);
+                else $load();
             } finally {
                 $this->app->make(\app\service\ResilientCache::class)->clear();
                 $this->app->make(\app\service\SiteSettings::class)->forget();

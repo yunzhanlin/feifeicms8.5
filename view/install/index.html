@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>FeiFeiCMS {$version|htmlspecialchars|raw} 安装</title>
-    <link rel="stylesheet" href="/static/install.css?v=1">
+    <link rel="stylesheet" href="/static/install.css?v=2">
 </head>
 <body>
 <main class="installer">
@@ -29,6 +29,7 @@
         <div class="form-row"><label for="app_url">站点地址</label><input id="app_url" name="app_url" type="url" value="{$values.app_url|htmlspecialchars|raw}" placeholder="https://example.com"></div>
 
         <h2>MySQL 5.7.13+ / 8.x</h2>
+        <p class="install-note">使用本站数据库的普通账号即可，需要建表和读写权限。不要求触发器或 SUPER 权限，无需修改二进制日志设置。搜索变更由程序自动记录。</p>
         <div class="form-grid">
             <div class="form-row"><label for="db_host">主机</label><input id="db_host" name="db_host" value="{$values.db_host|htmlspecialchars|raw}" required></div>
             <div class="form-row"><label for="db_port">端口</label><input id="db_port" name="db_port" inputmode="numeric" value="{$values.db_port|htmlspecialchars|raw}" required></div>

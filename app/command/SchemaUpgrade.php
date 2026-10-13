@@ -48,13 +48,18 @@ final class SchemaUpgrade extends Command
                 $output->writeln('[OK] 数据库已是最新结构，当前版本 ' . $current);
                 return 0;
             }
-            (new \app\service\MySqlTriggerPreflight())->check(Db::connect()->getPdo());
             foreach ($migrations as $migrationVersion => $path) {
                 $count = 0;
-                foreach ((new SqlStatementStream())->fromFile($path) as $statement) {
-                    Db::execute($statement);
-                    $count++;
-                }
+                $apply = function () use ($path, &$count): void {
+                    foreach ((new SqlStatementStream())->fromFile($path) as $statement) {
+                        if (preg_match('/^UPDATE\s+`?ffx_media`?\b/i', $statement)) (new \app\service\SearchConsistency())->requireRebuild();
+                        Db::execute($statement);
+                        $count++;
+                    }
+                };
+                $connection = Db::connect();
+                if ($connection instanceof \app\db\Mysql) $connection->withoutSearchJournal($apply);
+                else $apply();
                 $recorded = (int) Db::table('ffx_schema_versions')->where('version', $migrationVersion)->count();
                 if ($recorded !== 1) throw new \RuntimeException('迁移未写入版本记录：' . basename($path));
                 $output->writeln(sprintf('[OK] %s，%d 条 SQL', basename($path), $count));

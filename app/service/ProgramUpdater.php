@@ -201,21 +201,27 @@ final class ProgramUpdater
             $schemaLock = (int) (Db::query("SELECT GET_LOCK('feifeicms_schema_upgrade', 0) AS acquired")[0]['acquired'] ?? 0) === 1;
             if (!$schemaLock) throw new \RuntimeException('另一项数据库升级正在执行');
             try {
-                $preflightChecked = false;
                 foreach (glob($root . '/database/migrations/[0-9][0-9][0-9]_*.sql') ?: [] as $migration) {
                     if (!preg_match('~/(\d{3})_~', $migration, $m) || (int) $m[1] <= $current) continue;
-                    if (!$preflightChecked) {
-                        (new MySqlTriggerPreflight())->check(Db::connect()->getPdo());
-                        $preflightChecked = true;
-                    }
                     $migrationStarted = true;
-                    foreach ((new SqlStatementStream())->fromFile($migration) as $sql) Db::execute($sql);
+                    $apply = function () use ($migration): void {
+                        foreach ((new SqlStatementStream())->fromFile($migration) as $sql) {
+                            if (preg_match('/^UPDATE\s+`?ffx_media`?\b/i', $sql)) (new SearchConsistency())->requireRebuild();
+                            Db::execute($sql);
+                        }
+                    };
+                    $connection = Db::connect();
+                    if ($connection instanceof \app\db\Mysql) $connection->withoutSearchJournal($apply);
+                    else $apply();
                     $recorded = (int) Db::table('ffx_schema_versions')->where('version', (int) $m[1])->count();
                     if ($recorded !== 1) throw new \RuntimeException('迁移未记录版本：' . basename($migration));
                     $current = (int) $m[1];
                 }
             } finally {
                 Db::query("SELECT RELEASE_LOCK('feifeicms_schema_upgrade')");
+            }
+            if (!(new WebInstaller(new PasswordHasher(), new SqlStatementStream()))->removeInstallerEntry()) {
+                trace('安装入口未能自动删除，安装锁仍有效，请检查 public/install.php 权限', 'warning');
             }
             if (function_exists('opcache_reset')) opcache_reset();
             clearstatcache(true);
