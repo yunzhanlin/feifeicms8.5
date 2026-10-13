@@ -6,11 +6,59 @@ namespace app\service;
 use GuzzleHttp\Client;
 use think\facade\Db;
 
-/** Performs one administrator-approved release update in a CLI worker. */
+/** Performs one administrator-approved update in a CLI or finished FPM request. */
 final class ProgramUpdater
 {
     private const MAX_ARCHIVE = 100_000_000;
     private const MAX_UNPACKED = 300_000_000;
+    /** @var array{self,string}|null */
+    private static ?array $deferred = null;
+    private ?string $runningJobId = null;
+
+    public static function supportsWebWorker(): bool
+    {
+        return PHP_SAPI === 'fpm-fcgi' && function_exists('fastcgi_finish_request')
+            && function_exists('ignore_user_abort') && function_exists('set_time_limit');
+    }
+
+    /** The entrypoint runs this only after response/session handling and lease release. */
+    public function defer(string $id): void
+    {
+        if (!self::supportsWebWorker()) throw new \RuntimeException('服务器无法启动 CLI，也不支持 PHP-FPM 后台更新；请使用服务器计划任务或手动升级');
+        if (!preg_match('/^[a-f0-9]{24}$/D', $id) || self::$deferred !== null) throw new \RuntimeException('后台更新任务无效或已启动');
+        ignore_user_abort(true);
+        if (!set_time_limit(0)) throw new \RuntimeException('无法调整后台更新执行时限，请使用服务器计划任务或手动升级');
+        self::$deferred = [$this, $id];
+    }
+
+    /** No shell execution, public worker endpoint or database credentials in a URL. */
+    public static function runDeferred(): void
+    {
+        if (self::$deferred === null) return;
+        [$updater, $id] = self::$deferred;
+        self::$deferred = null;
+        if (!fastcgi_finish_request()) {
+            $updater->failQueued($id, '无法结束更新请求，请重试或使用服务器计划任务');
+            return;
+        }
+        register_shutdown_function(static function () use ($updater, $id): void {
+            // A fatal error may bypass run()'s catch/finally. Keep maintenance
+            // intact, but do not leave the browser polling "running" forever.
+            if ($updater->runningJobId !== $id) return;
+            try {
+                $job = $updater->state();
+                if (($job['id'] ?? '') === $id && ($job['status'] ?? '') === 'running') {
+                    $job['status'] = 'failed';
+                    $updater->progress($job, 'PHP 后台更新意外结束，请检查服务器日志及 runtime/updates 中的备份');
+                }
+            } catch (\Throwable) { /* preserve the original fatal error */ }
+        });
+        try { $updater->run($id); }
+        catch (\Throwable $error) {
+            try { trace('后台更新失败：' . mb_substr($error->getMessage(), 0, 300), 'error'); }
+            catch (\Throwable) { /* run() already records the failure */ }
+        }
+    }
 
     public function directory(): string
     {
@@ -77,6 +125,7 @@ final class ProgramUpdater
         try {
             $job = $this->state();
             if ($job === null || $job['id'] !== $id || $job['status'] !== 'queued') throw new \RuntimeException('更新任务不存在或已执行');
+            $this->runningJobId = $id;
             $job['status'] = 'running';
             $work = $dir . '/' . $id;
             if (!mkdir($work, 0700) && !is_dir($work)) throw new \RuntimeException('无法创建更新暂存目录');
@@ -112,6 +161,7 @@ final class ProgramUpdater
             }
             throw $e;
         } finally {
+            $this->runningJobId = null;
             flock($lock, LOCK_UN);
             fclose($lock);
         }

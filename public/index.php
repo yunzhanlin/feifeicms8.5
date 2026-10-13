@@ -36,3 +36,9 @@ try {
 } finally {
     \app\service\UpdateMaintenance::leave($updateLease);
 }
+
+// A restricted panel can finish the response and use the current FPM process.
+// Never begin the writer while this request still owns its shared lease.
+if (class_exists(\app\service\ProgramUpdater::class, false)) {
+    \app\service\ProgramUpdater::runDeferred();
+}

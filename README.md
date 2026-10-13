@@ -72,7 +72,7 @@ Nginx／宝塔使用 [站点伪静态配置](deploy/baota/thinkphp.conf)，其�
 
 #### 更新与旧站迁移
 
-升级前请备份数据库、`.env` 和上传文件。超级管理员可以在“工具 → 版本升级”检查 [GitHub 正式版发布页](https://github.com/yunzhanlin/feifeicms8.5/releases/latest) 并确认在线更新；自动更新要求站点 PHP 用户能执行 `proc_open`、使用同系列 PHP CLI，并能写入程序目录。不满足时请手动覆盖程序文件、安装依赖并执行：
+升级前请备份数据库、`.env` 和上传文件。超级管理员可以在“工具 → 版本升级”检查 [GitHub 正式版发布页](https://github.com/yunzhanlin/feifeicms8.5/releases/latest) 并确认在线更新；程序优先启动同系列 PHP CLI。面板禁用 `proc_open` 或 CLI 无法启动时，PHP-FPM 可在结束响应并释放会话与请求锁后继续执行，不需要修改面板禁用函数配置。程序目录须由本站 PHP 用户可写；不支持这两种方式的环境请手动覆盖程序文件、安装依赖并执行：
 
 ```bash
 php think feifei:schema:upgrade
@@ -83,6 +83,8 @@ php think feifei:search:sync
 升级后管理员和会员旧会话需要重新登录。管理员密码、账号状态或角色变更会撤销旧会话。新密码支持最多 200 字节；旧 bcrypt 密码超过 72 字节的账号须重置密码，旧格式无法确认被截断的尾部。
 
 在线更新会等待已有 PHP 请求结束，再临时返回 503 维护提示，完成后恢复访问并刷新 PHP-FPM 的程序缓存。数据库迁移或文件回滚失败时保持维护，不继续提供可能不一致的服务。管理员检查更新备份、修复文件并执行 `php think feifei:schema:upgrade` 后，可执行 `php think feifei:update:resume` 解除维护。首次手动部署这项保护时请重载 PHP-FPM，确保旧入口缓存被刷新。
+
+PHP-FPM 后台更新会占用一个工作进程，仍受面板的进程终止策略影响。若设置了 `request_terminate_timeout_track_finished=yes`，管理员应确认其超时足够完成备份和更新；大站点优先使用 CLI 或服务器计划任务。程序不会自动修改 PHP-FPM 的全局安全配置。
 
 多个站点共用 Redis 时，请给每个站点配置不同的 `REDIS_PREFIX`。恢复数据库前请暂停网站写入；恢复后搜索暂时使用 MySQL，执行全量索引同步后再启用外部索引。
 

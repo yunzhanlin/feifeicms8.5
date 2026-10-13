@@ -34,13 +34,26 @@ final class Updater extends BaseController
         try {
             $release = $this->catalog->latest(true);
             if (!$release['available'] || !hash_equals($release['tag'], (string) $this->request->post('tag', ''))) throw new \RuntimeException('发布版本已变化，请刷新后重试');
-            $php = $this->cli->executable();
+            $php = null;
+            try { $php = $this->cli->executable(); }
+            catch (\RuntimeException $error) {
+                if (!ProgramUpdater::supportsWebWorker()) throw $error;
+            }
             $job = $this->updater->queue($release);
-            $log = $this->updater->directory() . '/worker-' . $job['id'] . '.log';
-            $this->cli->spawn([$php, root_path() . 'think', 'feifei:update:apply', $job['id']], root_path(), $log);
+            $executor = 'php-fpm';
+            if ($php !== null) {
+                try {
+                    $log = $this->updater->directory() . '/worker-' . $job['id'] . '.log';
+                    $this->cli->spawn([$php, root_path() . 'think', 'feifei:update:apply', $job['id']], root_path(), $log);
+                    $executor = 'cli';
+                } catch (\RuntimeException $error) {
+                    if (!ProgramUpdater::supportsWebWorker()) throw $error;
+                }
+            }
+            if ($executor === 'php-fpm') $this->updater->defer((string) $job['id']);
             $started = true;
-            try { $this->audit->record('program.update.started', 'release', $release['tag'], null, ['job' => $job['id']]); } catch (\Throwable) { /* worker already owns the job */ }
-            return json(['ok' => true, 'job' => $job]);
+            try { $this->audit->record('program.update.started', 'release', $release['tag'], null, ['job' => $job['id'], 'executor' => $executor]); } catch (\Throwable) { /* worker already owns the job */ }
+            return json(['ok' => true, 'job' => $job, 'executor' => $executor]);
         } catch (\Throwable $e) {
             if (!$started && isset($job['id'])) $this->updater->failQueued((string) $job['id'], '后台更新进程未能启动');
             return json(['ok' => false, 'error' => mb_substr($e->getMessage(), 0, 180)], 422);
