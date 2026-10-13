@@ -37,10 +37,9 @@ final class ProgramUpdater
         if (self::$deferred === null) return;
         [$updater, $id] = self::$deferred;
         self::$deferred = null;
-        if (!fastcgi_finish_request()) {
-            $updater->failQueued($id, '无法结束更新请求，请重试或使用服务器计划任务');
-            return;
-        }
+        // ThinkPHP Response::send() may already have finished this request.
+        // A second call returns false in that case, not an update failure.
+        fastcgi_finish_request();
         register_shutdown_function(static function () use ($updater, $id): void {
             // A fatal error may bypass run()'s catch/finally. Keep maintenance
             // intact, but do not leave the browser polling "running" forever.
