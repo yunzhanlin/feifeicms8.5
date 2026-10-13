@@ -9,15 +9,23 @@ if ($tag !== 'v' . $release['version']) throw new RuntimeException('发布标签
 $target = (string) ($argv[2] ?? $root . '/feifeicms-update.zip');
 $mode = (string) ($argv[3] ?? 'update');
 if (!in_array($mode, ['update', 'install'], true)) throw new RuntimeException('无效构建类型');
+$installed = json_decode((string) @file_get_contents($root . '/vendor/composer/installed.json'), true);
+if (!is_array($installed) || ($installed['dev'] ?? null) !== false || ($installed['dev-package-names'] ?? []) !== []) {
+    throw new RuntimeException('发布包必须先执行 composer install --no-dev --classmap-authoritative，不能打包开发依赖');
+}
 $roots = ['app', 'config', 'database/migrations', 'extend', 'route', 'view/admin', 'view/install', 'view/mxone', 'vendor',
     'public/static', 'public/legacy', 'public/mxstatic', 'public/player'];
-$single = ['think', '.htaccess', 'composer.json', 'composer.lock', 'public/index.php', 'public/install.php',
+$single = ['think', '.htaccess', 'composer.json', 'composer.lock', 'public/index.php',
     'public/router.php', 'public/.htaccess', 'public/favicon.ico', 'public/robots.txt'];
 if ($mode === 'install') {
-    $roots = array_merge($roots, ['deploy', 'docker', 'docs', 'plugins/legacy43']);
-    $single = array_merge($single, ['database/schema-v2.sql', '.example.env', 'README.md', 'LICENSE.txt', 'NOTICE', 'Dockerfile', 'docker-compose.yml']);
+    // Native web installation only: optional deployment and migration add-ons
+    // remain in the repository, not in a new site's program directory.
+    $single = array_merge($single, ['public/install.php', 'database/schema-v2.sql',
+        'deploy/baota/thinkphp.conf', 'deploy/apache/feifeicms.conf', 'docs/模板标签.md', 'LICENSE.txt', 'NOTICE']);
 }
 $files = [];
+$sources = [];
+$contents = [];
 foreach ($roots as $directory) {
     if (!is_dir($root . '/' . $directory)) continue;
     $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($root . '/' . $directory, FilesystemIterator::SKIP_DOTS));
@@ -36,10 +44,24 @@ foreach ($roots as $directory) {
                 && !preg_match('~/(?:licen[cs]e|copying|notice)(?:[.-]|$)~i', $relative)) continue;
         }
         $files[$relative] = hash_file('sha256', $file->getPathname());
+        $sources[$relative] = $file->getPathname();
     }
 }
 foreach ($single as $relative) {
-    if (is_file($root . '/' . $relative) && !is_link($root . '/' . $relative)) $files[$relative] = hash_file('sha256', $root . '/' . $relative);
+    if (is_file($root . '/' . $relative) && !is_link($root . '/' . $relative)) {
+        $files[$relative] = hash_file('sha256', $root . '/' . $relative);
+        $sources[$relative] = $root . '/' . $relative;
+    }
+}
+if ($mode === 'install') {
+    $guide = $root . '/docs/安装说明.md';
+    if (!is_file($guide) || is_link($guide)) throw new RuntimeException('完整安装包缺少安装说明');
+    $contents['README.md'] = str_replace(['(../deploy/', '(模板标签.md)'],
+        ['(deploy/', '(docs/模板标签.md)'], (string) file_get_contents($guide));
+    $files['README.md'] = hash('sha256', $contents['README.md']);
+    foreach (['public/install.php', 'database/schema-v2.sql', 'deploy/baota/thinkphp.conf', 'docs/模板标签.md'] as $required) {
+        if (!isset($files[$required])) throw new RuntimeException('完整安装包缺少文件：' . $required);
+    }
 }
 ksort($files, SORT_STRING);
 if (!isset($files['vendor/autoload.php'], $files['config/version.php'], $files['app/service/ReleaseCatalog.php'])) throw new RuntimeException('构建缺少程序或 Composer 依赖');
@@ -49,7 +71,10 @@ if ($mode === 'install') {
     $zip->addEmptyDir('runtime');
     $zip->addEmptyDir('public/uploads');
 }
-foreach ($files as $relative => $_) if (!$zip->addFile($root . '/' . $relative, $relative)) throw new RuntimeException('无法加入文件：' . $relative);
+foreach ($files as $relative => $_) {
+    $added = isset($contents[$relative]) ? $zip->addFromString($relative, $contents[$relative]) : $zip->addFile($sources[$relative], $relative);
+    if (!$added) throw new RuntimeException('无法加入文件：' . $relative);
+}
 $manifest = ['format' => 1, 'version' => $release['version'], 'files' => $files];
 $zip->addFromString('manifest.json', json_encode($manifest, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 if (!$zip->close()) throw new RuntimeException('无法完成更新包');
