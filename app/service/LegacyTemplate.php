@@ -159,15 +159,17 @@ final class LegacyTemplate
     public function scenarios(string $tag = ''): array
     {
         $p = $this->parse($tag);
-        $query = Db::table('ffx_scenarios')->whereNull('deleted_at')->where('status', 'published');
-        if (!empty($p['id'])) $query->whereIn('id', $this->ids((string) $p['id']));
-        if (!empty($p['vodid']) || !empty($p['cid'])) $query->whereIn('media_id', $this->ids((string) ($p['vodid'] ?? $p['cid'])));
+        $query = Db::table('ffx_scenarios')->alias('s')->join(['ffx_media' => 'm'], 'm.id=s.media_id')
+            ->whereNull('s.deleted_at')->where('s.status', 'published')
+            ->whereNull('m.deleted_at')->where('m.status', 'published')->field('s.*');
+        if (!empty($p['id'])) $query->whereIn('s.id', $this->ids((string) $p['id']));
+        if (!empty($p['vodid']) || !empty($p['cid'])) $query->whereIn('s.media_id', $this->ids((string) ($p['vodid'] ?? $p['cid'])));
         return array_map(static fn (array $row): array => $row + [
             'scenario_id' => (int) $row['id'], 'scenario_vid' => (int) $row['media_id'],
             'scenario_pid' => (int) $row['episode_no'], 'scenario_name' => (string) $row['title'],
             'scenario_content' => (string) $row['content'],
             'scenario_link' => ff_url('scenario', ['id' => (int) $row['id'], 'pid' => (int) $row['episode_no']]),
-        ], $query->order('sort_order')->order('episode_no')->order('id')->limit($this->limit($p, 100))->select()->toArray());
+        ], $query->order('s.sort_order')->order('s.episode_no')->order('s.id')->limit($this->limit($p, 100))->select()->toArray());
     }
 
     /** @return array<int, array<string, mixed>> */

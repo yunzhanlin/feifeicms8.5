@@ -301,6 +301,9 @@ final class WebInstaller
     public function removeInstallerEntry(): bool
     {
         if (!$this->isLocked()) return false;
+        // Compatibility bridge: the previous updater already calls this method
+        // after replacing files, before reporting success or leaving maintenance.
+        RetiredStaticFiles::retire(root_path());
         $entry = root_path() . 'public/install.php';
         if (!is_file($entry) && !is_link($entry)) return true;
         // Removal failures must not roll back a successful database installation.

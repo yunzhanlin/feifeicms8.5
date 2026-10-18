@@ -21,7 +21,7 @@
 {if condition="!empty($preview)"}
 <section class="section-block database-replace-preview" data-replace-preview>
     <div class="section-heading"><h2>替换预览：匹配 {$preview.matched} 条</h2><small>尚未修改数据；最多显示 10 条、每条匹配位置附近的部分内容。确认有效期 10 分钟。</small></div>
-    <div class="notice">当前目标：<strong>{$input.table|htmlspecialchars|raw}.{$input.field|htmlspecialchars|raw}</strong>。替换后将清理相关前台缓存；视频索引由搜索任务增量同步。静态生成页面须另行重新生成。</div>
+    <div class="notice">当前目标：<strong>{$input.table|htmlspecialchars|raw}.{$input.field|htmlspecialchars|raw}</strong>。替换后将清理相关前台缓存；视频索引由搜索任务增量同步。</div>
     <div class="table-wrap"><table class="data-table database-replace-samples"><thead><tr><th width="100">记录主键</th><th>替换前（节选）</th><th>替换后（节选）</th></tr></thead><tbody>
     {volist name="preview.samples" id="sample"}<tr><td>{$sample.row_key|htmlspecialchars|raw}</td><td><pre>{$sample.original|htmlspecialchars|raw}</pre></td><td><pre>{$sample.replacement|htmlspecialchars|raw}</pre></td></tr>{/volist}
     </tbody></table></div>

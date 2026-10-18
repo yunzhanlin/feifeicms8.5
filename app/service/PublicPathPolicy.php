@@ -24,7 +24,7 @@ final class PublicPathPolicy
         // must not turn into a second unauthenticated application entry point.
         if (preg_match('~\.(?:php[0-9]?|phtml|phar)(?:/|$)~', $path)
             && !preg_match('~^(?:index|admin|api|install)\.php$~', $path)) return true;
-        return preg_match('~^(?:view|tpl|template|templates|app|config|database|deploy|docker|docs|extend|plugins|route|runtime|scripts|tests|vendor|qa)(?:[/.]|$)~', $path) === 1
+        return preg_match('~^(?:generated|view|tpl|template|templates|app|config|database|deploy|docker|docs|extend|plugins|route|runtime|scripts|tests|vendor|qa)(?:[/.]|$)~', $path) === 1
             || preg_match('~^(?:composer\.(?:json|lock|phar)|phpunit\.xml|think|Dockerfile|docker-compose\.ya?ml)(?:/|$)~i', $path) === 1
             || preg_match('~^legacy/(?:lib|tpl|runtime|uploads)(?:[/.]|$)~', $path) === 1
             || preg_match('~^(?:uploads|storage|static|mxstatic|player|legacy)/.*\.(?:php[0-9]?|phtml|phar|cgi|pl|py|sh)(?:/|$)~', $path) === 1;

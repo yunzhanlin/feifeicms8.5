@@ -269,6 +269,7 @@ final class ProgramUpdater
             } finally {
                 Db::query("SELECT RELEASE_LOCK('feifeicms_schema_upgrade')");
             }
+            RetiredStaticFiles::retire($root);
             if (!(new WebInstaller(new PasswordHasher(), new SqlStatementStream()))->removeInstallerEntry()) {
                 trace('安装入口未能自动删除，安装锁仍有效，请检查 public/install.php 权限', 'warning');
             }

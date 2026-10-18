@@ -54,7 +54,6 @@ final class Tools extends BaseController
             'search' => $this->searchStats(),
             'templateStats' => $this->directoryStats(runtime_path() . 'temp'),
             'dataStats' => $this->directoryStats(runtime_path() . 'cache'),
-            'pageStats' => $this->directoryStats(public_path() . 'generated'),
             'message' => mb_substr((string) $this->request->get('message', ''), 0, 200),
             'messageType' => $this->request->get('error', '') === '1' ? 'danger' : 'success',
             'csrf' => $this->csrf->get(),
@@ -111,12 +110,11 @@ final class Tools extends BaseController
     {
         $this->guardCsrf();
         $scope = (string) $this->request->post('scope', 'all');
-        $allowed = ['templates', 'data', 'page', 'today_video', 'today_article', 'today_topic', 'all'];
+        $allowed = ['templates', 'data', 'today_video', 'today_article', 'today_topic', 'all'];
         if (!in_array($scope, $allowed, true)) throw new HttpException(422, '缓存类型无效');
 
         $deleted = 0;
         if (in_array($scope, ['templates', 'all'], true)) $deleted += $this->clearDirectory(runtime_path() . 'temp');
-        if (in_array($scope, ['page', 'all'], true)) $deleted += $this->clearDirectory(public_path() . 'generated');
         if (in_array($scope, ['data', 'all'], true)) {
             $this->app->make(\app\service\ResilientCache::class)->clear();
             $this->settings->forget();
@@ -129,7 +127,7 @@ final class Tools extends BaseController
         clearstatcache(true);
 
         $labels = [
-            'templates' => '系统编译与模板缓存', 'data' => '全站数据缓存', 'page' => '页面生成文件',
+            'templates' => '系统编译与模板缓存', 'data' => '全站数据缓存',
             'today_video' => '今日更新视频缓存', 'today_article' => '今日更新文章缓存',
             'today_topic' => '今日更新专题缓存', 'all' => '全部站点缓存',
         ];
@@ -573,109 +571,6 @@ final class Tools extends BaseController
         $this->guardCsrf();
         // Older bookmarked forms must go through the new preview/confirmation flow.
         return redirect('/admin/database/replace?message=' . rawurlencode('数据替换已移至数据库管理，请重新选择表和字段并预览。'), 303);
-    }
-
-    public function staticPages(): Response
-    {
-        $directory = public_path() . 'generated';
-        $files = [];
-        if (is_dir($directory)) {
-            $iterator = new \RecursiveIteratorIterator(new \RecursiveDirectoryIterator($directory, \FilesystemIterator::SKIP_DOTS));
-            foreach ($iterator as $file) {
-                if (!$file->isFile()) continue;
-                $relative = str_replace(DIRECTORY_SEPARATOR, '/', substr($file->getPathname(), strlen($directory) + 1));
-                $files[] = ['name' => $relative, 'size' => $file->getSize(), 'time' => $file->getMTime(), 'url' => '/generated/' . implode('/', array_map('rawurlencode', explode('/', $relative)))];
-            }
-        }
-        usort($files, static fn (array $a, array $b): int => $b['time'] <=> $a['time']);
-        return view('/admin/tools/static', [
-            'files' => $files, 'message' => mb_substr((string) $this->request->get('message', ''), 0, 240),
-            'csrf' => $this->csrf->get(),
-        ]);
-    }
-
-    public function generateStatic(): Response
-    {
-        $this->guardCsrf();
-        $directory = public_path() . 'generated';
-        if (!is_dir($directory)) mkdir($directory, 0755, true);
-        chmod($directory, 0755);
-        $base = rtrim((string) $this->request->domain(), '/');
-        $scopes = array_values(array_intersect((array) $this->request->post('scopes', ['feeds']), ['feeds', 'home', 'categories', 'media', 'articles', 'topics']));
-        if ($scopes === []) throw new HttpException(422, '请选择至少一种生成内容');
-        $limit = max(1, min(5000, (int) $this->request->post('limit', 500)));
-        $rows = Db::table('ffx_media')->where('status', 'published')->whereNull('deleted_at')->order('id', 'desc')->limit($this->settings->int('admin.content.sitemap_limit', 1000, 1, 50000))->select()->toArray();
-        $items = '';
-        $rss = '';
-        foreach ($rows as $row) {
-            $url = $base . ff_url('vod', (int) $row['id']);
-            $items .= '<url><loc>' . htmlspecialchars($url, ENT_XML1) . '</loc><lastmod>' . gmdate('c', strtotime((string) $row['updated_at'])) . '</lastmod></url>';
-            if (substr_count($rss, '<item>') < 100) $rss .= '<item><title>' . htmlspecialchars((string) $row['title'], ENT_XML1) . '</title><link>' . htmlspecialchars($url, ENT_XML1) . '</link></item>';
-        }
-        $generated = 0;
-        $failed = 0;
-        $failureMessages = [];
-        if (in_array('feeds', $scopes, true)) {
-            $sitemapPath = $directory . '/sitemap.xml';
-            $rssPath = $directory . '/rss.xml';
-            file_put_contents($sitemapPath, '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">' . $items . '</urlset>', LOCK_EX);
-            file_put_contents($rssPath, '<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>' . htmlspecialchars($this->settings->string('admin.base.site_name', (string) config('feifei.site_name')), ENT_XML1) . '</title><link>' . htmlspecialchars($base, ENT_XML1) . '</link>' . $rss . '</channel></rss>', LOCK_EX);
-            chmod($sitemapPath, 0644);
-            chmod($rssPath, 0644);
-            $generated += 2;
-        }
-
-        $targets = [];
-        if (in_array('home', $scopes, true)) $targets[] = ['url' => '/', 'file' => 'index.html', 'kind' => 'home', 'id' => 0];
-        $definitions = [
-            'categories' => ['ffx_categories', 'list', 'category'],
-            'media' => ['ffx_media', 'vod', 'vod'],
-            'articles' => ['ffx_articles', 'news', 'news'],
-            'topics' => ['ffx_topics', 'special', 'special'],
-        ];
-        foreach ($definitions as $scope => [$table, $urlType, $folder]) {
-            if (!in_array($scope, $scopes, true)) continue;
-            $query = Db::table($table)->field('id')->where('status', 'published')->whereNull('deleted_at')->order('id', 'desc')->limit($limit)->select()->toArray();
-            foreach ($query as $row) $targets[] = ['url' => ff_url($urlType, (int) $row['id']), 'file' => $folder . '/' . (int) $row['id'] . '.html', 'kind' => $scope, 'id' => (int) $row['id']];
-        }
-        if ($targets !== []) {
-            foreach ($targets as $target) {
-                try {
-                    $body = $this->renderStaticTarget((string) $target['kind'], (int) $target['id']);
-                    if ($body === '') {
-                        $failed++;
-                        $failureMessages[] = $target['url'] . ' 渲染结果为空';
-                        continue;
-                    }
-                    $path = $directory . '/' . $target['file'];
-                    $parent = dirname($path);
-                    if (!is_dir($parent)) mkdir($parent, 0755, true);
-                    if (file_put_contents($path, $body, LOCK_EX) === false) { $failed++; continue; }
-                    chmod($path, 0644);
-                    $generated++;
-                } catch (Throwable $exception) {
-                    $failed++;
-                    $failureMessages[] = $target['url'] . ' ' . mb_substr($exception->getMessage(), 0, 120);
-                }
-            }
-        }
-        $this->audit->record('static.generate', 'system', 'static', null, ['scopes' => $scopes, 'generated' => $generated, 'failed' => $failed, 'failures' => array_slice($failureMessages, 0, 20)]);
-        $message = '生成完成：成功 ' . $generated . ' 个，失败 ' . $failed . ' 个';
-        if ($failureMessages !== []) $message .= '；' . implode('；', array_slice($failureMessages, 0, 2));
-        return redirect('/admin/tools/static?message=' . rawurlencode($message));
-    }
-
-    private function renderStaticTarget(string $kind, int $id): string
-    {
-        $response = match ($kind) {
-            'home' => app()->make(\app\controller\Index::class)->index(),
-            'categories' => app()->make(\app\controller\Category::class)->show($id),
-            'media' => app()->make(\app\controller\Vod::class)->detail($id),
-            'articles' => app()->make(\app\controller\News::class)->detail($id),
-            'topics' => app()->make(\app\controller\Special::class)->detail($id),
-            default => throw new HttpException(422, '不支持的静态生成类型'),
-        };
-        return (string) $response->getContent();
     }
 
     private function versionDetails(): array

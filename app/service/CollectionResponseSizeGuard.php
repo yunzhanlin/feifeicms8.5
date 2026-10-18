@@ -3,6 +3,10 @@ declare(strict_types=1);
 
 namespace app\service;
 
+use GuzzleHttp\Psr7\FnStream;
+use GuzzleHttp\Psr7\Utils;
+use Psr\Http\Message\StreamInterface;
+
 final class CollectionResponseSizeGuard
 {
     public const DEFAULT_MAX_BYTES = 5_242_880;
@@ -33,5 +37,22 @@ final class CollectionResponseSizeGuard
         if (strlen($body) > $this->maxBytes) {
             throw new \RuntimeException('采集响应超过 5MB');
         }
+    }
+
+    /** Bound decoded writes, before Guzzle can accumulate the response body. */
+    public function sink(): StreamInterface
+    {
+        $stream = Utils::streamFor(Utils::tryFopen('php://temp', 'w+'));
+        $received = 0;
+        return FnStream::decorate($stream, [
+            'write' => function (string $chunk) use ($stream, &$received): int {
+                if (strlen($chunk) > $this->maxBytes - $received) {
+                    throw new \RuntimeException('采集响应超过 5MB');
+                }
+                $written = $stream->write($chunk);
+                $received += $written;
+                return $written;
+            },
+        ]);
     }
 }

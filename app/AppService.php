@@ -17,6 +17,7 @@ class AppService extends Service
 
     public function boot()
     {
-        // 服务启动
+        // Also runs after a first upgrade performed by the previous updater.
+        \app\service\RetiredStaticFiles::retire($this->app->getRootPath());
     }
 }

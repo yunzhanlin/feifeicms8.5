@@ -220,8 +220,6 @@ Route::group('admin', function (): void {
     Route::post('tools/records/clear', 'admin.Tools/clearRecords');
     Route::get('tools/replace', 'admin.Tools/replace');
     Route::post('tools/replace', 'admin.Tools/runReplace');
-    Route::get('tools/static', 'admin.Tools/staticPages');
-    Route::post('tools/static/generate', 'admin.Tools/generateStatic');
     Route::get('tools/legacy-upgrade', 'admin.LegacyUpgrade/index');
     Route::post('tools/legacy-upgrade/preflight', 'admin.LegacyUpgrade/preflight');
     Route::post('tools/legacy-upgrade/batch', 'admin.LegacyUpgrade/batch');

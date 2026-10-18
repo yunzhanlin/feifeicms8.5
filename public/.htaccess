@@ -14,7 +14,7 @@ Options -Indexes -MultiViews
   RewriteEngine On
   RewriteCond %{REQUEST_FILENAME} -l
   RewriteRule ^ - [F,END]
-  RewriteRule ^(?:(?:public|index\.php|admin\.php|api\.php|install\.php)/)*(?:view|tpl|template|templates|app|config|database|deploy|docker|docs|extend|plugins|route|runtime|scripts|tests|vendor|qa)(?:[/.]|$) - [F,END,NC]
+  RewriteRule ^(?:(?:public|index\.php|admin\.php|api\.php|install\.php)/)*(?:generated|view|tpl|template|templates|app|config|database|deploy|docker|docs|extend|plugins|route|runtime|scripts|tests|vendor|qa)(?:[/.]|$) - [F,END,NC]
   RewriteRule ^legacy/(?:Lib|Tpl|Runtime|Uploads)(?:[/.]|$) - [F,END,NC]
   RewriteRule ^(?:uploads|storage|static|mxstatic|player|legacy)/.*\.(?:php[0-9]?|phtml|phar|cgi|pl|py|sh)(?:/|$) - [F,END,NC]
   RewriteRule (^|/)\.(?!well-known(?:/|$)) - [F,END]
