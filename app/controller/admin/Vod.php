@@ -100,6 +100,7 @@ final class Vod extends BaseController
 
     public function create(): Response
     {
+        $players = $this->players();
         return view('/admin/vod/edit', [
             'media' => [
                 'id' => 0, 'title' => '', 'category_id' => null,
@@ -117,11 +118,10 @@ final class Vod extends BaseController
             'selectedCategoryNames' => '',
             'tags' => '',
             'credits' => '',
-            'playSources' => [[
-                'id' => 0, 'source_key' => 'default', 'player_key' => 'default', 'display_name' => '默认线路',
-                'parser_key' => '', 'status' => 'enabled', 'legacy_urls' => '',
-            ]],
-            'players' => $this->players(),
+            'playSources' => [$this->emptyPlaySource($players)],
+            'players' => $players,
+            'error' => '',
+            'playbackEditorPresent' => 1,
             'editorOptions' => $this->editorOptions(null),
             'csrf' => $this->csrf->get(),
             'isNew' => true,
@@ -135,7 +135,7 @@ final class Vod extends BaseController
         }
         $data = $this->payload();
         if ($data['title'] === '') {
-            return response('影片名称不能为空', 422);
+            return $this->validationFailure($data, 0, '影片名称不能为空');
         }
         $data['slug'] = $this->slugger->make((string) $this->request->post('slug', ''), 'media');
         $data['media_type'] = 'video';
@@ -144,15 +144,20 @@ final class Vod extends BaseController
         if ($data['status'] === 'published') {
             $data['published_at'] = $data['created_at'];
         }
-        $media = Db::transaction(function () use ($data): Media {
-            $media = Media::create($data);
-            $this->syncRelations((int) $media->id, $data['category_id']);
-            $this->syncLegacyPlayback((int) $media->id);
-            return $media;
-        });
+        try {
+            $media = Db::transaction(function () use ($data): Media {
+                $media = Media::create($data);
+                $this->syncRelations((int) $media->id, $data['category_id']);
+                $this->syncLegacyPlayback((int) $media->id);
+                return $media;
+            });
+        } catch (HttpException $error) {
+            if ($error->getStatusCode() !== 422) throw $error;
+            return $this->validationFailure($data, 0, $error->getMessage());
+        }
         $this->audit->record('media.create', 'media', (int) $media->id, null, $media->toArray());
         $this->frontendCache->invalidateHome();
-        return redirect('/admin/vod/' . $media->id . '/edit');
+        return redirect('/admin/vod?notice=' . rawurlencode('视频添加成功'));
     }
 
     public function edit(int $id): Response
@@ -181,6 +186,8 @@ final class Vod extends BaseController
             'credits' => $this->creditText($id),
             'playSources' => $this->legacyPlaySources($id),
             'players' => $this->players(),
+            'error' => '',
+            'playbackEditorPresent' => 0,
             'editorOptions' => $this->editorOptions((int) ($mediaData['category_id'] ?? 0)),
             'csrf' => $this->csrf->get(),
             'isNew' => false,
@@ -199,7 +206,7 @@ final class Vod extends BaseController
         $before = $media->toArray();
         $data = $this->payload();
         if ($data['title'] === '') {
-            return response('影片名称不能为空', 422);
+            return $this->validationFailure($data, $id, '影片名称不能为空');
         }
         if ($data['status'] === 'published' && empty($media->published_at)) {
             $data['published_at'] = gmdate('Y-m-d H:i:s');
@@ -209,14 +216,19 @@ final class Vod extends BaseController
         $data['updated_at'] = (int) $this->request->post('refresh_updated_at', 0) === 1
             ? gmdate('Y-m-d H:i:s')
             : (string) $media->updated_at;
-        Db::transaction(function () use ($media, $data, $id): void {
-            $media->save($data);
-            $this->syncRelations($id, $data['category_id']);
-            $this->syncLegacyPlayback($id);
-        });
+        try {
+            Db::transaction(function () use ($media, $data, $id): void {
+                $media->save($data);
+                $this->syncRelations($id, $data['category_id']);
+                $this->syncLegacyPlayback($id);
+            });
+        } catch (HttpException $error) {
+            if ($error->getStatusCode() !== 422) throw $error;
+            return $this->validationFailure($data, $id, $error->getMessage());
+        }
         $this->audit->record('media.update', 'media', $id, $before, $media->toArray());
         $this->frontendCache->invalidateHome();
-        return redirect('/admin/vod/' . $id . '/edit');
+        return redirect('/admin/vod?notice=' . rawurlencode('视频保存成功'));
     }
 
     public function delete(int $id): Response
@@ -506,6 +518,45 @@ final class Vod extends BaseController
         return Db::table('ffx_players')->where('status', 'enabled')->order('sort_order')->order('id')->select()->toArray();
     }
 
+    /** @param list<array<string, mixed>> $players @return array<string, mixed> */
+    private function emptyPlaySource(array $players): array
+    {
+        return ['id' => 0, 'source_key' => (string) ($players[0]['player_key'] ?? ''),
+            'player_key' => (string) ($players[0]['player_key'] ?? ''), 'display_name' => (string) ($players[0]['name'] ?? ''),
+            'parser_key' => '', 'status' => 'enabled', 'legacy_urls' => '', 'delete_missing' => false];
+    }
+
+    /** Preserve submitted data on expected validation failures; the transaction has rolled back. */
+    private function validationFailure(array $data, int $id, string $message): Response
+    {
+        /** @var \think\response\View $view */
+        $view = $id > 0 ? $this->edit($id) : $this->create();
+        $sources = [];
+        $ids = (array) $this->request->post('play_source_id', []);
+        $keys = (array) $this->request->post('play_source_key', []);
+        $names = (array) $this->request->post('play_source_name', []);
+        $parsers = (array) $this->request->post('play_parser_key', []);
+        $urls = (array) $this->request->post('play_urls', []);
+        $deleteMissing = array_map('strval', (array) $this->request->post('play_delete_missing', []));
+        for ($index = 0, $count = max(count($ids), count($keys), count($names), count($urls)); $index < $count; $index++) {
+            $key = (string) ($keys[$index] ?? '');
+            $sources[] = ['id' => (int) ($ids[$index] ?? 0), 'source_key' => $key,
+                'player_key' => PlaybackPlayerRegistry::sourceKey(['source_key' => $key, 'parser_key' => $parsers[$index] ?? '']),
+                'display_name' => (string) ($names[$index] ?? ''), 'parser_key' => (string) ($parsers[$index] ?? ''),
+                'legacy_urls' => (string) ($urls[$index] ?? ''), 'delete_missing' => in_array((string) $index, $deleteMissing, true)];
+        }
+        return $view->assign([
+            'media' => array_replace((array) $view->getVars('media'), $data, ['id' => $id, 'slug' => (string) $this->request->post('slug', '')]),
+            'legacyMeta' => $this->legacyMeta($data['metadata'] ?? []),
+            'selectedCategoryIds' => array_map('intval', (array) $this->request->post('category_ids', [])),
+            'selectedCategoryNames' => (string) $this->request->post('category_names', ''),
+            'tags' => (string) $this->request->post('tags', ''), 'credits' => (string) $this->request->post('credits', ''),
+            'playSources' => $sources === [] ? $view->getVars('playSources') : $sources,
+            'playbackEditorPresent' => (int) $this->request->post('playback_editor_present', 0) === 1 ? 1 : 0,
+            'error' => $message,
+        ])->code(422);
+    }
+
     /** @return array<string, array<int, mixed>> */
     private function editorOptions(?int $categoryId): array
     {
@@ -614,6 +665,7 @@ final class Vod extends BaseController
         $sources = Db::table('ffx_play_sources')->where('media_id', $mediaId)->order('sort_order')->order('id')->select()->toArray();
         foreach ($sources as &$source) {
             $source['player_key'] = PlaybackPlayerRegistry::sourceKey($source);
+            $source['delete_missing'] = false;
             $episodes = Db::table('ffx_episodes')->where('source_id', (int) $source['id'])->order('sort_order')->order('episode_no')->select()->toArray();
             $source['legacy_urls'] = implode("\n", array_map(static function (array $episode): string {
                 $line = (string) $episode['label'] . '$' . (string) $episode['media_url'];
@@ -621,10 +673,7 @@ final class Vod extends BaseController
             }, $episodes));
         }
         unset($source);
-        return $sources === [] ? [[
-            'id' => 0, 'source_key' => 'default', 'player_key' => 'default', 'display_name' => '默认线路',
-            'parser_key' => '', 'status' => 'enabled', 'legacy_urls' => '',
-        ]] : $sources;
+        return $sources === [] ? [$this->emptyPlaySource($this->players())] : $sources;
     }
 
     private function syncLegacyPlayback(int $mediaId): void

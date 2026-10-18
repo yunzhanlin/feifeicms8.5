@@ -1,6 +1,14 @@
 <?php
 // 应用公共文件
 
+if (!function_exists('ff_url_img')) {
+    /** Apply configured hotlink protection without changing the stored image URL. */
+    function ff_url_img(mixed $url): string
+    {
+        return app()->make(app\service\ImageUrl::class)->display(is_scalar($url) ? (string) $url : '');
+    }
+}
+
 if (!function_exists('ff_url_generator')) {
     /** Reuse one generator and its record cache throughout the current request. */
     function ff_url_generator(): app\service\LegacyUrlGenerator

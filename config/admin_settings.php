@@ -344,8 +344,8 @@ return [
             ],
             '图片代理' => [
                 'upload_http_prefix' => $field('远程附件前缀', 'url', ''),
-                'upload_referer' => $field('外部防盗链代理', 'url', ''),
-                'upload_referer_domains' => $field('防盗链域名', 'textarea', ''),
+                'upload_referer' => $field('外部防盗链代理', 'url', '', help: '填写代理前缀，如 https://example.com/img.php?url=；原图地址会自动编码后追加。'),
+                'upload_referer_domains' => $field('防盗链域名', 'textarea', '', help: '每行一个域名，如 doubanio.com，同时匹配其子域名；留空不启用外部代理。'),
                 'upload_referer_local' => $field('本地图片代理', 'text', ''),
                 'upload_safety' => $field('禁止下载的域名', 'textarea', ''),
             ],

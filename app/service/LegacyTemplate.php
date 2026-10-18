@@ -119,7 +119,7 @@ final class LegacyTemplate
     public function slides(string $tag = ''): array
     {
         $p = $this->parse($tag);
-        return Db::table('ffx_slides')->where('status', 'enabled')->order('sort_order')->order('id')->limit($this->limit($p, 10))->select()->toArray();
+        return array_map($this->frontend->imageFields(...), Db::table('ffx_slides')->where('status', 'enabled')->order('sort_order')->order('id')->limit($this->limit($p, 10))->select()->toArray());
     }
 
     /** @return array<int, array<string, mixed>> */
@@ -133,11 +133,12 @@ final class LegacyTemplate
     public function links(string $tag = ''): array
     {
         $p = $this->parse($tag);
+        $rows = array_map($this->frontend->imageFields(...), Db::table('ffx_links')->where('status', 'enabled')->order('sort_order')->order('id')->limit($this->limit($p, 50))->select()->toArray());
         return array_map(static fn (array $row): array => $row + [
             'link_id' => (int) $row['id'], 'link_name' => (string) $row['name'],
             'link_url' => (string) $row['url'], 'link_logo' => (string) ($row['logo_url'] ?? ''),
             'link_type' => (string) ($row['link_type'] ?? 'text'),
-        ], Db::table('ffx_links')->where('status', 'enabled')->order('sort_order')->order('id')->limit($this->limit($p, 50))->select()->toArray());
+        ], $rows);
     }
 
     /** @return array<int, array<string, mixed>> */

@@ -12,11 +12,13 @@ final class FrontendData
 
     private readonly SiteSettings $settings;
     private readonly FrontendCache $cache;
+    private readonly ImageUrl $images;
 
     public function __construct(?SiteSettings $settings = null, ?FrontendCache $cache = null)
     {
         $this->cache = $cache ?? new FrontendCache(new ResilientCache());
         $this->settings = $settings ?? new SiteSettings($this->cache);
+        $this->images = new ImageUrl($this->settings);
     }
 
     /** @return array<string, mixed> */
@@ -56,7 +58,7 @@ final class FrontendData
                 'description' => $this->settings->string('admin.base.site_description', (string) config('feifei.site_description')),
             ],
             'pageActive' => '',
-            'friendLinks' => is_array($structure['friendLinks'] ?? null) ? $structure['friendLinks'] : [],
+            'friendLinks' => array_map($this->imageFields(...), is_array($structure['friendLinks'] ?? null) ? $structure['friendLinks'] : []),
             'siteNavigation' => array_values(array_filter($navigation, static fn (array $item): bool => empty($item['parent_id']))),
             'siteNavigationChildren' => $this->navigationChildren($navigation),
             'hotSearches' => $this->hotSearches(),
@@ -65,7 +67,7 @@ final class FrontendData
                 'slideInterval' => $this->settings->int('admin.base.ui_slide_index', 3000, 1000, 60000),
                 'episodeLimit' => $this->settings->int('admin.base.ui_playurl', 0, 0, 1000),
             ],
-            'siteSlides' => array_slice(is_array($structure['slides'] ?? null) ? $structure['slides'] : [], 0, $slideLimit),
+            'siteSlides' => array_map($this->imageFields(...), array_slice(is_array($structure['slides'] ?? null) ? $structure['slides'] : [], 0, $slideLimit)),
             'siteCopyright' => $this->settings->string('admin.base.site_copyright'),
             'siteIcp' => $this->settings->string('admin.base.site_icp'),
             'siteStatistics' => $this->settings->string('admin.base.site_tongji'),
@@ -139,6 +141,7 @@ final class FrontendData
     {
         LegacyUrlGenerator::prime('ffx_media', $media);
         if (trim((string) ($media['poster_url'] ?? '')) === '') $media['poster_url'] = $this->settings->string('admin.content.default_poster');
+        $media = $this->imageFields($media);
         $metadata = $media['metadata'] ?? [];
         if (is_string($metadata)) {
             $metadata = json_decode($metadata, true);
@@ -245,6 +248,7 @@ final class FrontendData
     {
         LegacyUrlGenerator::prime('ffx_articles', $article);
         if (trim((string) ($article['cover_url'] ?? '')) === '') $article['cover_url'] = $this->settings->string('admin.content.default_poster');
+        $article = $this->imageFields($article);
         $content = (string) ($article['content'] ?? '');
         return $article + [
             'news_id' => (int) ($article['id'] ?? 0),
@@ -261,6 +265,7 @@ final class FrontendData
     public function special(array $topic): array
     {
         LegacyUrlGenerator::prime('ffx_topics', $topic);
+        $topic = $this->imageFields($topic);
         $content = (string) ($topic['content'] ?? '');
         return $topic + [
             'special_id' => (int) ($topic['id'] ?? 0),
@@ -279,6 +284,7 @@ final class FrontendData
     {
         LegacyUrlGenerator::prime('ffx_people', $person);
         if (trim((string) ($person['avatar_url'] ?? '')) === '') $person['avatar_url'] = $this->settings->string('admin.content.default_avatar');
+        $person = $this->imageFields($person);
         $metadata = $person['metadata'] ?? [];
         if (is_string($metadata)) $metadata = json_decode($metadata, true);
         $metadata = is_array($metadata) ? $metadata : [];
@@ -299,6 +305,12 @@ final class FrontendData
             'summary_text' => $this->summary((string) ($person['summary'] ?? $person['biography'] ?? ''), $this->settings->int('admin.content.summary_length', 180, 20, 1000)),
             'safe_content' => $this->settings->bool('admin.content.allow_html', true) ? (string) ($person['biography'] ?? '') : nl2br(htmlspecialchars(strip_tags((string) ($person['biography'] ?? '')), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')),
         ];
+    }
+
+    /** @param array<string, mixed> $row @return array<string, mixed> */
+    public function imageFields(array $row): array
+    {
+        return $this->images->fields($row);
     }
 
     /** @param array<int, array<string, mixed>> $categories
