@@ -303,6 +303,8 @@ final class WebInstaller
         if (!$this->isLocked()) return false;
         // Compatibility bridge: the previous updater already calls this method
         // after replacing files, before reporting success or leaving maintenance.
+        // Its in-memory authoritative Composer map predates this new class.
+        require_once __DIR__ . '/RetiredStaticFiles.php';
         RetiredStaticFiles::retire(root_path());
         $entry = root_path() . 'public/install.php';
         if (!is_file($entry) && !is_link($entry)) return true;
