@@ -75,12 +75,14 @@ final class Collections extends BaseController
         $mapping = json_decode((string) ($source['category_mapping'] ?? '{}'), true);
         $mapping = is_array($mapping) ? $mapping : [];
         $displayMapping = array_replace($this->suggestMapping($upstream['categories'], $this->localCategories()), $mapping);
+        $paginationStart = max(1, min((int) $upstream['page'] - 2, (int) $upstream['pagecount'] - 4));
         return view('/admin/collections/resource', [
             'source' => $source,
             'upstream' => $upstream,
             'mapping' => $displayMapping,
             'categories' => $this->localCategories(),
             'filters' => $filters,
+            'paginationPages' => range($paginationStart, min((int) $upstream['pagecount'], $paginationStart + 4)),
             'error' => $error,
             'csrf' => $this->csrf->get(),
         ]);

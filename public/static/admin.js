@@ -59,6 +59,60 @@
         tbody.appendChild(row);
     });
 
+    const bindingControls = Array.from(document.querySelectorAll('.legacy-bind-control'));
+    if (bindingControls.length) {
+        const closeBinding = (control, restoreFocus = false) => {
+            control.open = false;
+            control.querySelector('form')?.reset();
+            if (restoreFocus) control.querySelector('summary')?.focus();
+        };
+        const positionBinding = (control) => {
+            const form = control.querySelector('form');
+            const summary = control.querySelector('summary');
+            if (!control.open || !form || !summary) return;
+            const margin = 8;
+            const viewport = document.documentElement;
+            const anchor = summary.getBoundingClientRect();
+            const headerBottom = document.querySelector('.admin-topbar')?.getBoundingClientRect().bottom || 0;
+            const minTop = Math.max(margin, headerBottom + margin);
+            const maxHeight = Math.max(0, viewport.clientHeight - minTop - margin);
+            form.style.maxHeight = `${maxHeight}px`;
+            const panel = form.getBoundingClientRect();
+            const left = Math.max(margin, Math.min(anchor.left, viewport.clientWidth - panel.width - margin));
+            const below = anchor.bottom + 6;
+            const top = below + panel.height <= viewport.clientHeight - margin
+                ? Math.max(minTop, below)
+                : Math.max(minTop, anchor.top - panel.height - 6);
+            form.style.left = `${left}px`;
+            form.style.top = `${top}px`;
+        };
+        bindingControls.forEach((control) => {
+            control.classList.add('is-enhanced');
+            control.addEventListener('toggle', () => {
+                if (!control.open) return;
+                bindingControls.forEach((other) => { if (other !== control && other.open) closeBinding(other); });
+                positionBinding(control);
+            });
+            control.querySelector('[data-bind-cancel]')?.addEventListener('click', () => closeBinding(control, true));
+        });
+        document.addEventListener('click', (event) => {
+            bindingControls.forEach((control) => { if (control.open && !control.contains(event.target)) closeBinding(control); });
+        });
+        document.addEventListener('keydown', (event) => {
+            if (event.key !== 'Escape') return;
+            bindingControls.forEach((control) => {
+                if (control.open) { event.preventDefault(); closeBinding(control, true); }
+            });
+        });
+        window.addEventListener('resize', () => bindingControls.forEach(positionBinding));
+        // Close on document/container scroll, but keep the editor's own scrollbar usable.
+        document.addEventListener('scroll', (event) => {
+            bindingControls.forEach((control) => {
+                if (control.open && !control.querySelector('form')?.contains(event.target)) closeBinding(control);
+            });
+        }, true);
+    }
+
     document.querySelectorAll('[data-check-all]').forEach((control) => {
         control.addEventListener('click', () => {
             const form = control.closest('form');
