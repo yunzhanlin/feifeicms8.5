@@ -482,7 +482,10 @@ final class Vod extends BaseController
         foreach ($items as $item) $ids[] = (int) $item->id;
         if ($ids === []) return;
         $categoryNames = [];
-        foreach ($categories as $category) $categoryNames[(int) $category['id']] = (string) $category['name'];
+        foreach ($categories as $category) {
+            $categoryNames[(int) $category['id']] = (string) $category['name'];
+            \app\service\LegacyUrlGenerator::prime('ffx_categories', $category);
+        }
         $sourceKeys = [];
         foreach (Db::table('ffx_play_sources')->whereIn('media_id', $ids)->where('status', 'enabled')->order('sort_order')->order('id')->field('media_id,source_key,parser_key')->select()->toArray() as $source) {
             $sourceKeys[(int) $source['media_id']][] = PlaybackPlayerRegistry::sourceKey($source);
@@ -492,6 +495,7 @@ final class Vod extends BaseController
             $scenarioCounts[(int) $row['media_id']] = (int) $row['total'];
         }
         foreach ($items as $item) {
+            \app\service\LegacyUrlGenerator::prime('ffx_media', $item->toArray());
             $metadata = is_array($item->metadata) ? $item->metadata : (json_decode((string) $item->metadata, true) ?: []);
             $continu = trim((string) ($item->episode_label ?? ''));
             $weekday = trim((string) ($metadata['weekday'] ?? ''));

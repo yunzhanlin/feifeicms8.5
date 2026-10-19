@@ -6,6 +6,8 @@ use think\facade\Db;
 
 final class PlayerResolver
 {
+    public const DEFAULT_CONFIG = ['parser_mode' => 'json', 'direct_type' => 'm3u8'];
+
     public function __construct(private readonly SiteSettings $settings, private readonly PublicJsonClient $http, private readonly MediaUrlGuard $guard, private readonly SafeRemoteUrl $safeUrl) {}
 
     public function plan(string $key): array
@@ -13,23 +15,29 @@ final class PlayerResolver
         $player = Db::table('ffx_players')->where('player_key', PlaybackPlayerRegistry::normalizeKey($key))->where('status', 'enabled')->find();
         if ($player === null) throw new \RuntimeException('播放器未注册或已停用');
         $config = is_array($player['config'] ?? null) ? $player['config'] : (json_decode((string) ($player['config'] ?? ''), true) ?: []);
-        $endpoint = trim((string) ($player['parser_url'] ?: $this->settings->string('admin.player.play_jiexi')));
+        // Each registered player decides its own mode. A global parser must not
+        // silently take over a player whose parser URL was intentionally left blank.
+        $endpoint = trim((string) ($player['parser_url'] ?? ''));
         $mode = (string) ($config['parser_mode'] ?? $this->settings->string('admin.player.parser_mode', 'json'));
         if (!in_array($mode, ['json', 'iframe'], true)) throw new \RuntimeException('解析模式无效');
-        $type = strtolower((string) ($config['direct_type'] ?? ''));
+        $type = strtolower((string) ($config['direct_type'] ?? self::DEFAULT_CONFIG['direct_type']));
         if (!in_array($type, ['', 'm3u8', 'mp4', 'webm', 'ogg'], true)) throw new \RuntimeException('直链媒体类型无效');
-        if ($endpoint !== '') $this->assertEndpoint($endpoint);
-        return ['endpoint' => $endpoint, 'mode' => $mode, 'direct_type' => $type, 'force' => ($config['force_parser'] ?? false) === true];
+        return ['endpoint' => $endpoint, 'mode' => $mode, 'direct_type' => $type, 'force' => $endpoint !== ''];
     }
 
     public function resolve(string $key, string $url): array
     {
-        $url = $this->guard->allow($url) ?? throw new \RuntimeException('播放地址无效');
+        // A parser input can be an opaque resource ID, not just an HTTP URL.
+        // Keep the original bytes; only the parser endpoint and its output are URLs.
+        if (trim($url) === '' || strlen($url) > 4096 || preg_match('/[\x00-\x1F\x7F]/', $url)) throw new \RuntimeException('播放地址无效');
         $plan = $this->plan($key);
-        $path = strtolower((string) parse_url($url, PHP_URL_PATH));
-        $type = preg_match('/\.(m3u8|mp4|webm|ogg)$/', $path, $match) ? $match[1] : $plan['direct_type'];
-        if ($type !== '' && !$plan['force']) return ['url' => $url, 'type' => $type];
-        if ($plan['endpoint'] === '') throw new \RuntimeException('请为该播放器配置解析接口或明确的直链媒体类型');
+        if ($plan['endpoint'] === '') {
+            if ($this->guard->allow($url) === null) throw new \RuntimeException('该播放器未配置解析接口，播放地址必须是 HTTP/HTTPS 直链');
+            $path = strtolower((string) parse_url($url, PHP_URL_PATH));
+            $type = preg_match('/\.(m3u8|mp4|webm|ogg)$/', $path, $match) ? $match[1] : ($plan['direct_type'] ?: 'm3u8');
+            return ['url' => $url, 'type' => $type];
+        }
+        $this->assertEndpoint($plan['endpoint']);
         if ($plan['mode'] === 'iframe') {
             $this->safeUrl->resolve($plan['endpoint']);
             return ['url' => $this->appendUrl($plan['endpoint'], $url), 'type' => 'iframe'];
@@ -39,7 +47,19 @@ final class PlayerResolver
         $data = is_array($payload['data'] ?? null) ? $payload['data'] : $payload;
         PublicJsonClient::assertSuccess($payload);
         $resolved = $this->guard->allow((string) ($data['url'] ?? '')) ?? throw new \RuntimeException('解析接口未返回有效播放地址');
-        $type = strtolower((string) ($data['type'] ?? pathinfo((string) parse_url($resolved, PHP_URL_PATH), PATHINFO_EXTENSION)));
+        $type = is_string($data['type'] ?? null) ? strtolower(trim($data['type'])) : '';
+        $type = match ($type) {
+            'hls', 'application/x-mpegurl', 'application/vnd.apple.mpegurl' => 'm3u8',
+            'video/mp4' => 'mp4',
+            'video/webm' => 'webm',
+            'video/ogg', 'application/ogg' => 'ogg',
+            default => $type,
+        };
+        // Some providers use "type" for a transport label, e.g. 单线程.
+        // Recognized media types remain authoritative, including extensionless URLs.
+        if (!in_array($type, ['m3u8', 'mp4', 'webm', 'ogg'], true)) {
+            $type = strtolower(pathinfo((string) parse_url($resolved, PHP_URL_PATH), PATHINFO_EXTENSION));
+        }
         if (!in_array($type, ['m3u8', 'mp4', 'webm', 'ogg'], true)) throw new \RuntimeException('解析接口未返回受支持的媒体类型');
         return ['url' => $resolved, 'type' => $type];
     }

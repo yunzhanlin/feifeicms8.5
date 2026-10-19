@@ -143,14 +143,15 @@ final class Operations extends BaseController
     {
         $def = $this->definition($type);
         $defaults = match ($type) {
-            'players' => ['id' => 0, 'player_key' => '', 'name' => '', 'parser_url' => '', 'config' => '{}', 'sort_order' => 0, 'status' => 'enabled'],
+            'players' => ['id' => 0, 'player_key' => '', 'name' => '', 'parser_url' => '', 'config' => json_encode(\app\service\PlayerResolver::DEFAULT_CONFIG, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT), 'sort_order' => 0, 'status' => 'enabled'],
             'slides' => ['id' => 0, 'name' => '', 'image_url' => '', 'mobile_image_url' => '', 'target_url' => '', 'description' => '', 'sort_order' => 0, 'status' => 'enabled', 'starts_at' => '', 'ends_at' => ''],
             'links' => ['id' => 0, 'name' => '', 'url' => '', 'logo_url' => '', 'link_type' => 'text', 'sort_order' => 0, 'status' => 'enabled'],
             'navigation' => ['id' => 0, 'parent_id' => null, 'title' => '', 'url' => '', 'target' => '_self', 'sort_order' => 0, 'status' => 'enabled'],
             'ads' => ['id' => 0, 'slot_key' => '', 'name' => '', 'content' => '', 'status' => 'disabled', 'starts_at' => '', 'ends_at' => ''],
         };
-        if ($item !== null && $type === 'players' && is_string($item['config'] ?? null)) {
-            $item['config'] = json_encode(json_decode((string) $item['config'], true), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+        if ($item !== null && $type === 'players') {
+            $config = is_array($item['config'] ?? null) ? $item['config'] : json_decode((string) ($item['config'] ?? ''), true);
+            $item['config'] = json_encode($config ?: \app\service\PlayerResolver::DEFAULT_CONFIG, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
         }
         return view('/admin/operations/edit', [
             'type' => $type, 'label' => $def['label'], 'item' => $item ?? $defaults,

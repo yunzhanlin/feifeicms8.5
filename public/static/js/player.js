@@ -12,6 +12,11 @@
         return url;
     }
 
+    function sourceValue(value) {
+        value = String(value || '');
+        return value.trim() && value.length <= 4096 && !/[\u0000-\u001f\u007f]/.test(value) ? value : '';
+    }
+
     function endpoint(base, params) {
         var url = new URL(base, window.location.origin);
         Object.keys(params || {}).forEach(function (key) {
@@ -164,7 +169,7 @@
 
     function resolvePlainSource(app) {
         var directType = mediaTypeFromUrl(app.videoUrl);
-        if (directType && !app.forceParser) {
+        if (directType && !app.forceParser && /^https?:\/\//i.test(app.videoUrl)) {
             return Promise.resolve({
                 url: app.videoUrl,
                 type: directType,
@@ -194,7 +199,7 @@
             body: JSON.stringify({token: app.sourceToken})
         }).then(function (result) {
             var data = result && result.data ? result.data : {};
-            app.videoUrl = safeUrl(data.url);
+            app.videoUrl = sourceValue(data.url);
             if (!app.videoUrl) {
                 throw new Error((result && result.message) || '播放令牌没有返回有效地址');
             }
@@ -399,7 +404,7 @@
             return;
         }
         var app = {
-            videoUrl: safeUrl((options && options.url) || box.getAttribute('data-url')),
+            videoUrl: sourceValue((options && options.url) || box.getAttribute('data-url')),
             sourceToken: String((options && options.sourceToken) || box.getAttribute('data-source-token') || ''),
             sourceApi: (options && options.sourceApi) || box.getAttribute('data-source-api') || '/danmu/source',
             type: String((options && options.type) || box.getAttribute('data-type') || '').toLowerCase(),

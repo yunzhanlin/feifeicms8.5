@@ -16,6 +16,20 @@ final class LegacyRewriteRules
         '(:any)' => '[^/?#]+',
     ];
 
+    /** Use the same defaults shown in URL settings until the administrator saves them. */
+    public function definition(SiteSettings $settings): string
+    {
+        $default = '';
+        foreach ((array) config('admin_settings.rewrite.groups', []) as $fields) {
+            if (isset($fields['rewrite_route']['default'])) {
+                $default = (string) $fields['rewrite_route']['default'];
+                break;
+            }
+        }
+        // An explicitly saved empty rule set must remain empty.
+        return $settings->string('admin.rewrite.rewrite_route', $default);
+    }
+
     /** @return list<array{line:int,source:string,target:string,extra:array<string,string>,source_regex:string,target_regex:string}> */
     public function parse(string $definition): array
     {

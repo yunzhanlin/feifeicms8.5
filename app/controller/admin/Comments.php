@@ -108,7 +108,7 @@ final class Comments extends BaseController
     private function targetUrl(string $type, int $id): string
     {
         return match ($type) {
-            'media', 'vod' => '/vod/' . $id,
+            'media', 'vod' => ff_url('vod', $id),
             'article', 'news' => '/news/' . $id,
             'topic', 'special' => '/special/' . $id,
             'person', 'star', 'role' => '/star/' . $id,

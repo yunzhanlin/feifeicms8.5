@@ -34,7 +34,7 @@ final class LegacyUrlGenerator
         }
 
         if ($this->settings->bool('admin.rewrite.url_router_on', true)) {
-            $definition = $this->settings->string('admin.rewrite.rewrite_route', '');
+            $definition = $this->rules->definition($this->settings);
             if (trim($definition) !== '') {
                 try {
                     $match = $this->rules->matchRewrite($this->actions($name, $params, true), $definition);

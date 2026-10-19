@@ -37,7 +37,7 @@ final class Rewrite extends BaseController
             $this->notFound();
         }
         try {
-            $route = $this->rules->resolveRoute($path, $this->settings->string('admin.rewrite.rewrite_route', ''));
+            $route = $this->rules->resolveRoute($path, $this->rules->definition($this->settings));
         } catch (\InvalidArgumentException) {
             $route = null;
         }

@@ -97,8 +97,13 @@ final class Vod extends BaseController
         $legacyVod = $this->frontend->vod($media->toArray());
         $related = Db::table('ffx_media')->where('status', 'published')->whereNull('deleted_at')->where('category_id', (int) $media->category_id)
             ->where('id', '<>', $id)->order('view_count', 'desc')->order('id', 'desc')->limit($this->settings->int('admin.content.related_limit', 12, 0, 50))->select()->toArray();
-        $currentUrl = $this->mediaUrlGuard->allow((string) $episode['url']);
-        $plan = $this->app->make(\app\service\PlayerResolver::class)->plan((string) $source['code']);
+        $currentUrl = (string) $episode['url'];
+        try {
+            $plan = $this->app->make(\app\service\PlayerResolver::class)->plan((string) $source['code']);
+        } catch (\RuntimeException) {
+            // Show parser configuration errors in the player, not as a page-wide 500.
+            $plan = ['endpoint' => '', 'mode' => 'json', 'force' => true];
+        }
         if ($plan['endpoint'] !== '' && $plan['mode'] === 'iframe') {
             $this->request->withMiddleware(['feifei_frame_origin' => \app\service\PlayerResolver::origin($plan['endpoint'])]);
         }
