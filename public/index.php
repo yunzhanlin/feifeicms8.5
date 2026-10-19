@@ -26,6 +26,8 @@ try {
 // [ 应用入口文件 ]
 
 try {
+    require_once __DIR__ . '/../app/service/ThemeAssets.php';
+    if (\app\service\ThemeAssets::dispatch(dirname(__DIR__))) return;
     require __DIR__ . '/../vendor/autoload.php';
 
     // 执行HTTP应用并响应

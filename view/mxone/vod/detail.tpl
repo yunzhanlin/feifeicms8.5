@@ -1,0 +1,126 @@
+{assign name="pageTitle" value="$vod.vod_name" /}
+{assign name="pageActive" value="" /}
+{include file="common/head" /}
+{include file="common/header" /}
+<main class="mx-wrap mx-main">
+    <section class="mx-detail">
+        <div class="mx-detail-poster">
+            <img src="{$vod.vod_pic|default='/theme-assets/shared/images/no-poster.svg'}" alt="{$vod.vod_name}" data-fallback-poster="/theme-assets/shared/images/no-poster.svg">
+        </div>
+        <div class="mx-detail-info">
+            <div class="mx-detail-head">
+                <div class="mx-detail-title">
+                    <h1>{$vod.vod_name}</h1>
+                    {notempty name="vod.vod_title"}<p class="mx-original-title">{$vod.vod_title}</p>{/notempty}
+                    {notempty name="vod.vod_original"}<p class="mx-original-title">{$vod.vod_original}</p>{/notempty}
+                    <p class="mx-sub">{$vod.vod_year} / {$vod.area_text} / {$vod.vod_language} / {$vod.remark_text}</p>
+                </div>
+                <div class="mx-rating" data-vod-rating data-id="{$vod.vod_id}" data-score="{$rating.score}" data-count="{$rating.count}" data-user-score="{$rating.user_score}">
+                    <div class="mx-rating-summary">
+                        <span>评分：</span>
+                        <strong data-rating-score>{$rating.score}</strong><span>分</span>
+                        <em data-rating-count>{$rating.count} 人评分</em>
+                        <i data-rating-user>{notempty name="rating.user_score"}我的评分：{$rating.user_score}{else /}还没有评分{/notempty}</i>
+                    </div>
+                    <div class="mx-rating-stars" data-rating-stars title="点击星星评分">
+                        <span class="mx-rating-star-base">{for start="1" end="6"}<i>★</i>{/for}</span>
+                        <span class="mx-rating-star-fill" data-rating-fill>{for start="1" end="6"}<i>★</i>{/for}</span>
+                    </div>
+                    <p class="mx-rating-result" data-rating-message></p>
+                </div>
+            </div>
+            <div class="mx-vod-people">
+                <p><b>主演：</b>{$vod.vod_actor|default='暂无'}</p>
+                <p><b>导演：</b>{$vod.vod_director|default='暂无'}</p>
+            </div>
+            <div class="mx-vod-meta">
+                <span><b>类型</b><em>{$vod.vod_type|default='暂无'}</em></span>
+                <span><b>关键词</b><em>{$vod.vod_keywords|default='暂无'}</em></span>
+                <span><b>年代</b><em>{$vod.vod_year|default='暂无'}</em></span>
+                <span><b>地区</b><em>{$vod.area_text|default='暂无'}</em></span>
+                <span><b>语言</b><em>{$vod.vod_language|default='暂无'}</em></span>
+                <span><b>状态</b><em>{$vod.remark_text|default='暂无'}</em></span>
+                {notempty name="vod.vod_douban_id"}<span><b>豆瓣 ID</b><em>{$vod.vod_douban_id}</em></span>{/notempty}
+                {notempty name="vod.vod_imdb_id"}<span><b>IMDb ID</b><em>{$vod.vod_imdb_id}</em></span>{/notempty}
+                {notempty name="vod.vod_weekday"}<span><b>更新周期</b><em>{$vod.vod_weekday}</em></span>{/notempty}
+                {notempty name="vod.vod_tv"}<span><b>电视频道</b><em>{$vod.vod_tv}</em></span>{/notempty}
+                <span><b>上映/播出</b><em>{$vod.vod_pubdate|default='暂无'}</em></span>
+                <span><b>更新时间</b><em>{if $vod.vod_addtime>0}{$vod.vod_addtime|date='Y-m-d H:i'}{else /}暂无{/if}</em></span>
+            </div>
+            {notempty name="tags"}<div class="mx-chip-list mx-detail-tags">{volist name="tags" id="tag"}<a href="/search?wd={$tag.name|urlencode}">{$tag.name}</a>{/volist}</div>{/notempty}
+            <p class="mx-desc">{$vod.vod_content|strip_tags}</p>
+            <div class="mx-detail-bottom">
+                {if !empty($access.allowed)}{notempty name="sources"}<a class="mx-btn" href="{:ff_play_url($vod.vod_id,0,0)}">立即播放</a>{/notempty}{else /}
+                {if $access.mode == 'points'}<form class="mx-inline-form" method="post" action="/vod/unlock"><input type="hidden" name="_token" value="{$csrf|htmlentities}"><input type="hidden" name="id" value="{$vod.vod_id}"><button class="mx-btn" type="submit">{$access.price} 积分解锁</button></form>{else /}<a class="mx-btn" href="/vip">开通 VIP 观看</a>{/if}
+                {/if}
+                <button class="mx-btn mx-btn-light" type="button" data-vod-favorite data-id="{$vod.vod_id}" data-api="/user/favorite?" data-login-url="/user/login"><span>收藏</span></button>
+            </div>
+            {notempty name="accessMessage"}<p class="mx-access-message">{$accessMessage|htmlentities}</p>{/notempty}
+        </div>
+    </section>
+    <section>
+        <div class="mx-title"><h2>播放线路</h2><span>选择播放源</span></div>
+        {volist name="sources" id="source" key="sourceIndex"}
+        <div class="mx-source" data-episode-source>
+            <div class="mx-source-head"><h3>{$source.name}</h3><button class="mx-episode-sort-toggle" type="button" data-episode-sort-toggle>倒序</button></div>
+            <div class="mx-episodes" data-episode-list data-limit="{$frontendUi.episodeLimit}">
+                {volist name="source.episodes" id="episode" key="episodeIndex"}{if !empty($access.allowed)}<a data-episode-index="{$episodeIndex-1}" href="{:ff_play_url($vod.vod_id,$sourceIndex-1,$episodeIndex-1)}">{$episode.title}</a>{else /}<span data-episode-index="{$episodeIndex-1}" class="mx-episode-locked">{$episode.title} 🔒</span>{/if}{/volist}
+            </div>
+        </div>
+        {/volist}
+    </section>
+    {notempty name="credits"}<section><div class="mx-title"><h2>演职人员</h2><span>人物与影片关联</span></div><div class="mx-credit-grid">{volist name="credits" id="credit"}<a class="mx-panel" href="{:ff_url('person',$credit.id)}">{notempty name="credit.avatar_url"}<img src="{$credit.avatar_url}" alt="{$credit.name}">{/notempty}<strong>{$credit.name}</strong><span>{$credit.credit_type}{notempty name="credit.character_name"} · {$credit.character_name}{/notempty}</span></a>{/volist}</div></section>{/notempty}
+    {if $scenarioCount>0}<section><div class="mx-title"><h2>分集剧情</h2><a href="/vod/{$vod.vod_id}/scenarios">全部 {$scenarioCount} 集 &gt;</a></div><div class="mx-scenario-chapters">{volist name="scenarios" id="scenario"}<article><a href="/scenario/{$scenario.id}"><span class="mx-scenario-number">{$scenario.episode_no}</span><div><h3>{$scenario.title|default='分集剧情'}</h3><p>{$scenario.content|strip_tags}</p></div><b>查看</b></a></article>{/volist}</div></section>{/if}
+    {if $vod.vod_lines!='' || $vod.vod_watch!='' || $vod.vod_ending!=''}<section><div class="mx-title"><h2>影片资料</h2><span>采集与编辑字段</span></div><div class="mx-facts-copy">{notempty name="vod.vod_lines"}<article class="mx-panel"><h3>经典台词</h3><p>{$vod.vod_lines|htmlentities|nl2br|raw}</p></article>{/notempty}{notempty name="vod.vod_watch"}<article class="mx-panel"><h3>看点解析</h3><p>{$vod.vod_watch|htmlentities|nl2br|raw}</p></article>{/notempty}{notempty name="vod.vod_ending"}<article class="mx-panel"><h3>结局解析</h3><p>{$vod.vod_ending|htmlentities|nl2br|raw}</p></article>{/notempty}</div></section>{/if}
+    {notempty name="assets"}<section><div class="mx-title"><h2>附件资源</h2><span>字幕、预告、下载和其他附件</span></div><div class="mx-asset-list">{volist name="assets" id="asset"}<a class="mx-panel" href="{$asset.url|htmlentities}" target="_blank" rel="noopener"><strong>{$asset.label|default=$asset.asset_type}</strong><span>{$asset.asset_type} {notempty name="asset.language"}· {$asset.language}{/notempty}</span></a>{/volist}</div></section>{/notempty}
+    {notempty name="siteAds.vod_detail"}<aside class="mx-ad-slot">{$siteAds.vod_detail|raw}</aside>{/notempty}
+    {notempty name="sameActors"}
+    <section class="mx-panel mx-comments" data-same-actor data-vod-id="{$vod.vod_id}">
+        <div class="mx-title"><h2>同主演</h2><span>默认展示 {$sameActorLabel}</span></div>
+        <div class="mx-actor-tabs">
+            {volist name="sameActors" id="actor"}
+            <a href="javascript:;" data-actor="{$actor|htmlentities}" {if $actor==$sameActorActive}class="active"{/if}>{$actor}</a>
+            {/volist}
+        </div>
+        <div class="mx-grid" data-same-actor-list>
+            {notempty name="sameActorItems"}
+            {volist name="sameActorItems" id="item" offset="0" length="12"}
+            <a class="mx-card" href="{:ff_url('vod',$item.vod_id)}">
+                <span class="mx-pic">
+                    <img src="{$item.vod_pic|default='/theme-assets/shared/images/no-poster.svg'}" alt="{$item.vod_name}" data-fallback-poster="/theme-assets/shared/images/no-poster.svg">
+                    <i>{notempty name="item.vod_continu"}{$item.vod_continu}{else /}{$item.vod_year}{/notempty}</i>
+                </span>
+                <strong>{$item.vod_name}</strong>
+                <small>{$item.vod_actor|default='主演暂无'}</small>
+            </a>
+            {/volist}
+            {else /}
+            <p>暂无同主演影片</p>
+            {/notempty}
+        </div>
+    </section>
+    {/notempty}
+    {if !empty($commentsEnabled)}<section class="mx-comments" id="comments">
+        <div class="mx-title"><h2>热门评论</h2><span>共 {$commentCount} 条</span></div>
+        <form class="mx-comment-editor" method="post" action="/forum/post" data-comment-login-required="{$commentLoginRequired}" data-user-logged="{$isLoggedIn}">
+            <input type="hidden" name="_token" value="{$csrf|htmlentities}">
+            <input type="hidden" name="cid" value="{$vod.vod_id}">
+            <input type="hidden" name="pid" value="0">
+            <textarea name="content" rows="4" maxlength="1000" placeholder="说说你的看法，文明发言。"></textarea>
+            <p><button class="mx-btn" type="submit">发表评论</button></p>
+        </form>
+        <div>{$commentHtml|raw}</div>
+        <p><a href="{:ff_url('comments',$vod.vod_id)}">进入完整评论页</a></p>
+    </section>{/if}
+    {notempty name="related"}
+    <section>
+        <div class="mx-title"><h2>猜你喜欢</h2><a href="{:ff_url('type',$vod.vod_cid)}">更多 &gt;</a></div>
+        <div class="mx-grid">
+            {volist name="related" id="item" offset="0" length="12"}{include file="module/vod_card" /}{/volist}
+        </div>
+    </section>
+    {/notempty}
+</main>
+{include file="common/comment_login_modal" /}
+{assign name="footerText" value="MXOne · 影片详情" /}
+{include file="common/footer" /}

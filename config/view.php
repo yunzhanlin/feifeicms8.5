@@ -13,7 +13,7 @@ return [
     // 单应用统一视图根目录，避免命名空间控制器重复拼接 admin/admin。
     'view_path'     => app()->getRootPath() . 'view' . DIRECTORY_SEPARATOR,
     // 模板后缀
-    'view_suffix'   => 'html',
+    'view_suffix'   => 'tpl',
     // 模板文件名分隔符
     'view_depr'     => DIRECTORY_SEPARATOR,
     // 模板引擎普通标签开始标记

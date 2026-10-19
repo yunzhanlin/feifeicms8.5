@@ -5,7 +5,7 @@ namespace app\service;
 
 use think\exception\HttpException;
 
-/** Private template source; public CSS/JS/images belong under public/. */
+/** Private, self-contained theme packages. PHP extensions are never web-editable. */
 final class TemplateFiles
 {
     public function __construct(private readonly ?string $directory = null) {}
@@ -35,14 +35,21 @@ final class TemplateFiles
             throw new HttpException(422, '模板路径无效');
         }
         $theme = strtolower(explode('/', $relative, 2)[0]);
-        if (in_array($theme, ['admin', 'install'], true)) throw new HttpException(403, '系统模板不允许在此编辑');
+        if (!preg_match('/^[a-z0-9_-]+$/D', $theme)) throw new HttpException(422, '主题目录名仅允许字母、数字、下划线和短横线');
+        if (in_array($theme, ['admin', 'install', 'shared'], true)) throw new HttpException(403, '系统模板不允许在此编辑');
         return $relative;
     }
 
     public function file(string $relative, bool $create = false): string
     {
         $relative = $this->normalize($relative);
-        if (!str_contains($relative, '/') || !str_ends_with($relative, '.html')) throw new HttpException(422, '模板目录仅允许 HTML 模板；静态资源请放在 public 目录');
+        $parts = explode('/', $relative);
+        $asset = ($parts[1] ?? '') === 'assets';
+        $valid = $asset ? preg_match('/\.(?:css|js)$/D', $relative) === 1 : str_ends_with($relative, '.tpl');
+        if (count($parts) < 2 || !$valid || in_array('extensions', $parts, true)
+            || preg_match('~\.(?:php[0-9]*|phtml|phar)(?:[./]|$)~i', $relative)) {
+            throw new HttpException(422, '仅允许编辑 .tpl 模板及 assets 中的 CSS、JS；PHP 扩展请通过服务器部署');
+        }
         $path = $this->resolve($relative);
         if (!$create && !is_file($path)) throw new HttpException(404, '模板文件不存在');
         if ($create && (file_exists($path) || is_link($path))) throw new HttpException(409, '模板文件已存在');

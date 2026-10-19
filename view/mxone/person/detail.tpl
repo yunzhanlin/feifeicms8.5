@@ -1,0 +1,25 @@
+{assign name="pageTitle" value="$item.person_name" /}
+{assign name="pageActive" value="person" /}
+{include file="common/head" /}
+{include file="common/header" /}
+<main class="mx-wrap mx-main">
+    <section class="mx-detail">
+        <span class="mx-detail-poster"><img src="{$item.person_pic|default='/theme-assets/shared/images/no-poster.svg'}" alt="{$item.person_name}"></span>
+        <div class="mx-detail-info">
+            <p class="mx-eyebrow">{if $item.person_sid==9}ROLE{else /}STAR{/if}</p>
+            <h1>{$item.person_name}</h1>
+            <p class="mx-sub">{$item.person_alias} · {$item.person_gender} · {$item.person_nationality}</p>
+            <p>生日：{$item.person_birthday|default='-'} · 星座：{$item.person_astrology|default='-'} · 職業：{$item.person_profession|default='-'}</p>
+            <p>學校：{$item.person_school|default='-'} · 閱讀：{$item.person_hits}</p>
+            <p class="mx-desc">{$item.summary_text}</p>
+        </div>
+    </section>
+    <article class="mx-article">
+        <p class="mx-eyebrow">PROFILE</p>
+        <h1>人物資料</h1>
+        <div class="mx-content">{$item.safe_content|raw}</div>
+    </article>
+    {notempty name="vod"}<section><div class="mx-title"><h2>关联作品</h2><span>共 {$vod|count} 部</span></div><div class="mx-grid">{volist name="vod" id="item"}{include file="module/vod_card" /}{/volist}</div></section>{else /}<p class="mx-empty">暂无关联作品。</p>{/notempty}
+</main>
+{assign name="footerText" value="MXOne · 人物详情" /}
+{include file="common/footer" /}

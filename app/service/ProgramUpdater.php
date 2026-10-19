@@ -79,7 +79,7 @@ final class ProgramUpdater
     {
         if (!$release['available'] || version_compare($release['version'], (string) config('feifei.version_id'), '<=')) throw new \RuntimeException('没有可安装的新版本');
         ReleaseCatalog::assetUrl($release['tag'], ReleaseCatalog::PACKAGE);
-        foreach (['', 'app', 'config', 'database/migrations', 'route', 'view', 'vendor', 'public', 'public/static'] as $directory) {
+        foreach (['', 'app', 'config', 'database/migrations', 'route', 'view', 'vendor', 'public'] as $directory) {
             $path = root_path() . $directory;
             if (is_dir($path) && !is_writable($path)) throw new \RuntimeException('自动更新需要站点 PHP 用户可写程序目录：' . ($directory ?: '.'));
         }

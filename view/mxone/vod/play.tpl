@@ -1,0 +1,60 @@
+{assign name="pageTitle" value="$vod.vod_name" /}
+{assign name="pageActive" value="" /}
+{assign name="playerJs" value="1" /}
+{assign name="headerVodId" value="$vod.vod_id" /}
+{include file="common/head" /}
+{include file="common/header" /}
+<main class="mx-wrap mx-main" data-mx-history-item data-vod-id="{$vod.vod_id}" data-episode-id="{$episode.id}" data-vod-name="{$vod.vod_name|htmlentities}" data-episode-title="{$current.title|htmlentities}">
+    <section class="mx-player-card">
+        <div class="mx-player"
+             data-ff-player
+             data-media-id="{$vod.vod_id}" data-episode-id="{$episode.id}"
+             data-force-parser="{$playerForceParser|default=0}"
+             data-url="{$current.url|htmlspecialchars|raw}"
+             data-type="{$currentSource.code|default=''|htmlentities}"
+             data-title="{$vod.vod_name|htmlentities} {$current.title|htmlentities}"
+             data-video-id="{$danmuVideoId|htmlentities}"
+             data-legacy-video-id="vod-{$vod.vod_id}-{$sid}-{$pid}"
+             data-danmu-read-api="{if !empty($danmakuEnabled)}/danmu/read{/if}"
+             data-danmu-send-api="{if !empty($danmakuEnabled)}/danmu/send{/if}"
+	             data-remote-danmu-api="{if !empty($danmakuEnabled)}/danmu/remote{/if}"
+	             data-parse-api="/danmu/parse"
+	             data-autoplay="{$playerAutoplay}"
+	             data-auto-next="{$playerAutoNext}"
+	             data-next-url="{$nextUrl|htmlentities}"></div>
+        <div class="mx-player-meta">
+            <h1><a href="{:ff_url('vod',$vod.vod_id)}">{$vod.vod_name}</a><span>{$current.title}</span></h1>
+            <div class="mx-player-actions">
+                <button type="button" data-vod-updown data-id="{$vod.vod_id}" data-type="up">顶 <em data-up-count>{$vod.vod_up|default=0}</em></button>
+                <button type="button" data-vod-updown data-id="{$vod.vod_id}" data-type="down">踩 <em data-down-count>{$vod.vod_down|default=0}</em></button>
+                {notempty name="prevUrl"}<a href="{$prevUrl}">上一集</a>{else /}<span class="disabled">上一集</span>{/notempty}
+                {notempty name="nextUrl"}<a href="{$nextUrl}">下一集</a>{else /}<span class="disabled">下一集</span>{/notempty}
+            </div>
+        </div>
+    </section>
+    {notempty name="siteAds.vod_play"}<aside class="mx-ad-slot">{$siteAds.vod_play|raw}</aside>{/notempty}
+    <section>
+        <div class="mx-title"><h2>线路与选集</h2><span>{$currentSource.name}</span></div>
+        <nav class="mx-play-source-tabs">{volist name="sources" id="source" key="sourceIndex"}<a class="{if ($sourceIndex-1)==$sid}active{/if}" href="{:ff_play_url($vod.vod_id,$sourceIndex-1,0)}" data-play-source="{$sourceIndex-1}">{$source.name}<em>{$source.episodes|count}</em></a>{/volist}</nav>
+        <div class="mx-play-source-panels">
+        {volist name="sources" id="source" key="sourceIndex"}
+        <div class="mx-source" data-play-source-panel="{$sourceIndex-1}" data-episode-source {if ($sourceIndex-1)!=$sid}hidden{/if}>
+            <div class="mx-source-head"><h3>{$source.name}</h3><button class="mx-episode-sort-toggle" type="button" data-episode-sort-toggle>倒序</button></div>
+            <div class="mx-episodes" data-episode-list data-limit="{$frontendUi.episodeLimit}">
+                {volist name="source.episodes" id="episode" key="episodeIndex"}<a data-episode-index="{$episodeIndex-1}" class="{if ($sourceIndex-1)==$sid && ($episodeIndex-1)==$pid}active{/if}" href="{:ff_play_url($vod.vod_id,$sourceIndex-1,$episodeIndex-1)}">{$episode.title}</a>{/volist}
+            </div>
+        </div>
+        {/volist}
+        </div>
+    </section>
+    {notempty name="related"}
+    <section>
+        <div class="mx-title"><h2>相关推荐</h2><a href="{:ff_url('type',$vod.vod_cid)}">更多 &gt;</a></div>
+        <div class="mx-grid">
+            {volist name="related" id="item" offset="0" length="12"}{include file="module/vod_card" /}{/volist}
+        </div>
+    </section>
+    {/notempty}
+</main>
+{assign name="hideFooter" value="0" /}
+{include file="common/footer" /}

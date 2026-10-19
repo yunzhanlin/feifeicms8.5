@@ -10,7 +10,7 @@ final class RetiredStaticFiles
     {
         $root = realpath($directory);
         if ($root === false) throw new \RuntimeException('程序目录不存在');
-        $targets = ['public/generated', 'view/admin/tools/static.html'];
+        $targets = ['public/generated', 'view/admin/tools/static.html', 'view/admin/tools/static.tpl'];
         $exists = static fn (string $path): bool => file_exists($path) || is_link($path);
         if (!array_filter($targets, static fn (string $path): bool => $exists($root . '/' . $path))) return;
 

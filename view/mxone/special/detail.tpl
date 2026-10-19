@@ -1,0 +1,16 @@
+{assign name="pageTitle" value="$item.special_name" /}
+{assign name="pageActive" value="special" /}
+{include file="common/head" /}
+{include file="common/header" /}
+<main class="mx-wrap mx-main">
+    <article class="mx-article">
+        <p class="mx-eyebrow">SPECIAL</p>
+        <h1>{$item.special_name}</h1>
+        <p class="mx-summary">{$item.special_description}</p>
+        <p class="mx-meta">標籤：{$item.special_tag_name|default='暂无'} · 閱讀 {$item.special_hits}</p>
+        <div class="mx-content">{$item.safe_content|raw}</div>
+    </article>
+    {notempty name="vods"}<section><div class="mx-title"><h2>专题片单</h2><span>共 {$vods|count} 部影片</span></div><div class="mx-grid">{volist name="vods" id="item"}{include file="module/vod_card" /}{/volist}</div></section>{else /}<p class="mx-empty">该专题暂未关联影片。</p>{/notempty}
+</main>
+{assign name="footerText" value="MXOne · 专题详情" /}
+{include file="common/footer" /}

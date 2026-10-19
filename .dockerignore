@@ -6,7 +6,7 @@ legacy/Runtime/Logs
 legacy/Runtime/Temp
 runtime/*
 public/uploads/*
-vendor
+vendor/*
 tests
 phpunit.xml
 .github

@@ -110,11 +110,11 @@ final class Tools extends BaseController
     {
         $this->guardCsrf();
         $scope = (string) $this->request->post('scope', 'all');
-        $allowed = ['templates', 'data', 'today_video', 'today_article', 'today_topic', 'all'];
+        $allowed = ['view', 'data', 'today_video', 'today_article', 'today_topic', 'all'];
         if (!in_array($scope, $allowed, true)) throw new HttpException(422, '缓存类型无效');
 
         $deleted = 0;
-        if (in_array($scope, ['templates', 'all'], true)) $deleted += $this->clearDirectory(runtime_path() . 'temp');
+        if (in_array($scope, ['view', 'all'], true)) $deleted += $this->clearDirectory(runtime_path() . 'temp');
         if (in_array($scope, ['data', 'all'], true)) {
             $this->app->make(\app\service\ResilientCache::class)->clear();
             $this->settings->forget();
@@ -127,7 +127,7 @@ final class Tools extends BaseController
         clearstatcache(true);
 
         $labels = [
-            'templates' => '系统编译与模板缓存', 'data' => '全站数据缓存',
+            'view' => '系统编译与模板缓存', 'data' => '全站数据缓存',
             'today_video' => '今日更新视频缓存', 'today_article' => '今日更新文章缓存',
             'today_topic' => '今日更新专题缓存', 'all' => '全部站点缓存',
         ];
@@ -160,8 +160,7 @@ final class Tools extends BaseController
         $entries = [];
 
         // The top level is a theme selector, not a raw view/ directory browser.
-        // Only complete frontend themes belong here; admin/install are private
-        // system views and static resources are kept outside the view tree.
+        // Only complete frontend themes belong here; system bundles stay private.
         $items = [];
         if ($currentPath === '') {
             foreach (array_keys($this->themes->options()) as $theme) {
@@ -173,7 +172,7 @@ final class Tools extends BaseController
                 // DirectoryIterator reuses the same mutable iterator object. Store an
                 // immutable SplFileInfo snapshot or every row becomes the final item.
                 if (!$item->isDot() && !$item->isLink() && !str_starts_with($item->getFilename(), '.')
-                    && ($item->isDir() || $item->getExtension() === 'html')) $items[] = new \SplFileInfo($item->getPathname());
+                    && ($item->isDir() || in_array(strtolower($item->getExtension()), ['tpl', 'css', 'js', 'php', 'png', 'jpg', 'jpeg', 'gif', 'svg', 'webp', 'woff', 'woff2', 'ttf', 'eot'], true))) $items[] = new \SplFileInfo($item->getPathname());
             }
         }
 
@@ -185,8 +184,8 @@ final class Tools extends BaseController
                 'name' => $item->getFilename(),
                 'path' => $relative,
                 'is_dir' => $isDirectory,
-                'icon' => $isDirectory ? 'folder' : (in_array($extension, ['html', 'htm', 'css', 'js', 'jpg', 'gif'], true) ? $extension : 'other'),
-                'editable' => !$isDirectory && in_array($extension, $this->templateEditableExtensions(), true),
+                'icon' => $isDirectory ? 'folder' : ($extension === 'tpl' ? 'html' : (in_array($extension, ['css', 'js', 'jpg', 'gif'], true) ? $extension : 'other')),
+                'editable' => !$isDirectory && ($extension === 'tpl' || (str_contains('/' . $relative, '/assets/') && in_array($extension, ['css', 'js'], true))),
                 'description' => $isDirectory ? '文件夹' : $this->templateDescription($relative),
                 'size' => $this->formatFileSize($isDirectory ? $this->directoryStats($item->getPathname())['bytes'] : $item->getSize()),
                 'modified' => date('Y-m-d H:i:s', $item->getMTime()),
@@ -618,7 +617,7 @@ final class Tools extends BaseController
     /** @return list<string> */
     private function templateEditableExtensions(): array
     {
-        return ['html'];
+        return ['tpl', 'css', 'js'];
     }
 
     private function templateDescription(string $relative): string
@@ -628,11 +627,12 @@ final class Tools extends BaseController
         return match (true) {
             $name === 'footer.html', $name === 'footer.tpl' => '底部公用模板',
             $name === 'header.html', $name === 'header.tpl' => '顶部公用模板',
-            $name === 'index.html' && str_ends_with($directory, 'index') => '网站首页模板',
-            $name === 'play.html', $name === 'vod_play.tpl' => '播放页模板',
-            $name === 'detail.html' && str_ends_with($directory, 'vod'), $name === 'vod_detail.tpl' => '视频内容模板',
-            $name === 'detail.html' && str_ends_with($directory, 'news'), $name === 'news_detail.tpl' => '文章内容模板',
-            $name === 'detail.html' && str_ends_with($directory, 'special'), $name === 'special_detail.tpl' => '专题内容模板',
+            $name === 'index.tpl' && str_ends_with($directory, 'index') => '网站首页模板',
+            $name === 'play.tpl', $name === 'vod_play.tpl' => '播放页模板',
+            $name === 'detail.tpl' && str_ends_with($directory, 'vod'), $name === 'vod_detail.tpl' => '视频内容模板',
+            $name === 'detail.tpl' && str_ends_with($directory, 'news'), $name === 'news_detail.tpl' => '文章内容模板',
+            $name === 'detail.tpl' && str_ends_with($directory, 'special'), $name === 'special_detail.tpl' => '专题内容模板',
+            str_ends_with($name, '.php') => 'PHP扩展（仅可通过服务器部署）',
             $name === 'system.css' => '模板主题样式表',
             str_ends_with($name, '.css') => 'CSS样式表',
             str_ends_with($name, '.js') => 'Javascript文件',

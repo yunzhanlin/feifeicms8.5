@@ -7,17 +7,28 @@ namespace app\service;
 final class ThemeRegistry
 {
     private const REQUIRED_TEMPLATES = [
-        'index/index.html',
-        'common/head.html',
-        'common/header.html',
-        'common/footer.html',
-        'vod/detail.html',
-        'vod/play.html',
-        'vod/type.html',
-        'search/index.html',
+        'index/index.tpl',
+        'common/head.tpl',
+        'common/header.tpl',
+        'common/footer.tpl',
+        'vod/detail.tpl',
+        'vod/play.tpl',
+        'vod/type.tpl',
+        'search/index.tpl',
     ];
 
     public function __construct(private readonly SiteSettings $settings) {}
+
+    private ?string $renderedTheme = null;
+
+    public function current(): string
+    {
+        if ($this->renderedTheme !== null) return $this->renderedTheme;
+        $options = $this->options();
+        $setting = $this->isMobileRequest() ? 'default_theme_m' : 'default_theme';
+        $theme = $this->settings->string('admin.base.' . $setting, 'mxone');
+        return isset($options[$theme]) ? $theme : 'mxone';
+    }
 
     /** @return array<string, string> */
     public function options(): array
@@ -27,7 +38,8 @@ final class ThemeRegistry
         $options = [];
         foreach ($directories as $directory) {
             $key = basename($directory);
-            if (in_array(strtolower($key), ['admin', 'install'], true) || is_link($directory) || !$this->isComplete($directory)) continue;
+            if (!preg_match('/^[A-Za-z0-9_-]+$/D', $key)) continue;
+            if (in_array(strtolower($key), ['admin', 'install', 'shared'], true) || is_link($directory) || !$this->isComplete($directory)) continue;
             $options[$key] = match (strtolower($key)) {
                 'mxone' => 'MXOne',
                 default => strtoupper($key),
@@ -49,8 +61,11 @@ final class ThemeRegistry
         foreach (array_unique([$theme, 'mxone']) as $candidate) {
             if ($candidate === '') continue;
             try {
-                $files->file($candidate . '/' . $relative . '.html');
-                return $candidate . '/' . $relative;
+                $file = $files->file($candidate . '/' . $relative . '.tpl');
+                $this->renderedTheme = $candidate;
+                \think\facade\View::assign('themeName', $candidate);
+                \think\facade\View::engine()->config(['view_path' => $files->root() . '/' . $candidate . '/', 'view_suffix' => 'tpl']);
+                return $file;
             } catch (\think\exception\HttpException) {}
         }
         throw new \think\exception\HttpException(404, '模板不存在');
