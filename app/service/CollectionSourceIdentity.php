@@ -38,7 +38,7 @@ final class CollectionSourceIdentity
         $markers = $this->split($stored);
         $rows = Db::table('ffx_external_refs')->alias('r')
             ->leftJoin(['ffx_collection_sources' => 's'], 's.id=r.source_id')
-            ->where('r.entity_type', 'media')->where('r.entity_id', $mediaId)
+            ->where('r.entity_type', 'media')->where('r.entity_id', $mediaId)->where('r.source_id', '>', 0)
             ->field('r.source_id,r.external_id,r.source_url,s.name')->order('r.id')->select()->toArray();
         foreach ($rows as $row) {
             $markers[] = $this->marker(

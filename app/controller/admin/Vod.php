@@ -137,7 +137,8 @@ final class Vod extends BaseController
         if ($data['title'] === '') {
             return $this->validationFailure($data, 0, '影片名称不能为空');
         }
-        $data['slug'] = $this->slugger->make((string) $this->request->post('slug', ''), 'media');
+        $slugs = new \app\service\MediaSlug();
+        $preferred = (string) $this->request->post('slug', '');
         $data['media_type'] = 'video';
         $data['created_at'] = gmdate('Y-m-d H:i:s');
         $data['updated_at'] = $data['created_at'];
@@ -145,12 +146,13 @@ final class Vod extends BaseController
             $data['published_at'] = $data['created_at'];
         }
         try {
-            $media = Db::transaction(function () use ($data): Media {
+            $media = \app\service\CollectionImportLock::run(['slug:' . $slugs->base($data['title'], $preferred)], fn (): Media => Db::transaction(function () use ($data, $preferred, $slugs): Media {
+                $data['slug'] = $slugs->allocate($data['title'], $preferred);
                 $media = Media::create($data);
                 $this->syncRelations((int) $media->id, $data['category_id']);
                 $this->syncLegacyPlayback((int) $media->id);
                 return $media;
-            });
+            }));
         } catch (HttpException $error) {
             if ($error->getStatusCode() !== 422) throw $error;
             return $this->validationFailure($data, 0, $error->getMessage());
@@ -173,7 +175,7 @@ final class Vod extends BaseController
         $legacyMeta = $this->legacyMeta($metadata);
         $legacyMeta['source_ref'] = $this->sourceIdentity->forMedia($id, (string) $legacyMeta['source_ref']);
         if ($legacyMeta['inputer'] === '') {
-            $sourceId = (int) Db::table('ffx_external_refs')->where('entity_type', 'media')->where('entity_id', $id)->order('id')->value('source_id');
+            $sourceId = (int) Db::table('ffx_external_refs')->where('entity_type', 'media')->where('entity_id', $id)->where('source_id', '>', 0)->order('id')->value('source_id');
             if ($sourceId > 0) $legacyMeta['inputer'] = 'json_' . $sourceId;
         }
         return view('/admin/vod/edit', [
@@ -216,12 +218,16 @@ final class Vod extends BaseController
         $data['updated_at'] = (int) $this->request->post('refresh_updated_at', 0) === 1
             ? gmdate('Y-m-d H:i:s')
             : (string) $media->updated_at;
+        $slugs = new \app\service\MediaSlug();
+        $preferred = (string) $this->request->post('slug', (string) $media->slug);
         try {
-            Db::transaction(function () use ($media, $data, $id): void {
+            \app\service\CollectionImportLock::run(['slug:' . $slugs->base($data['title'], $preferred)], fn () => Db::transaction(function () use ($media, $data, $id, $slugs, $preferred): void {
+                $data['slug'] = $slugs->allocate($data['title'], $preferred, $id);
+                if ($data['slug'] !== (string) $media->slug) $slugs->remember((string) $media->slug, $id);
                 $media->save($data);
                 $this->syncRelations($id, $data['category_id']);
                 $this->syncLegacyPlayback($id);
-            });
+            }));
         } catch (HttpException $error) {
             if ($error->getStatusCode() !== 422) throw $error;
             return $this->validationFailure($data, $id, $error->getMessage());

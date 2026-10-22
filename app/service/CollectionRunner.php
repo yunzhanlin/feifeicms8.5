@@ -58,8 +58,11 @@ final class CollectionRunner
             // One registry read per job batch, not one query per imported video.
             $allowedPlayers = $this->allowedPlayers();
             $mapping = json_decode((string) ($source['category_mapping'] ?? '{}'), true);
-            $mapping = is_array($mapping) ? $mapping : [];
-            $defaultCategory = (int) Db::table('ffx_categories')->where('content_type', 'media')->where('status', 'published')->order('sort_order')->value('id');
+            $validCategoryIds = array_map('intval', Db::table('ffx_categories')->where('content_type', 'media')
+                ->where('status', 'published')->whereNull('deleted_at')->column('id'));
+            $mapping = $this->categoryMap->normalize(is_array($mapping) ? $mapping : [], $validCategoryIds);
+            // An unsaved suggestion is not a binding. Never fall back to the first category.
+            $defaultCategory = 0;
             $lastRemotePage = $page;
             $remotePageCount = $pageEnd;
             for ($offset = 0; $offset < $maxPages && $page + $offset <= $pageEnd; $offset++) {
@@ -272,6 +275,7 @@ final class CollectionRunner
     {
         $incoming = $this->normalizer->media($row);
         $identities = ['title:' . $this->normalizeTitle((string) $incoming['title']), 'ref:' . $sourceId . ':' . $incoming['external_id']];
+        $identities[] = 'slug:' . (new MediaSlug())->base((string) $incoming['title']);
         foreach (['douban_id', 'imdb_id'] as $field) if (trim((string) $incoming[$field]) !== '') $identities[] = $field . ':' . strtolower(trim((string) $incoming[$field]));
         return CollectionImportLock::run($identities, fn (): bool => $this->importMediaLocked($sourceId, $row, $mapping, $defaultCategory, $newDataPolicy, $allowedPlayers));
     }
@@ -292,7 +296,7 @@ final class CollectionRunner
         $typeId = (string) $incoming['category_remote_id'];
         $categoryId = $this->categoryMap->resolve($mapping, $typeId, $defaultCategory);
         if ($categoryId < 1) {
-            throw new CollectionSkipException('远程分类已设置为不绑定');
+            throw new CollectionSkipException('远程分类未绑定、已解绑或本地分类不可用，请先保存分类绑定');
         }
 
         $existing = Db::table('ffx_external_refs')->where('source_id', $sourceId)->where('entity_type', 'media')->where('external_id', $externalId)->find();
@@ -341,11 +345,7 @@ final class CollectionRunner
                 'updated_at' => $now, 'deleted_at' => null,
             ];
             if ($mergeId < 1) {
-                $safeExternalId = trim((string) preg_replace('/[^a-zA-Z0-9_-]+/', '-', $externalId), '-');
-                if ($safeExternalId === '') {
-                    $safeExternalId = substr(hash('sha256', $externalId), 0, 32);
-                }
-                $mediaData['slug'] = mb_substr('source-' . $sourceId . '-' . $safeExternalId, 0, 255);
+                $mediaData['slug'] = (new MediaSlug())->allocate($title);
                 $mediaData['media_type'] = 'video';
                 $mediaData['created_at'] = $now;
                 $mediaId = (int) Db::table('ffx_media')->insertGetId($mediaData);
@@ -353,12 +353,21 @@ final class CollectionRunner
                 $mediaId = $mergeId;
                 $local = Db::table('ffx_media')->where('id', $mediaId)->lock(true)->find() ?: [];
                 $mediaData = $this->mergeMediaData($local, $mediaData, true);
+                if ($existing !== null) $mediaData['category_id'] = $categoryId;
+                $slugs = new MediaSlug();
+                if ((string) $local['title'] === $title && $slugs->isGenerated((string) ($local['slug'] ?? ''))) {
+                    $slugs->remember((string) $local['slug'], $mediaId);
+                    $mediaData['slug'] = $slugs->allocate((string) $local['title'], '', $mediaId);
+                }
                 Db::table('ffx_media')->where('id', $mediaId)->update($mediaData);
             }
 
+            $primaryCategory = (int) Db::table('ffx_media')->where('id', $mediaId)->value('category_id');
+            Db::table('ffx_media_categories')->where('media_id', $mediaId)->update(['is_primary' => 0]);
             if (Db::table('ffx_media_categories')->where('media_id', $mediaId)->where('category_id', $categoryId)->count() === 0) {
-                Db::table('ffx_media_categories')->insert(['media_id' => $mediaId, 'category_id' => $categoryId, 'is_primary' => $mergeId < 1 ? 1 : 0, 'sort_order' => 0]);
+                Db::table('ffx_media_categories')->insert(['media_id' => $mediaId, 'category_id' => $categoryId, 'is_primary' => $primaryCategory === $categoryId ? 1 : 0, 'sort_order' => 0]);
             }
+            Db::table('ffx_media_categories')->where('media_id', $mediaId)->where('category_id', $primaryCategory)->update(['is_primary' => 1]);
 
             // Never delete/recreate imported lines: episodes may have assets,
             // comments and watch history referencing their stable IDs. Empty
@@ -420,7 +429,8 @@ final class CollectionRunner
             $value = trim((string) $incoming[$field]);
             if ($value === '') continue;
             $rows = Db::table('ffx_media')->where($field, $value)->whereNull('deleted_at')->select()->toArray();
-            $matches = array_values(array_filter($rows, fn (array $row): bool => $this->normalizeTitle((string) $row['title']) === $title));
+            $matches = array_values(array_filter($rows, fn (array $row): bool => $this->normalizeTitle((string) $row['title']) === $title
+                && $this->categoryRoot((int) ($row['category_id'] ?? 0)) === $this->categoryRoot($categoryId)));
             if (count($matches) === 1) return (int) $matches[0]['id'];
         }
         $rows = Db::table('ffx_media')->where('category_id', $categoryId)->whereNull('deleted_at')->whereIn('title', $this->titleVariants((string) $incoming['title']))->limit(30)->select()->toArray();
@@ -439,6 +449,18 @@ final class CollectionRunner
             if ($score >= 2) $matches[] = $row;
         }
         return count($matches) === 1 ? (int) $matches[0]['id'] : 0;
+    }
+
+    private function categoryRoot(int $categoryId): int
+    {
+        $seen = [];
+        while ($categoryId > 0 && !isset($seen[$categoryId])) {
+            $seen[$categoryId] = true;
+            $parent = (int) Db::table('ffx_categories')->where('id', $categoryId)->whereNull('deleted_at')->value('parent_id');
+            if ($parent < 1) return $categoryId;
+            $categoryId = $parent;
+        }
+        return 0;
     }
 
     /** @param array<string, mixed> $local @param array<string, mixed> $incoming @return array<string, mixed> */

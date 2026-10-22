@@ -213,6 +213,7 @@ Route::group('admin', function (): void {
     Route::get('tools/batch', 'admin.Tools/batchMaintenance');
     Route::post('tools/batch/playback', 'admin.Tools/deletePlaybackSource');
     Route::post('tools/batch/slugs', 'admin.Tools/generateSlugs');
+    Route::post('tools/batch/slugs/next', 'admin.Tools/generateMediaSlugsNext');
     Route::post('tools/batch/tags', 'admin.Tools/generateTags');
     Route::get('tools/records', 'admin.Tools/records');
     Route::post('tools/records/history/:id/delete', 'admin.Tools/deleteHistory')->pattern(['id' => '\\d+']);

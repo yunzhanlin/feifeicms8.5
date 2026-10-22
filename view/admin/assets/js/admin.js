@@ -734,42 +734,77 @@
 
     document.querySelectorAll('[data-vod-tool-batch]').forEach((form) => {
         const endpoint = form.dataset.endpoint || '';
-        const storageKey = form.dataset.storageKey || endpoint;
+        const progressFields = (form.dataset.progressFields || '').split(',').filter(Boolean);
+        const storageKey = () => progressFields.length || form.dataset.progressOwner
+            ? [form.dataset.storageKey || endpoint, form.dataset.progressOwner || '',
+                ...progressFields.map((name) => `${name}=${new FormData(form).get(name) || ''}`)].join(':')
+            : form.dataset.storageKey || endpoint;
+        const load = (selectedKey = storageKey()) => {
+            const value = localStorage.getItem(selectedKey);
+            if (!value) return {cursor: 0};
+            try { const parsed = JSON.parse(value); return parsed && typeof parsed === 'object' ? parsed : {cursor: Number(parsed) || 0}; }
+            catch { return {cursor: Number(value) || 0}; }
+        };
         const start = form.querySelector('[data-tool-start]');
         const pause = form.querySelector('[data-tool-pause]');
         const reset = form.querySelector('[data-tool-reset]');
         const state = form.querySelector('[data-tool-state]');
         let running = false;
+        let busy = false;
+        let generation = 0;
+        const options = Array.from(form.querySelectorAll('select, input:not([type="hidden"])'));
         const setRunning = (value) => {
             running = value;
-            if (start instanceof HTMLButtonElement) start.disabled = value;
+            if (start instanceof HTMLButtonElement) start.disabled = value || busy;
             if (pause instanceof HTMLButtonElement) pause.disabled = !value;
+            if (reset instanceof HTMLButtonElement) reset.disabled = busy;
+            options.forEach((input) => { input.disabled = value || busy; });
         };
-        const run = async () => {
-            if (!running) return;
+        // Disabled form controls are absent from FormData: keep a stable enabled clone of values.
+        let parameters = null;
+        let key = '';
+        const run = async (token) => {
+            if (!running || busy || token !== generation) return;
             const body = new FormData(form);
-            body.set('cursor', localStorage.getItem(storageKey) || '0');
+            if (parameters) parameters.forEach((value, name) => { body.set(name, value); });
+            const saved = load(key);
+            body.set('cursor', String(saved.cursor || 0));
+            if ('toolSnapshot' in form.dataset && saved.batch) {
+                body.set('batch_started_at', saved.batch.batch_started_at || '');
+                body.set('upper_id', String(saved.batch.upper_id || 0));
+            }
+            busy = true;
+            setRunning(true);
             try {
                 const payload = await postForm(endpoint, body);
                 const data = payload.data || {};
-                if (data.cursor !== undefined) localStorage.setItem(storageKey, String(data.cursor));
-                if (state) state.textContent = payload.message || '已处理';
+                if (data.cursor !== undefined) localStorage.setItem(key, JSON.stringify({cursor: data.cursor, batch: data.batch || saved.batch}));
+                if (state) state.textContent = (running ? '' : '已暂停：') + (payload.message || '已处理');
                 addLog(form, payload.message || '已处理', Boolean(data.failed));
                 if (data.done) { setRunning(false); return; }
-                const delay = Math.max(500, Number(new FormData(form).get('delay')) || 2000);
-                window.setTimeout(run, delay);
+                const delay = Math.max(500, Number(body.get('delay')) || 2000);
+                if (running && token === generation) window.setTimeout(() => run(token), delay);
             } catch (error) {
                 const message = error instanceof Error ? error.message : '执行失败';
                 if (state) state.textContent = message;
                 addLog(form, message, true);
                 setRunning(false);
+            } finally {
+                busy = false;
+                setRunning(running);
             }
         };
-        start?.addEventListener('click', () => { setRunning(true); if (state) state.textContent = '正在执行…'; run(); });
-        pause?.addEventListener('click', () => { setRunning(false); if (state) state.textContent = '已暂停，可继续执行'; });
-        reset?.addEventListener('click', () => { setRunning(false); localStorage.removeItem(storageKey); if (state) state.textContent = '进度已重置'; });
-        const saved = localStorage.getItem(storageKey);
-        if (saved && state) state.textContent = `上次处理到视频 #${saved}`;
+        start?.addEventListener('click', () => {
+            if (busy || running) return;
+            parameters = new FormData(form); key = storageKey();
+            const token = ++generation;
+            setRunning(true); if (state) state.textContent = '正在执行…'; run(token);
+        });
+        pause?.addEventListener('click', () => { ++generation; setRunning(false); if (state) state.textContent = busy ? '已暂停，等待当前请求完成' : '已暂停，可继续执行'; });
+        reset?.addEventListener('click', () => { if (busy) return; ++generation; setRunning(false); localStorage.removeItem(storageKey()); if (state) state.textContent = '进度已重置'; });
+        const showSaved = () => { const saved = load(); if (state) state.textContent = saved.cursor ? `当前范围上次处理到视频 #${saved.cursor}` : '当前范围尚未开始'; };
+        options.forEach((input) => input.addEventListener('change', showSaved));
+        showSaved();
     });
 
     document.querySelectorAll('[data-tool-retry]').forEach((button) => {

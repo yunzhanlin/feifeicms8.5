@@ -6,8 +6,8 @@ namespace app\service;
 final class CollectionCategoryMap
 {
     /**
-     * Keep zero as an explicit "unbound" choice. Missing keys may still receive
-     * automatic suggestions, while saved zero values must remain unbound.
+     * Keep zero as an explicit "unbound" choice. Suggestions belong to the UI;
+     * only saved, valid mappings authorize collection into a local category.
      *
      * @param array<array-key, mixed> $posted
      * @param list<int> $validLocalIds

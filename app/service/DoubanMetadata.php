@@ -17,7 +17,7 @@ final class DoubanMetadata
 {
     private const MAX_BODY_BYTES = 2 * 1024 * 1024;
 
-    public function __construct(private readonly SiteSettings $settings) {}
+    public function __construct(private readonly SiteSettings $settings, private readonly ?ClientInterface $client = null) {}
 
     /** Like 7.4: one subject page for every video type, JSON only fills missing fields. */
     public function fetch(string $subjectId, ?ClientInterface $client = null): array
@@ -25,7 +25,7 @@ final class DoubanMetadata
         if (!preg_match('/^[1-9]\d{4,11}$/D', $subjectId)) {
             throw new RuntimeException('豆瓣 ID 格式无效');
         }
-        $client ??= new Client();
+        $client ??= $this->client ?? new Client();
         $deadline = microtime(true) + 20;
         $pageData = [];
         try {

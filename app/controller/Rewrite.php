@@ -98,6 +98,11 @@ final class Rewrite extends BaseController
     {
         if ($slug === '') $this->notFound();
         $id = (int) (Db::table($table)->where('slug', $slug)->where('status', 'published')->whereNull('deleted_at')->value('id') ?: 0);
+        if ($id < 1 && $table === 'ffx_media') {
+            $id = (int) (Db::table('ffx_external_refs')->alias('r')->join(['ffx_media' => 'm'], 'm.id=r.entity_id')
+                ->where('r.provider', 'media-slug-alias')->where('r.entity_type', 'media')->where('r.external_id', $slug)
+                ->where('m.status', 'published')->whereNull('m.deleted_at')->value('m.id') ?: 0);
+        }
         if ($id < 1) $this->notFound();
         return $id;
     }

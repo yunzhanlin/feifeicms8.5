@@ -431,6 +431,7 @@ final class Tools extends BaseController
             ->group('source_key')->order('source_count', 'desc')->select()->toArray();
         return view('/admin/tools/batch', [
             'sources' => $sources,
+            'progressOwner' => (int) \think\facade\Session::get('admin_id', 0),
             'message' => mb_substr((string) $this->request->get('message', ''), 0, 200),
             'csrf' => $this->csrf->get(),
         ]);
@@ -461,6 +462,10 @@ final class Tools extends BaseController
         $rows = Db::table($table)->field('id,' . $titleField . ',slug')->order('id')->limit(5000)->select()->toArray();
         $updated = 0;
         foreach ($rows as $row) {
+            if ($type === 'media') {
+                if ((new \app\service\MediaSlug())->repair((int) $row['id'])) $updated++;
+                continue;
+            }
             $base = mb_strtolower((string) $row[$titleField]);
             $base = trim((string) preg_replace('/[^a-z0-9]+/u', '-', $base), '-');
             $slug = mb_substr(($base !== '' ? $base : $prefix) . '-' . (int) $row['id'], 0, 220);
@@ -471,6 +476,31 @@ final class Tools extends BaseController
         $this->audit->record('tools.slug_generate', $type, 'batch', null, ['updated' => $updated]);
         if ($updated > 0) $this->frontendCache->invalidateHome();
         return redirect('/admin/tools/batch?message=' . rawurlencode('链接别名生成完成，更新 ' . $updated . ' 条'));
+    }
+
+    public function generateMediaSlugsNext(): Response
+    {
+        $this->guardCsrf();
+        $scope = (string) $this->request->post('scope', 'generated');
+        if (!in_array($scope, ['generated', 'all'], true)) throw new HttpException(422, '处理范围无效');
+        $cursor = max(0, (int) $this->request->post('cursor', 0));
+        $upper = max(0, (int) $this->request->post('upper_id', 0));
+        if ($upper === 0) $upper = (int) Db::table('ffx_media')->max('id');
+        $rows = Db::table('ffx_media')->whereNull('deleted_at')->where('id', '>', $cursor)->where('id', '<=', $upper)
+            ->order('id')->limit(25)->column('id');
+        $updated = 0;
+        try {
+            foreach ($rows as $id) {
+                if ((new \app\service\MediaSlug())->repair((int) $id, $scope === 'generated')) $updated++;
+                $cursor = (int) $id;
+            }
+        } finally {
+            if ($updated > 0) $this->frontendCache->invalidateHome();
+        }
+        if ($updated > 0) $this->audit->record('tools.slug_generate', 'media', 'batch', null, ['updated' => $updated, 'cursor' => $cursor, 'scope' => $scope]);
+        return json(['ok' => true, 'message' => '本批扫描 ' . count($rows) . ' 部，修复 ' . $updated . ' 个拼音别名，处理到视频 #' . $cursor,
+            'data' => ['done' => count($rows) < 25, 'cursor' => $cursor, 'updated' => $updated,
+                'batch' => ['upper_id' => $upper, 'batch_started_at' => gmdate('Y-m-d H:i:s')]]]);
     }
 
     public function generateTags(): Response

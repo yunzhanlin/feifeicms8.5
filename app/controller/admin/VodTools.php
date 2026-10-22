@@ -9,6 +9,7 @@ use app\service\CollectionRunner;
 use app\service\CsrfToken;
 use app\service\DoubanComments;
 use app\service\DoubanMetadata;
+use app\service\DoubanBatchScope;
 use app\service\FrontendCache;
 use think\facade\Db;
 use think\Response;
@@ -30,7 +31,10 @@ final class VodTools extends BaseController
 
     public function douban(): Response
     {
-        $missing = $this->doubanCandidates()->count();
+        $batch = new DoubanBatchScope();
+        $filters = $batch->normalize($this->request->get());
+        $missing = $batch->candidates($filters)->count();
+        $total = $batch->query($filters)->count();
         $failures = Db::table('ffx_external_refs')->alias('r')
             ->leftJoin(['ffx_media' => 'm'], 'm.id = r.entity_id')
             ->where('r.provider', 'douban-metadata-failure')->where('r.entity_type', 'media')
@@ -38,8 +42,12 @@ final class VodTools extends BaseController
         foreach ($failures as &$failure) $failure['detail'] = $this->jsonObject($failure['payload'] ?? null);
         unset($failure);
         return view('/admin/vod_tools/douban', [
-            'total' => Db::table('ffx_media')->whereNull('deleted_at')->whereRaw("douban_id REGEXP '^[1-9][0-9]{4,11}$'")->count(),
+            'total' => $total,
             'missing' => $missing,
+            'withoutId' => $batch->query($filters, false)->count() - $total,
+            'categories' => $batch->categories(),
+            'filters' => $filters,
+            'progressOwner' => (int) \think\facade\Session::get('admin_id', 0),
             'failures' => $failures,
             'csrf' => $this->csrf->get(),
         ]);
@@ -48,24 +56,26 @@ final class VodTools extends BaseController
     public function doubanNext(): Response
     {
         if (!$this->csrf->verify($this->request->post('_token'))) return json(['ok' => false, 'message' => '请求已过期'], 419);
-        $scope = (string) $this->request->post('scope', 'missing');
-        if (!in_array($scope, ['missing', 'all'], true)) $scope = 'missing';
+        $batch = new DoubanBatchScope();
+        $filters = $batch->normalize($this->request->post(), true);
+        $scope = $filters['scope'];
         $cursor = max(0, (int) $this->request->post('cursor', 0));
         $mediaId = max(0, (int) $this->request->post('media_id', 0));
-        $query = $scope === 'missing' ? $this->doubanCandidates() : Db::table('ffx_media')->whereNull('deleted_at')->whereRaw("douban_id REGEXP '^[1-9][0-9]{4,11}$'");
+        $query = $scope === 'missing' ? $batch->candidates($filters) : $batch->query($filters);
         if ($mediaId > 0) $query->where('id', $mediaId);
         else $query->where('id', '>', $cursor);
         $media = $query->order('id')->find();
-        if ($media === null) return json(['ok' => true, 'message' => '全部处理完成', 'data' => ['done' => true, 'cursor' => $cursor]]);
+        $progress = ['batch_started_at' => $filters['batch_started_at'], 'upper_id' => $filters['upper_id']];
+        if ($media === null) return json(['ok' => true, 'message' => '当前目录和时间范围已全部处理完成', 'data' => ['done' => true, 'cursor' => $cursor, 'batch' => $progress]]);
         try {
             $incoming = $this->douban->fetch((string) $media['douban_id']);
             $fields = $this->applyDoubanData($media, $incoming, $scope === 'missing');
             Db::table('ffx_external_refs')->where('provider', 'douban-metadata-failure')->where('entity_type', 'media')->where('external_id', (string) $media['id'])->delete();
             $this->audit->record('vod.douban_complete', 'media', (int) $media['id'], null, ['scope' => $scope, 'fields' => $fields]);
-            return json(['ok' => true, 'message' => '#' . $media['id'] . ' ' . $media['title'] . '：已补全 ' . count($fields) . ' 个字段', 'data' => ['done' => false, 'cursor' => (int) $media['id'], 'media_id' => (int) $media['id'], 'title' => $media['title'], 'douban_id' => $media['douban_id'], 'fields' => $fields]]);
+            return json(['ok' => true, 'message' => '#' . $media['id'] . ' ' . $media['title'] . '：已补全 ' . count($fields) . ' 个字段', 'data' => ['done' => false, 'cursor' => (int) $media['id'], 'media_id' => (int) $media['id'], 'title' => $media['title'], 'douban_id' => $media['douban_id'], 'fields' => $fields, 'batch' => $progress]]);
         } catch (Throwable $exception) {
             $this->saveFailure((int) $media['id'], $exception->getMessage());
-            return json(['ok' => true, 'message' => '#' . $media['id'] . ' ' . $media['title'] . '：' . mb_substr($exception->getMessage(), 0, 160), 'data' => ['done' => false, 'failed' => true, 'cursor' => (int) $media['id'], 'media_id' => (int) $media['id']]]);
+            return json(['ok' => true, 'message' => '#' . $media['id'] . ' ' . $media['title'] . '：' . mb_substr($exception->getMessage(), 0, 160), 'data' => ['done' => false, 'failed' => true, 'cursor' => (int) $media['id'], 'media_id' => (int) $media['id'], 'batch' => $progress]]);
         }
     }
 
@@ -163,7 +173,8 @@ final class VodTools extends BaseController
 
     private function doubanCandidates(): \think\db\Query
     {
-        return Db::table('ffx_media')->whereNull('deleted_at')->whereRaw("douban_id REGEXP '^[1-9][0-9]{4,11}$'")->whereRaw("(COALESCE(TRIM(poster_url),'')='' OR COALESCE(TRIM(content),'')='' OR COALESCE(TRIM(imdb_id),'')='' OR release_date IS NULL OR COALESCE(rating,0)=0 OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata,'$.director')),'')='' OR COALESCE(JSON_UNQUOTE(JSON_EXTRACT(metadata,'$.actor')),'')='')");
+        $batch = new DoubanBatchScope();
+        return $batch->candidates($batch->normalize([]));
     }
 
     /** @param array<string,mixed> $media @param array<string,mixed> $incoming @return array<int,string> */

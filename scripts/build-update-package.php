@@ -79,6 +79,10 @@ foreach (['view/admin/assets/css/admin.css', 'view/admin/assets/js/admin.js', 'v
     'view/shared/assets/player/vendor/artplayer-plugin-danmuku.js'] as $required) {
     if (!isset($files[$required])) throw new RuntimeException('构建缺少主题运行文件：' . $required);
 }
+foreach (array_merge(['vendor/overtrue/pinyin/src/Pinyin.php', 'vendor/overtrue/pinyin/data/chars.php',
+    'vendor/overtrue/pinyin/data/surnames.php'], array_map(static fn (int $part): string => 'vendor/overtrue/pinyin/data/words-' . $part . '.php', range(0, 9))) as $required) {
+    if (!isset($files[$required])) throw new RuntimeException('构建缺少拼音运行文件：' . $required);
+}
 $zip = new ZipArchive();
 if ($zip->open($target, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) throw new RuntimeException('无法创建更新包');
 if ($mode === 'install') {

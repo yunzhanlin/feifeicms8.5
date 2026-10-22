@@ -8,16 +8,18 @@
         <li>
             <a href="?t={$remote.id|urlencode}&h={$filters.h}&wd={$filters.wd|urlencode}">{$remote.name|htmlspecialchars|raw}（{$remote.id|htmlspecialchars|raw}）</a>
             <details class="legacy-bind-control">
-                <summary class="{if isset($mapping[$remote.id]) && $mapping[$remote.id] > 0}is-bound{else /}is-unbound{/if}" aria-label="修改{$remote.name|htmlspecialchars|raw}分类绑定">{if isset($mapping[$remote.id]) && $mapping[$remote.id] > 0}解绑{else /}绑定{/if}</summary>
+                <summary class="{if isset($mapping[$remote.id]) && $mapping[$remote.id] > 0}is-bound{else /}is-unbound{/if}" aria-label="修改{$remote.name|htmlspecialchars|raw}分类绑定">{if isset($mapping[$remote.id]) && $mapping[$remote.id] > 0}已绑定：{$categoryNames[$mapping[$remote.id]]|htmlspecialchars|raw}{else /}未绑定{/if}</summary>
                 <form method="post" action="/admin/collections/{$source.id}/mapping" aria-label="{$remote.name|htmlspecialchars|raw}分类绑定">
                     <input type="hidden" name="_token" value="{$csrf|htmlspecialchars|raw}"><input type="hidden" name="partial" value="1">
-                    <label><span>转换为：</span><select name="mapping[{$remote.id|htmlspecialchars|raw}]"><option value="0" {if isset($mapping[$remote.id]) && $mapping[$remote.id] == 0}selected{/if}>不绑定</option>{volist name="categories" id="local"}<option value="{$local.id}" {if isset($mapping[$remote.id]) && $mapping[$remote.id] == $local.id}selected{/if}>{$local.name|htmlspecialchars|raw}</option>{/volist}</select></label>
+                    <label><span>转换为：</span><select name="mapping[{$remote.id|htmlspecialchars|raw}]"><option value="0" {if !isset($mapping[$remote.id]) || $mapping[$remote.id] == 0}selected{/if}>不绑定（跳过采集）</option>{volist name="categories" id="local"}<option value="{$local.id}" {if isset($mapping[$remote.id]) && $mapping[$remote.id] == $local.id}selected{/if}>{$local.name|htmlspecialchars|raw}</option>{/volist}</select></label>
+                    {if !isset($mapping[$remote.id]) && !empty($suggestions[$remote.id])}<p>建议：{$categoryNames[$suggestions[$remote.id]]|htmlspecialchars|raw}（选择并保存后生效）</p>{/if}
                     <div class="legacy-bind-actions"><button type="submit">保存</button><button type="button" data-bind-cancel>取消</button></div>
                 </form>
             </details>
         </li>
     {/volist}</ul></td></tr></tbody>
 </table></div>
+<div class="legacy-tool-help">分类建议不会自动保存；未绑定、已解绑或本地分类已停用的资源将跳过采集，不再默认入库到电影。修改绑定后重新采集同来源影片可修正主分类，已锁定影片不变。</div>
 {/if}
 
 <div class="table-wrap legacy-cj-wrap"><table class="data-table legacy-cj-table">

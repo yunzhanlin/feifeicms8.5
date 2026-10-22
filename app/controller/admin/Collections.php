@@ -74,13 +74,16 @@ final class Collections extends BaseController
         }
         $mapping = json_decode((string) ($source['category_mapping'] ?? '{}'), true);
         $mapping = is_array($mapping) ? $mapping : [];
-        $displayMapping = array_replace($this->suggestMapping($upstream['categories'], $this->localCategories()), $mapping);
+        $categories = $this->localCategories();
+        $mapping = $this->categoryMap->normalize($mapping, array_map('intval', array_column($categories, 'id')));
         $paginationStart = max(1, min((int) $upstream['page'] - 2, (int) $upstream['pagecount'] - 4));
         return view('/admin/collections/resource', [
             'source' => $source,
             'upstream' => $upstream,
-            'mapping' => $displayMapping,
-            'categories' => $this->localCategories(),
+            'mapping' => $mapping,
+            'suggestions' => $this->suggestMapping($upstream['categories'], $categories),
+            'categoryNames' => array_column($categories, 'name', 'id'),
+            'categories' => $categories,
             'filters' => $filters,
             'paginationPages' => range($paginationStart, min((int) $upstream['pagecount'], $paginationStart + 4)),
             'error' => $error,
@@ -123,17 +126,21 @@ final class Collections extends BaseController
     public function mapping(int $id): Response
     {
         $this->guardCsrf();
-        $before = $this->requireSource($id);
         $posted = (array) $this->request->post('mapping', []);
         $validLocalIds = array_map('intval', array_column($this->localCategories(), 'id'));
         $mapping = $this->categoryMap->normalize($posted, $validLocalIds);
-        if ((string) $this->request->post('partial', '') === '1') {
-            $existing = json_decode((string) ($before['category_mapping'] ?? '{}'), true);
-            $existing = is_array($existing) ? $this->categoryMap->normalize($existing, $validLocalIds) : [];
-            $mapping = array_replace($existing, $mapping);
-        }
-        $encoded = json_encode($mapping, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        Db::table('ffx_collection_sources')->where('id', $id)->update(['category_mapping' => $encoded, 'updated_at' => gmdate('Y-m-d H:i:s')]);
+        [$before, $encoded] = Db::transaction(function () use ($id, $mapping, $validLocalIds): array {
+            $before = Db::table('ffx_collection_sources')->where('id', $id)->lock(true)->find();
+            if ($before === null) throw new HttpException(404, '采集源不存在');
+            if ((string) $this->request->post('partial', '') === '1') {
+                $existing = json_decode((string) ($before['category_mapping'] ?? '{}'), true);
+                $existing = is_array($existing) ? $this->categoryMap->normalize($existing, $validLocalIds) : [];
+                $mapping = array_replace($existing, $mapping);
+            }
+            $encoded = json_encode((object) $mapping, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+            Db::table('ffx_collection_sources')->where('id', $id)->update(['category_mapping' => $encoded, 'updated_at' => gmdate('Y-m-d H:i:s')]);
+            return [$before, $encoded];
+        });
         $this->audit->record('collection_source.mapping', 'collection_source', $id, $before, ['category_mapping' => $encoded]);
         return redirect('/admin/collections/' . $id . '/resource');
     }
@@ -292,8 +299,9 @@ final class Collections extends BaseController
             $localName = match (true) {
                 str_contains($haystack, '动漫'), str_contains($haystack, '动画') => '动漫',
                 str_contains($haystack, '综艺'), str_contains($haystack, '体育'), str_contains($haystack, '足球'), str_contains($haystack, '篮球'), str_contains($haystack, '网球'), str_contains($haystack, '斯诺克') => '综艺',
-                str_contains($haystack, '剧'), str_contains($haystack, '短剧'), str_contains($haystack, '漫剧') => '电视剧',
-                default => '电影',
+                str_contains($parentName, '电影'), str_contains($name, '电影'), str_ends_with($name, '片') => '电影',
+                str_contains($haystack, '剧') => '电视剧',
+                default => '',
             };
             if (isset($localByName[$localName])) {
                 $suggestions[$id] = $localByName[$localName];
