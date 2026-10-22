@@ -156,12 +156,15 @@ button, .button, .submit, .editor-form > button, .stack-form button, .inline-for
 .legacy-collection-resume { margin: 0 0 12px; font-size: 14px; text-align: center; }
 .legacy-collection-resume a { font-weight: 700; }
 .legacy-collection-wrap { overflow-x: auto; }
-.legacy-collection-table { min-width: 900px; }
+.legacy-collection-table { width: 100%; min-width: 720px; table-layout: fixed; }
+.legacy-collection-table .collection-col-order { width: 36px; }
+.legacy-collection-table .collection-col-action { width: 82px; }
+.legacy-collection-table .collection-col-manage { width: 88px; }
 .legacy-collection-table .collection-list-heading { padding: 0 5px; text-align: left; }
 .legacy-collection-table .collection-list-heading span:last-child { float: right; }
 .legacy-collection-table td { height: 35px; padding-top: 5px; padding-bottom: 5px; }
 .legacy-collection-table .collection-order { width: 45px; padding-right: 2px; text-align: right !important; }
-.legacy-collection-table .collection-source { padding-left: 5px; text-align: left; white-space: nowrap; }
+.legacy-collection-table .collection-source { padding-left: 5px; text-align: left; white-space: normal; overflow-wrap: anywhere; }
 .legacy-collection-table .collection-source strong { font-weight: 700; }
 .collection-publish-on { color: #168142; }
 .collection-publish-off { color: #d52b20; }

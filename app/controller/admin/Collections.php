@@ -24,11 +24,14 @@ final class Collections extends BaseController
     public function index(): Response
     {
         $resourceType = $this->resourceType((string) $this->request->get('type', 'video'));
+        $trash = (int) $this->request->get('deleted', 0) === 1;
         return view('/admin/collections/index', [
-            'sources' => Db::table('ffx_collection_sources')->where('resource_type', $resourceType)->order('id', 'desc')->select()->toArray(),
+            'sources' => Db::table('ffx_collection_sources')->where('resource_type', $resourceType)
+                ->where('status', $trash ? '=' : '<>', 'deleted')->order('id', 'desc')->select()->toArray(),
             'resumeJob' => Db::table('ffx_collection_jobs')->whereIn('state', ['queued', 'running'])->order('id', 'desc')->find(),
             'resourceType' => $resourceType,
             'resourceLabel' => $resourceType === 'scenario' ? '剧情' : '视频',
+            'trash' => $trash,
             'csrf' => $this->csrf->get(),
         ]);
     }
@@ -95,6 +98,9 @@ final class Collections extends BaseController
     {
         $this->guardCsrf();
         $data = $this->payload();
+        if (Db::table('ffx_collection_sources')->where('resource_type', $data['resource_type'])->where('endpoint', $data['endpoint'])->count() > 0) {
+            throw new HttpException(422, '该资源库地址已存在；如已删除，请先在资源库回收站恢复后编辑');
+        }
         $data['created_at'] = gmdate('Y-m-d H:i:s');
         $data['updated_at'] = $data['created_at'];
         $id = Db::table('ffx_collection_sources')->insertGetId($data);
@@ -105,11 +111,14 @@ final class Collections extends BaseController
     public function update(int $id): Response
     {
         $this->guardCsrf();
-        $before = $this->requireSource($id);
         $data = $this->payload();
-        $data['category_mapping'] = (string) ($before['category_mapping'] ?? '{}');
         $data['updated_at'] = gmdate('Y-m-d H:i:s');
-        Db::table('ffx_collection_sources')->where('id', $id)->update($data);
+        $before = Db::transaction(function () use ($id, &$data): array {
+            $before = $this->requireSource($id, true);
+            $data['category_mapping'] = (string) ($before['category_mapping'] ?? '{}');
+            Db::table('ffx_collection_sources')->where('id', $id)->update($data);
+            return $before;
+        });
         $this->audit->record('collection_source.update', 'collection_source', $id, $before, $data);
         return redirect('/admin/collections/' . $id . '/edit');
     }
@@ -117,10 +126,38 @@ final class Collections extends BaseController
     public function delete(int $id): Response
     {
         $this->guardCsrf();
-        $before = $this->requireSource($id);
-        Db::table('ffx_collection_sources')->where('id', $id)->update(['status' => 'disabled', 'updated_at' => gmdate('Y-m-d H:i:s')]);
-        $this->audit->record('collection_source.disable', 'collection_source', $id, $before, ['status' => 'disabled']);
-        return redirect('/admin/collections');
+        $before = Db::transaction(function () use ($id): array {
+            // Workers and schedulers take this parent lock before claiming work.
+            $source = Db::table('ffx_collection_sources')->where('id', $id)->lock(true)->find();
+            if ($source === null) throw new HttpException(404, '采集源不存在');
+            if (Db::table('ffx_collection_jobs')->where('source_id', $id)->where('state', 'running')->count() > 0) {
+                throw new HttpException(409, '该资源库正在采集，请等待当前任务结束后再删除');
+            }
+            $now = gmdate('Y-m-d H:i:s');
+            Db::table('ffx_collection_sources')->where('id', $id)->update(['status' => 'deleted', 'updated_at' => $now]);
+            Db::table('ffx_collection_jobs')->where('source_id', $id)->where('state', 'queued')
+                ->update(['state' => 'cancelled', 'error_message' => '资源库已删除，待执行任务已取消', 'finished_at' => $now]);
+            Db::table('ffx_cron_tasks')->where('source_id', $id)->update(['status' => 'disabled', 'updated_at' => $now]);
+            return $source;
+        });
+        $this->audit->record('collection_source.delete', 'collection_source', $id, $before, ['status' => 'deleted']);
+        return redirect('/admin/collections?type=' . $this->resourceType((string) $before['resource_type']));
+    }
+
+    public function restore(int $id): Response
+    {
+        $this->guardCsrf();
+        $before = Db::transaction(function () use ($id): array {
+            $source = Db::table('ffx_collection_sources')->where('id', $id)->lock(true)->find();
+            if ($source === null) throw new HttpException(404, '采集源不存在');
+            if ($source['status'] === 'deleted') Db::table('ffx_collection_sources')->where('id', $id)
+                ->update(['status' => 'disabled', 'updated_at' => gmdate('Y-m-d H:i:s')]);
+            return $source;
+        });
+        $this->audit->record('collection_source.restore', 'collection_source', $id, $before,
+            ['status' => $before['status'] === 'deleted' ? 'disabled' : $before['status']]);
+        // Restoration does not restart cancelled jobs or enable old schedules.
+        return redirect('/admin/collections/' . $id . '/edit');
     }
 
     public function mapping(int $id): Response
@@ -131,7 +168,7 @@ final class Collections extends BaseController
         $mapping = $this->categoryMap->normalize($posted, $validLocalIds);
         [$before, $encoded] = Db::transaction(function () use ($id, $mapping, $validLocalIds): array {
             $before = Db::table('ffx_collection_sources')->where('id', $id)->lock(true)->find();
-            if ($before === null) throw new HttpException(404, '采集源不存在');
+            if ($before === null || $before['status'] === 'deleted') throw new HttpException(404, '采集源不存在或已删除');
             if ((string) $this->request->post('partial', '') === '1') {
                 $existing = json_decode((string) ($before['category_mapping'] ?? '{}'), true);
                 $existing = is_array($existing) ? $this->categoryMap->normalize($existing, $validLocalIds) : [];
@@ -171,12 +208,15 @@ final class Collections extends BaseController
         if ($keyword !== '') $cursor['wd'] = $keyword;
         if ($player !== '') $cursor['play'] = $player;
         $mode = $scope === 'all' ? match ($hours) { 24 => 'today', 168 => 'week', default => 'full' } : 'manual';
-        $jobId = Db::table('ffx_collection_jobs')->insertGetId([
-            'source_id' => $id, 'idempotency_key' => 'manual-' . $id . '-' . bin2hex(random_bytes(10)),
-            'mode' => $mode, 'state' => 'queued',
-            'cursor_value' => json_encode($cursor, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'created_at' => gmdate('Y-m-d H:i:s'),
-        ]);
+        $jobId = Db::transaction(function () use ($id, $mode, $cursor): int {
+            $this->requireSource($id, true);
+            return (int) Db::table('ffx_collection_jobs')->insertGetId([
+                'source_id' => $id, 'idempotency_key' => 'manual-' . $id . '-' . bin2hex(random_bytes(10)),
+                'mode' => $mode, 'state' => 'queued',
+                'cursor_value' => json_encode($cursor, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'created_at' => gmdate('Y-m-d H:i:s'),
+            ]);
+        });
         $this->audit->record('collection_job.queue', 'collection_job', $jobId, null, ['source_id' => $id] + $cursor);
         if ((int) $this->request->post('execute_now', 1) === 1) {
             try {
@@ -213,12 +253,17 @@ final class Collections extends BaseController
         if ($job === null) {
             throw new HttpException(404, '任务不存在');
         }
-        if (!in_array((string) $job['state'], ['failed', 'completed_with_errors', 'completed'], true)) {
-            throw new HttpException(409, '只能重试已结束的采集任务');
-        }
-        $changed = Db::table('ffx_collection_jobs')->where('id', $jobId)->where('state', (string) $job['state'])
-            ->update(['state' => 'queued', 'error_message' => null, 'started_at' => null, 'finished_at' => null]);
-        if ($changed !== 1) throw new HttpException(409, '采集任务状态已变化，请刷新后重试');
+        $job = Db::transaction(function () use ($jobId, $job): array {
+            $this->requireSource((int) $job['source_id'], true);
+            $job = Db::table('ffx_collection_jobs')->where('id', $jobId)->lock(true)->find();
+            if ($job === null || !in_array((string) $job['state'], ['failed', 'completed_with_errors', 'completed'], true)) {
+                throw new HttpException(409, '只能重试已结束的采集任务');
+            }
+            $changed = Db::table('ffx_collection_jobs')->where('id', $jobId)->where('state', (string) $job['state'])
+                ->update(['state' => 'queued', 'error_message' => null, 'started_at' => null, 'finished_at' => null]);
+            if ($changed !== 1) throw new HttpException(409, '采集任务状态已变化，请刷新后重试');
+            return $job;
+        });
         $this->audit->record('collection_job.retry', 'collection_job', $jobId, $job, ['state' => 'queued']);
         return redirect('/admin/collections');
     }
@@ -227,7 +272,7 @@ final class Collections extends BaseController
     {
         return view('/admin/collections/edit', [
             'item' => $item ?? ['id' => 0, 'name' => '', 'endpoint' => '', 'source_type' => $resourceType === 'scenario' ? 'feifei_json' : 'auto_json', 'resource_type' => $resourceType, 'media_source_id' => null, 'credential_ref' => '', 'category_mapping' => '{}', 'new_data_policy' => 'published', 'status' => 'disabled'],
-            'videoSources' => Db::table('ffx_collection_sources')->where('resource_type', 'video')->order('name')->select()->toArray(),
+            'videoSources' => Db::table('ffx_collection_sources')->where('resource_type', 'video')->where('status', '<>', 'deleted')->order('name')->select()->toArray(),
             'csrf' => $this->csrf->get(), 'isNew' => $item === null,
         ]);
     }
@@ -248,7 +293,7 @@ final class Collections extends BaseController
         if ($resourceType === 'scenario') {
             $candidate = max(0, (int) $this->request->post('media_source_id', 0));
             if ($candidate > 0) {
-                $exists = Db::table('ffx_collection_sources')->where('id', $candidate)->where('resource_type', 'video')->count();
+                $exists = Db::table('ffx_collection_sources')->where('id', $candidate)->where('resource_type', 'video')->where('status', '<>', 'deleted')->count();
                 if ($exists !== 1) throw new HttpException(422, '关联的视频资源库不存在');
                 $mediaSourceId = $candidate;
             }
@@ -310,10 +355,12 @@ final class Collections extends BaseController
         return $suggestions;
     }
 
-    private function requireSource(int $id): array
+    private function requireSource(int $id, bool $lock = false): array
     {
-        $row = Db::table('ffx_collection_sources')->where('id', $id)->find();
-        if ($row === null) {
+        $query = Db::table('ffx_collection_sources')->where('id', $id);
+        if ($lock) $query->lock(true);
+        $row = $query->find();
+        if ($row === null || $row['status'] === 'deleted') {
             throw new HttpException(404, '采集源不存在');
         }
         return $row;

@@ -167,6 +167,7 @@ Route::group('admin', function (): void {
     Route::post('collections/:id', 'admin.Collections/update')->pattern(['id' => '\\d+']);
     Route::post('collections/:id/mapping', 'admin.Collections/mapping')->pattern(['id' => '\\d+']);
     Route::post('collections/:id/delete', 'admin.Collections/delete')->pattern(['id' => '\\d+']);
+    Route::post('collections/:id/restore', 'admin.Collections/restore')->pattern(['id' => '\\d+']);
     Route::post('collections/:id/queue', 'admin.Collections/queue')->pattern(['id' => '\\d+']);
     Route::post('collections/jobs/:jobId/execute', 'admin.Collections/execute')->pattern(['jobId' => '\\d+']);
     Route::post('collections/jobs/:jobId/retry', 'admin.Collections/retry')->pattern(['jobId' => '\\d+']);

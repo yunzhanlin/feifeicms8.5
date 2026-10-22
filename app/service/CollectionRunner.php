@@ -20,13 +20,14 @@ final class CollectionRunner
         if ($job === null) {
             throw new \RuntimeException('采集任务不存在');
         }
-        $claimed = Db::table('ffx_collection_jobs')->where('id', $jobId)->where('state', 'queued')->update([
-            'state' => 'running', 'started_at' => gmdate('Y-m-d H:i:s'), 'finished_at' => null, 'error_message' => null,
-        ]);
-        if ($claimed !== 1) {
-            throw new \RuntimeException('采集任务已被其他工作进程领取或当前不可执行');
-        }
-        $source = Db::table('ffx_collection_sources')->where('id', (int) $job['source_id'])->find();
+        $source = Db::transaction(function () use ($jobId, $job): ?array {
+            $source = Db::table('ffx_collection_sources')->where('id', (int) $job['source_id'])->lock(true)->find();
+            $claimed = Db::table('ffx_collection_jobs')->where('id', $jobId)->where('state', 'queued')->update([
+                'state' => 'running', 'started_at' => gmdate('Y-m-d H:i:s'), 'finished_at' => null, 'error_message' => null,
+            ]);
+            if ($claimed !== 1) throw new \RuntimeException('采集任务已被其他工作进程领取或当前不可执行');
+            return $source;
+        });
         if ($source === null || $source['status'] !== 'enabled') {
             Db::table('ffx_collection_jobs')->where('id', $jobId)->where('state', 'running')->update([
                 'state' => 'failed', 'error_count' => (int) $job['error_count'] + 1,
