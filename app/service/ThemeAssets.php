@@ -3,7 +3,7 @@ declare(strict_types=1);
 
 namespace app\service;
 
-/** Static assets only: does not initialize ThinkPHP, sessions, settings or a database. */
+/** Public static files; the PHP dispatcher only serves legacy/explicit entry URLs. */
 final class ThemeAssets
 {
     private const TYPES = [
@@ -17,7 +17,7 @@ final class ThemeAssets
 
     public function root(): string
     {
-        $directory = $this->directory ?? dirname(__DIR__, 2) . '/view';
+        $directory = $this->directory ?? dirname(__DIR__, 2) . '/public/theme-assets';
         $root = realpath($directory);
         if ($root === false || !is_dir($root) || is_link($directory)) throw new \RuntimeException('主题目录无效');
         return $root;
@@ -26,21 +26,19 @@ final class ThemeAssets
     /** @return array{path:string,type:string,size:int,mtime:int,etag:string} */
     public function resolve(string $theme, string $asset): array
     {
-        if (!preg_match('/^[A-Za-z0-9_-]+$/D', $theme)
-            || !preg_match('~^[\pL\pN_@-][\pL\pN_.@-]*(?:/[\pL\pN_@-][\pL\pN_.@-]*)*$~uD', $asset)
-            || preg_match('~\.(?:php[0-9]*|phtml|phar|tpl|html?|ini|env)(?:[./]|$)~i', $asset)) {
+        if (!preg_match('/^[A-Za-z0-9_-]+$/D', $theme) || !self::isAllowedPath($asset)) {
             throw new \RuntimeException('资源路径无效');
         }
         $extension = strtolower(pathinfo($asset, PATHINFO_EXTENSION));
         if (!isset(self::TYPES[$extension])) throw new \RuntimeException('不允许读取此类文件');
         $root = $this->root();
         $path = $root;
-        foreach (array_merge([$theme, 'assets'], explode('/', $asset)) as $part) {
+        foreach (array_merge([$theme], explode('/', $asset)) as $part) {
             $path .= '/' . $part;
             if (is_link($path)) throw new \RuntimeException('资源路径不允许软链接');
         }
         $real = realpath($path);
-        $base = $root . '/' . $theme . '/assets/';
+        $base = $root . '/' . $theme . '/';
         if ($real === false || !str_starts_with($real, $base) || !is_file($real) || !is_readable($real)) {
             throw new \RuntimeException('资源不存在');
         }
@@ -50,12 +48,20 @@ final class ThemeAssets
             'mtime' => (int) filemtime($real), 'etag' => '"' . $hash . '"'];
     }
 
+    public static function isAllowedPath(string $asset): bool
+    {
+        return preg_match('~^[\pL\pN_@-][\pL\pN_.@-]*(?:/[\pL\pN_@-][\pL\pN_.@-]*)*$~uD', $asset) === 1
+            && !preg_match('~\.(?:php[0-9]*|phtml|phar|tpl|html?|ini|env)(?:[./]|$)~i', $asset)
+            && isset(self::TYPES[strtolower(pathinfo($asset, PATHINFO_EXTENSION))]);
+    }
+
     public function url(string $theme, string $asset): string
     {
         static $versions = [];
         $key = $this->root() . '/' . $theme . '/' . $asset;
         $version = $versions[$key] ??= substr(trim($this->resolve($theme, $asset)['etag'], '"'), 0, 16);
-        return '/theme-assets/' . rawurlencode($theme) . '/' . implode('/', array_map('rawurlencode', explode('/', $asset))) . '?v=' . $version;
+        $path = '/theme-assets/' . rawurlencode($theme) . '/' . implode('/', array_map('rawurlencode', explode('/', $asset)));
+        return $path . '?v=' . $version;
     }
 
     /** Old built-in asset URLs remain readable, without retaining duplicate files. */
@@ -98,12 +104,13 @@ final class ThemeAssets
             http_response_code(405); header('Allow: GET, HEAD'); header('Cache-Control: no-store');
             return true;
         }
-        try { $file = (new self($project . '/view'))->resolve($target[0], $target[1]); }
+        try { $file = (new self($project . '/public/theme-assets'))->resolve($target[0], $target[1]); }
         catch (\Throwable) {
             http_response_code(404); header('Content-Type: text/plain; charset=utf-8'); header('Cache-Control: no-store');
             if (($_SERVER['REQUEST_METHOD'] ?? 'GET') !== 'HEAD') echo '资源不存在';
             return true;
         }
+        http_response_code(200);
         header('Content-Type: ' . $file['type']);
         header('ETag: ' . $file['etag']);
         header('Last-Modified: ' . gmdate('D, d M Y H:i:s', $file['mtime']) . ' GMT');

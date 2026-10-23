@@ -60,9 +60,11 @@ Docker 使用独立 MySQL 容器；程序不需要调整 `log_bin_trust_function
 
 前台自带 `view/mxone/` 示例模板和 `/features` 功能展示页。新手请从 [模板制作与标签调用指南](docs/模板标签.md) 开始：按照“标签说明、参数、调用示例、返回字段”讲解 8.5 自有方法，包含首页制作、自适应 CSS、13 类查询标签、页面变量、分类筛选、搜索分页、播放与弹幕、剧情、会员互动及上线检查。制作模板时请用 `ff_url()`、`ff_play_url()` 生成链接，不要写死 URL 规则。
 
-`view/` 按单目录主题包组织：`mxone/` 为前台，`admin/` 为后台，`install/` 为安装页，`shared/` 为共享播放器和公共标签。每个包内的页面使用 `.tpl` 后缀，样式、JS、图片和字体在 `assets/`，PHP 展示扩展在 `extensions/`；复制整套前台主题只需复制一个目录。`public/` 只保留入口与公开文件，不再散放各主题资源；编译缓存、备份和更新文件仍保存在 `runtime/`。
+模板与静态资源按同名目录分离：`view/<主题名>/` 只存放 `.tpl` 页面和私有 `extensions/` PHP 展示扩展，`public/theme-assets/<主题名>/` 存放 CSS、JS、图片和字体。`mxone` 为默认前台，`admin`、`install` 为系统页面，`shared` 为共享播放器及公共标签。复制主题时同时复制这两个同名目录；编译缓存、备份和更新文件仍保存在 `runtime/`。
 
-主题包整体位于网站运行目录之外。模板使用 `ff_theme_asset()` 引用自身资源，系统通过 `/theme-assets/` 白名单入口读取 CSS、JS、图片和字体，并提供内容指纹、ETag 与浏览器缓存，不查询数据库。`.tpl`、PHP、隐藏文件和软链接不会通过该入口公开。超级管理员只可在线编辑前台 `.tpl`、CSS、JS，PHP 扩展须通过服务器部署。请更新本项目的 Nginx／宝塔规则并重载 PHP-FPM；禁止把整个 `view/` 设置为公开目录或软链接。网站伪静态 URL 的 `.html` 后缀不受模板改为 `.tpl` 的影响。
+模板使用 `ff_theme_asset()` 引用自身资源，返回 `/theme-assets/<主题名>/...` 及内容指纹。资源是网站运行目录 `public/` 内的真实文件，由 Nginx／Apache 直接读取，不需要主题资源专用 rewrite，也不经过 PHP 或查询数据库。静态目录只能放公开 CSS、JS、图片和字体，不能放 PHP、`.tpl`、配置、密钥或软链接。`view/` 始终保持私有，不能设置公开映射。网站 URL 的 `.html` 伪静态后缀不受影响。
+
+后台模板管理仍在主题下显示“assets”入口，并显示实际的 `public/theme-assets/` 路径；超级管理员可以编辑前台 `.tpl`、CSS、JS，PHP 扩展须通过服务器部署。旧在线更新器仍可接收升级包，新版首次启动会将旧 `view/<主题名>/assets/` 中的允许资源搬迁到公开目录，并把原目录保存在 `runtime/retired-theme-assets/`。全新安装包已是分离结构。已有主题资源 rewrite 可继续兼容使用，无需为了本次调整修改伪静态。
 
 Nginx／宝塔使用 [站点伪静态配置](deploy/baota/thinkphp.conf)，其中的私有目录规则须放在 `server` 中、所有 `location` 之外。Apache 推荐使用 [安全站点配置](deploy/apache/feifeicms.conf)，修改程序路径后加载；该配置将伪静态放在 `VirtualHost` 中并禁止跟随软链接。仅使用 `.htaccess` 的共享主机还需由服务商禁止公开目录中的软链接；程序无法替代 Web 服务器对静态文件的权限控制。
 

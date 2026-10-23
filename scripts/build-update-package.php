@@ -13,7 +13,8 @@ $installed = json_decode((string) @file_get_contents($root . '/vendor/composer/i
 if (!is_array($installed) || ($installed['dev'] ?? null) !== false || ($installed['dev-package-names'] ?? []) !== []) {
     throw new RuntimeException('发布包必须先执行 composer install --no-dev --classmap-authoritative，不能打包开发依赖');
 }
-$roots = ['app', 'config', 'database/migrations', 'extend', 'route', 'view/admin', 'view/install', 'view/mxone', 'view/shared', 'vendor'];
+$roots = ['app', 'config', 'database/migrations', 'extend', 'route', 'view/admin', 'view/install', 'view/mxone', 'view/shared',
+    'public/theme-assets/admin', 'public/theme-assets/install', 'public/theme-assets/mxone', 'public/theme-assets/shared', 'vendor'];
 $single = ['think', '.htaccess', 'composer.json', 'composer.lock', 'public/index.php',
     'public/router.php', 'public/.htaccess', 'public/favicon.ico', 'public/robots.txt'];
 if ($mode === 'install') {
@@ -37,9 +38,16 @@ foreach ($roots as $directory) {
             $extension = strtolower($file->getExtension());
             if (str_contains($relative, '/extensions/')) {
                 if ($extension !== 'php') continue;
-            } elseif (str_contains($relative, '/assets/')) {
-                if (!in_array($extension, ['css','js','png','jpg','jpeg','gif','webp','avif','svg','ico','woff','woff2','ttf','eot'], true)) continue;
-            } elseif ($extension !== 'tpl') continue;
+            } elseif (str_contains($relative, '/assets/')) continue;
+            elseif ($extension !== 'tpl') continue;
+        }
+        if (str_starts_with($relative, 'public/theme-assets/')) {
+            $asset = explode('/', substr($relative, strlen('public/theme-assets/')), 2)[1] ?? '';
+            if (!preg_match('~^[\pL\pN_@-][\pL\pN_.@-]*(?:/[\pL\pN_@-][\pL\pN_.@-]*)*$~uD', $asset)
+                || preg_match('~\.(?:php[0-9]*|phtml|phar|tpl|html?|ini|env)(?:[./]|$)~i', $asset)
+                || !in_array(strtolower($file->getExtension()), ['css','js','png','jpg','jpeg','gif','webp','avif','svg','ico','woff','woff2','ttf','eot'], true)) {
+                throw new RuntimeException('公开主题目录只能包含静态资源：' . $relative);
+            }
         }
         // Local-only theme assets must not leak into an otherwise shared asset root.
         if (preg_match('~(?:^|/)(?:qinxin|qingxin)(?:[./_-]|$)~i', $relative)) continue;
@@ -72,12 +80,26 @@ if ($mode === 'install') {
 }
 ksort($files, SORT_STRING);
 if (!isset($files['vendor/autoload.php'], $files['config/version.php'], $files['app/service/ReleaseCatalog.php'])) throw new RuntimeException('构建缺少程序或 Composer 依赖');
-foreach (['view/admin/assets/css/admin.css', 'view/admin/assets/js/admin.js', 'view/install/assets/css/install.css',
-    'view/mxone/common/head.tpl', 'view/mxone/assets/css/system.css', 'view/mxone/assets/js/app.js',
-    'view/mxone/extensions/functions.php', 'view/shared/extensions/tags.php', 'view/shared/assets/player/player.js',
-    'view/shared/assets/player/vendor/artplayer.js', 'view/shared/assets/player/vendor/hls.min.js',
-    'view/shared/assets/player/vendor/artplayer-plugin-danmuku.js'] as $required) {
+foreach (['public/theme-assets/admin/css/admin.css', 'public/theme-assets/admin/js/admin.js', 'public/theme-assets/install/css/install.css',
+    'view/mxone/common/head.tpl', 'public/theme-assets/mxone/css/system.css', 'public/theme-assets/mxone/js/app.js',
+    'view/mxone/extensions/functions.php', 'view/shared/extensions/tags.php', 'public/theme-assets/shared/player/player.js',
+    'public/theme-assets/shared/player/vendor/artplayer.js', 'public/theme-assets/shared/player/vendor/hls.min.js',
+    'public/theme-assets/shared/player/vendor/artplayer-plugin-danmuku.js'] as $required) {
     if (!isset($files[$required])) throw new RuntimeException('构建缺少主题运行文件：' . $required);
+}
+if ($mode === 'update') {
+    // Older installed updaters reject public/theme-assets/. Transfer static
+    // bytes through their existing view/ allowlist; the new entrypoint moves
+    // these files to public/theme-assets/ before rendering its first page.
+    foreach (array_keys($files) as $relative) {
+        if (!str_starts_with($relative, 'public/theme-assets/')) continue;
+        [$theme, $asset] = explode('/', substr($relative, strlen('public/theme-assets/')), 2);
+        $transfer = 'view/' . $theme . '/assets/' . $asset;
+        $files[$transfer] = $files[$relative];
+        $sources[$transfer] = $sources[$relative];
+        unset($files[$relative], $sources[$relative]);
+    }
+    ksort($files, SORT_STRING);
 }
 foreach (array_merge(['vendor/overtrue/pinyin/src/Pinyin.php', 'vendor/overtrue/pinyin/data/chars.php',
     'vendor/overtrue/pinyin/data/surnames.php'], array_map(static fn (int $part): string => 'vendor/overtrue/pinyin/data/words-' . $part . '.php', range(0, 9))) as $required) {

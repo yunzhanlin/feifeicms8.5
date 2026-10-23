@@ -20,6 +20,11 @@ final class PublicPathPolicy
         $path = ltrim($path, '/');
         // Reject the same paths via /index.php/ and accidental /public/ roots.
         $path = preg_replace('~^(?:(?:public|index\.php|admin\.php|api\.php|install\.php)/)+~', '', $path) ?? $path;
+        if (str_starts_with($path, 'theme-assets/')) {
+            require_once __DIR__ . '/ThemeAssets.php';
+            $parts = explode('/', substr($path, strlen('theme-assets/')), 2);
+            return count($parts) !== 2 || preg_match('/^[A-Za-z0-9_-]+$/D', $parts[0]) !== 1 || !ThemeAssets::isAllowedPath($parts[1]);
+        }
         // Only shipped front controllers are executable; uploaded/new PHP files
         // must not turn into a second unauthenticated application entry point.
         if (preg_match('~\.(?:php[0-9]?|phtml|phar)(?:/|$)~', $path)

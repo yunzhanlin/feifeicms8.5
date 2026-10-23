@@ -14,7 +14,7 @@ final class ThemeExtensions
     public function call(string $theme, string $name, mixed ...$arguments): mixed
     {
         if (!preg_match('/^[A-Za-z0-9_-]+$/D', $theme) || !preg_match('/^[a-z][a-z0-9_]*$/D', $name)) throw new \InvalidArgumentException('模板扩展名称无效');
-        $root = (new ThemeAssets($this->directory))->root();
+        $root = (new ThemeAssets($this->directory ?? dirname(__DIR__, 2) . '/view'))->root();
         $key = $root . '/' . $theme;
         if (!isset($this->loaded[$key])) {
             $file = $root;

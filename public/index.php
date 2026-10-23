@@ -27,6 +27,17 @@ try {
 
 try {
     require_once __DIR__ . '/../app/service/ThemeAssets.php';
+    require_once __DIR__ . '/../app/service/ThemeAssetLayout.php';
+    try { \app\service\ThemeAssetLayout::publish(dirname(__DIR__)); }
+    catch (\Throwable $error) {
+        error_log('主题资源迁移失败：' . $error->getMessage());
+        http_response_code(503);
+        header('Content-Type: text/plain; charset=utf-8');
+        header('Cache-Control: no-store');
+        header('Retry-After: 3');
+        echo '主题资源迁移尚未完成，请检查 view、public/theme-assets 和 runtime 的目录权限后刷新。';
+        return;
+    }
     if (\app\service\ThemeAssets::dispatch(dirname(__DIR__))) return;
     require __DIR__ . '/../vendor/autoload.php';
 

@@ -148,6 +148,7 @@ final class Tools extends BaseController
                 'mode' => 'edit',
                 'selected' => $this->normalizeTemplateRelative($selected),
                 'currentPath' => $directory,
+                'selectedDisplayPath' => $this->templateFiles->displayPath($selected),
                 // ThinkPHP output is escaped by default. Encode once here and render raw in
                 // the textarea so source code is displayed as source, not as &quot;/&lt;.
                 'editorContent' => htmlspecialchars($content, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
@@ -169,6 +170,7 @@ final class Tools extends BaseController
             }
         } else {
             foreach (new \DirectoryIterator($directory) as $item) {
+                if (!str_contains($currentPath, '/') && $item->getFilename() === 'assets') continue;
                 // DirectoryIterator reuses the same mutable iterator object. Store an
                 // immutable SplFileInfo snapshot or every row becomes the final item.
                 if (!$item->isDot() && !$item->isLink() && !str_starts_with($item->getFilename(), '.')
@@ -191,6 +193,17 @@ final class Tools extends BaseController
                 'modified' => date('Y-m-d H:i:s', $item->getMTime()),
             ];
         }
+        if ($currentPath !== '' && !str_contains($currentPath, '/')) {
+            try {
+                $assetPath = $this->templateDirectoryPath($currentPath . '/assets');
+                $entries[] = ['name' => 'assets', 'path' => $currentPath . '/assets', 'is_dir' => true,
+                    'icon' => 'folder', 'editable' => false, 'description' => '公开静态资源',
+                    'size' => $this->formatFileSize($this->directoryStats($assetPath)['bytes']),
+                    'modified' => date('Y-m-d H:i:s', (int) filemtime($assetPath))];
+            } catch (HttpException $error) {
+                if ($error->getStatusCode() !== 404) throw $error;
+            }
+        }
         usort($entries, static fn (array $left, array $right): int => $right['modified'] <=> $left['modified']);
         $parentPath = $currentPath === '' ? '' : dirname($currentPath);
         if ($parentPath === '.') $parentPath = '';
@@ -199,6 +212,7 @@ final class Tools extends BaseController
             'mode' => 'browse',
             'entries' => $entries,
             'currentPath' => $currentPath,
+            'currentDisplayPath' => $this->templateFiles->displayPath($currentPath),
             'parentPath' => $parentPath,
             'csrf' => $this->csrf->get(),
         ]);

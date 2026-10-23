@@ -18,6 +18,7 @@ Options -Indexes -MultiViews
   RewriteRule ^legacy/(?:Lib|Tpl|Runtime|Uploads)(?:[/.]|$) - [F,END,NC]
   RewriteRule ^(?:uploads|storage|static|mxstatic|player|legacy)/.*\.(?:php[0-9]?|phtml|phar|cgi|pl|py|sh)(?:/|$) - [F,END,NC]
   RewriteRule (^|/)\.(?!well-known(?:/|$)) - [F,END]
+  RewriteRule ^theme-assets/.*\.(?:php[0-9]*|phtml|phar|tpl|html?|ini|env)(?:[./]|$) - [F,END,NC]
 
   # Aliases use index.php; only index.php and install.php execute directly.
   RewriteRule ^(?:admin|api)\.php(?:/(.*))?$ index.php/$1 [QSA,PT,L]

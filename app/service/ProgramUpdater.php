@@ -210,6 +210,10 @@ final class ProgramUpdater
     private function allowed(string $path): bool
     {
         if ($path === '' || str_contains($path, '\\') || str_contains($path, "\0") || str_starts_with($path, '/') || preg_match('~(^|/)\.\.?(/|$)~', $path)) return false;
+        if (str_starts_with($path, 'public/theme-assets/')) {
+            $parts = explode('/', substr($path, strlen('public/theme-assets/')), 2);
+            return count($parts) === 2 && preg_match('/^[A-Za-z0-9_-]+$/D', $parts[0]) === 1 && ThemeAssets::isAllowedPath($parts[1]);
+        }
         if (in_array($path, ['think','.htaccess','composer.json','composer.lock','public/index.php','public/install.php','public/router.php','public/.htaccess','public/favicon.ico','public/robots.txt'], true)) return true;
         foreach (['app/','config/','database/migrations/','extend/','route/','view/','vendor/','public/static/','public/legacy/','public/mxstatic/','public/player/'] as $prefix) if (str_starts_with($path, $prefix)) return true;
         return false;

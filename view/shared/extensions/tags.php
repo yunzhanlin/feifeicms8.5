@@ -2,7 +2,7 @@
 // 应用公共文件
 
 if (!function_exists('ff_asset_url')) {
-    /** Public URL for a whitelisted static file inside a private theme package. */
+    /** Fingerprinted URL for a real file in public/theme-assets/<theme>/. */
     function ff_asset_url(string $bundle, string $path): string
     {
         static $assets = null;

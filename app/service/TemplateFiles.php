@@ -5,10 +5,25 @@ namespace app\service;
 
 use think\exception\HttpException;
 
-/** Private, self-contained theme packages. PHP extensions are never web-editable. */
+/** Private templates/extensions and a separate public static-resource tree. */
 final class TemplateFiles
 {
-    public function __construct(private readonly ?string $directory = null) {}
+    public function __construct(private readonly ?string $directory = null, private readonly ?string $assetsDirectory = null) {}
+
+    public function assetRoot(): string
+    {
+        $directory = $this->assetsDirectory ?? ($this->directory === null ? public_path() . 'theme-assets' : dirname($this->directory) . '/public/theme-assets');
+        return (new ThemeAssets($directory))->root();
+    }
+
+    public function displayPath(string $relative): string
+    {
+        $relative = $this->normalize($relative, true);
+        $parts = explode('/', $relative);
+        return ($parts[1] ?? '') === 'assets'
+            ? 'public/theme-assets/' . $parts[0] . (count($parts) > 2 ? '/' . implode('/', array_slice($parts, 2)) : '')
+            : 'view/' . $relative;
+    }
 
     public function root(): string
     {
@@ -70,7 +85,13 @@ final class TemplateFiles
     {
         $root = $this->root();
         $path = $root;
-        foreach ($relative === '' ? [] : explode('/', $relative) as $segment) {
+        $parts = $relative === '' ? [] : explode('/', $relative);
+        if (($parts[1] ?? '') === 'assets') {
+            $root = $this->assetRoot();
+            $path = $root;
+            $parts = array_merge([$parts[0]], array_slice($parts, 2));
+        }
+        foreach ($parts as $segment) {
             $path .= DIRECTORY_SEPARATOR . $segment;
             if (is_link($path)) throw new HttpException(403, '模板路径不能包含软链接');
             if (file_exists($path)) {
