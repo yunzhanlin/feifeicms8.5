@@ -1,4 +1,4 @@
-name: 构建安装包与在线更新包
+name: 构建干净安装包与增量更新包
 
 on:
   release:
@@ -21,7 +21,19 @@ jobs:
           extensions: curl, fileinfo, mbstring, openssl, pdo_mysql, zip
           tools: composer:v2
       - run: composer install --no-dev --no-interaction --prefer-dist --classmap-authoritative
-      - run: php scripts/build-update-package.php "${{ github.event.release.tag_name || github.ref_name }}"
+      - name: 下载并校验已发布基线
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          BASE_TAG=$(php -r 'echo json_decode(file_get_contents("config/release-base.json"), true)["tag"];')
+          mkdir -p release-base
+          gh release download "$BASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern feifeicms-update.zip --dir release-base
+      - run: php scripts/prepare-release-dependencies.php release-base/feifeicms-update.zip
+      - run: php scripts/build-update-package.php "${{ github.event.release.tag_name || github.ref_name }}" feifeicms-update.zip update release-base/feifeicms-update.zip
+      - name: 构建严格差量包
+        run: |
+          BASE_VERSION=$(php -r 'echo json_decode(file_get_contents("config/release-base.json"), true)["version"];')
+          php scripts/build-update-package.php "${{ github.event.release.tag_name || github.ref_name }}" "feifeicms-patch-from-$BASE_VERSION.zip" patch release-base/feifeicms-update.zip
       - run: php scripts/build-update-package.php "${{ github.event.release.tag_name || github.ref_name }}" feifeicms8.5.zip install
       - run: |
           cp plugins/legacy43/ff43-upgrade.php feifeicms43-upgrade-v1.0.1.php
@@ -33,6 +45,8 @@ jobs:
           files: |
             feifeicms-update.zip
             feifeicms-update.zip.sha256
+            feifeicms-patch-from-*.zip
+            feifeicms-patch-from-*.zip.sha256
             feifeicms8.5.zip
             feifeicms8.5.zip.sha256
             feifeicms43-upgrade-v1.0.1.php

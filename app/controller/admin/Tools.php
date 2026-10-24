@@ -110,6 +110,8 @@ final class Tools extends BaseController
     {
         $this->guardCsrf();
         $scope = (string) $this->request->post('scope', 'all');
+        // Accept forms opened before the template cache scope was corrected.
+        if ($scope === 'templates') $scope = 'view';
         $allowed = ['view', 'data', 'today_video', 'today_article', 'today_topic', 'all'];
         if (!in_array($scope, $allowed, true)) throw new HttpException(422, '缓存类型无效');
 
