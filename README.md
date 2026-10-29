@@ -33,7 +33,7 @@
 
 宝塔用户还可以参考 [`deploy/baota/`](deploy/baota/) 中的站点与计划任务示例。
 
-启用 Meilisearch 后建议每分钟运行 `php think feifei:search:work`，自动重试失败任务并处理批量变更；直接用其他工具执行数据库 SQL 后请运行 `php think feifei:search:sync` 全量同步。
+Meilisearch 的服务部署、后台配置、首次索引同步和每分钟任务见 [Meilisearch 部署与启用](docs/Meilisearch部署与启用.md)。启用后建议每分钟运行 `php think feifei:search:work`，自动重试失败任务并处理批量变更；直接用其他工具执行数据库 SQL 后请运行 `php think feifei:search:sync` 全量同步。
 
 安装包不包含站点数据、实际环境配置或第三方采集源，仅提供默认 MXOne 模板。默认使用文件缓存和 MySQL 搜索，播放器、采集源、支付、SMTP、第三方接口、Redis 和 Meilisearch 均由用户自行配置。
 
