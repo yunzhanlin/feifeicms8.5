@@ -6,11 +6,60 @@
 
 启用顺序：启动搜索服务 → 保存后台搜索配置 → 首次全量同步 → 设置每分钟增量同步 → 检查前台搜索。
 
+## 一键部署：宝塔或普通 Linux，PHP 直接运行
+
+提供 [一键部署脚本](../deploy/install-meilisearch.sh)，支持 Debian 12+、Ubuntu 22.04+，以及 x86_64 / aarch64（ARM64）服务器。通过 systemd 原生运行 Meilisearch，不依赖 Docker。脚本固定使用官方社区版 `1.53.2`，下载后校验两种架构各自的官方 SHA-256。
+
+在服务器终端执行下面的命令，将网站目录和 PHP 路径替换成实际值。网站目录必须是包含 `think` 的程序根目录，且网站已经安装完成：
+
+```bash
+MEILI_INSTALL_SCRIPT=$(mktemp) && \
+curl --proto '=https' --tlsv1.2 -fL https://raw.githubusercontent.com/yunzhanlin/feifeicms8.5/main/deploy/install-meilisearch.sh -o "$MEILI_INSTALL_SCRIPT" && \
+sudo bash "$MEILI_INSTALL_SCRIPT" --site /www/wwwroot/example.com --php /www/server/php/85/bin/php
+```
+
+脚本会完成以下操作：
+
+1. 检查系统、PHP、数据库、网站运行用户和端口，按需安装基础下载工具。
+2. 下载并验证程序，生成随机密钥，以独立的非 root 用户运行，仅监听 `127.0.0.1:7700`，设置开机启动。
+3. 将网站后台的五项搜索设置备份到 `runtime/backups/meilisearch-settings-*.json`，保存服务地址、密钥及网站专用索引名。
+4. 全量同步已审核视频，核对索引数量，成功后将搜索驱动切换到 Meilisearch，并保留 MySQL 故障回退。
+5. 创建每分钟增量同步的 systemd timer，以网站运行用户执行。
+
+网站 `.env`、模板和上传文件保持原样。网站接入或索引同步失败时，脚本尝试自动恢复此前的五项搜索设置，并输出备份位置。备份可能包含原搜索密钥，文件权限为 `600`，不要上传到 GitHub。服务本身安装成功但网站接入失败时，会保留搜索服务及数据，修复原因后可再次运行。
+
+重复执行会复用已有密钥、数据和端口，不会自动升级程序或接管其他程序创建的同名服务。已有端口被占用时，可指定其他端口；同机新建第二个实例时同时使用新的服务名：
+
+```bash
+sudo bash "$MEILI_INSTALL_SCRIPT" \
+  --name feifeicms-meilisearch-second --port 7701 \
+  --site /www/wwwroot/second.example.com --php /www/server/php/85/bin/php
+```
+
+不指定 `--site` 时，只部署搜索服务，接入参数保存在 `/etc/feifeicms/meilisearch/feifeicms-meilisearch-client.txt`，仅 root 可读。之后可按第 4～7 节手动接入，或加 `--site` 再次运行：
+
+```bash
+sudo bash "$MEILI_INSTALL_SCRIPT"
+sudo bash "$MEILI_INSTALL_SCRIPT" --help
+```
+
+可选参数 `--site-user www` 指定网站运行用户，默认取 `runtime/` 所有者，拒绝以 root 执行网站任务；`--index feifeicms_example` 指定索引，默认按网站绝对路径生成独立名称。自动接入要求网站和 PHP 路径只包含字母、数字、下划线、点、斜线、连字符。PHP 位于容器内的整站 Docker 部署使用第 3 节。
+
+默认实例的运行检查命令：
+
+```bash
+sudo systemctl status feifeicms-meilisearch.service --no-pager
+sudo journalctl -u feifeicms-meilisearch.service -n 80 --no-pager
+sudo systemctl list-timers 'feifeicms-meilisearch-search-*'
+```
+
+脚本会输出实际服务名、数据目录、密钥文件及 timer 名称。搜索数据位于 `/var/lib/feifeicms-meilisearch/<服务名>/`。需要停用时先将后台搜索驱动改为 MySQL，再用 `systemctl disable --now` 停止对应的增量同步 timer 和搜索服务；保留数据目录以便恢复。
+
 ## 1. 选择部署方式
 
 | 网站运行方式 | 按本文操作 | 程序使用的搜索地址 |
 | --- | --- | --- |
-| 宝塔或普通 Linux，PHP 直接运行在服务器上 | 第 2 节，独立 Docker 搜索服务 | `http://127.0.0.1:7700` |
+| 宝塔或普通 Linux，PHP 直接运行在服务器上 | 优先使用上面的一键部署；也可按第 2 节手动启动独立 Docker 搜索服务 | `http://127.0.0.1:7700` |
 | 使用本仓库的 Docker Compose 运行整站 | 第 3 节，启用已有搜索服务 | `http://meilisearch:7700` |
 
 两种方式选择一种即可。完整安装 ZIP 不包含 Docker Compose 示例；整站容器部署请使用仓库中的 [docker-compose.yml](../docker-compose.yml)。没有 Docker 的服务器也可以单独安装 Meilisearch 原生服务，启动后从第 4 节继续配置；服务地址以实际监听地址为准。

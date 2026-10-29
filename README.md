@@ -35,6 +35,8 @@
 
 Meilisearch 的服务部署、后台配置、首次索引同步和每分钟任务见 [Meilisearch 部署与启用](docs/Meilisearch部署与启用.md)。启用后建议每分钟运行 `php think feifei:search:work`，自动重试失败任务并处理批量变更；直接用其他工具执行数据库 SQL 后请运行 `php think feifei:search:sync` 全量同步。
 
+宝塔／普通 Linux 可使用 [Meilisearch 一键部署脚本](deploy/install-meilisearch.sh)：自动部署原生服务、生成密钥；加 `--site` 和 `--php` 可备份并保存后台搜索设置、全量同步和创建每分钟任务。支持 Debian 12+、Ubuntu 22.04+，x86_64 / ARM64，具体命令见上面的部署指南。
+
 安装包不包含站点数据、实际环境配置或第三方采集源，仅提供默认 MXOne 模板。默认使用文件缓存和 MySQL 搜索，播放器、采集源、支付、SMTP、第三方接口、Redis 和 Meilisearch 均由用户自行配置。
 
 完整安装 ZIP 仅保留运行必需文件、安装说明、模板制作指南及 Web 服务器伪静态规则；Docker 示例、可选服务配置、历史发布记录和独立迁移插件不进入 ZIP，可按需要从本仓库单独获取。包内安装步骤见 [安装说明](docs/安装说明.md)。
