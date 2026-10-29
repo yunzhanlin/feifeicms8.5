@@ -14,6 +14,12 @@ final class ResilientCache
     /** @var array<string, array{value:mixed,expires:int}> Request-local hot values avoid duplicate Redis round trips. */
     private static array $memo = [];
 
+    /** Driver changes must not carry request-local values into another store. */
+    public static function resetLocal(): void
+    {
+        self::$fallback = self::$memo = [];
+    }
+
     public function get(string $key, mixed $default = null): mixed
     {
         try { return Cache::get($key, $default); } catch (Throwable) {

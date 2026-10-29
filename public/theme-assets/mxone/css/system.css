@@ -158,14 +158,15 @@ html[data-theme="light"] .mx-icon-sun, html[data-theme="dark"] .mx-icon-moon { d
 .mx-hero-card{position:relative}.mx-hero-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}.mx-hero-card::after{content:"";position:absolute;inset:0;background:linear-gradient(90deg,rgba(17,20,29,.92),rgba(17,20,29,.40)),linear-gradient(0deg,rgba(17,20,29,.82),transparent)}.mx-hero-card>*:not(.mx-hero-bg){position:relative;z-index:2}
 .mx-hero-card { min-height: 315px; display: flex; align-items: flex-end; padding: 34px; overflow: hidden; background: linear-gradient(90deg, rgba(17, 20, 29, .92), rgba(17, 20, 29, .40)), url("../images/searchbg.jpg") center/cover; }
 .mx-hero-slider { position: relative; display: block; padding: 0; background: var(--mx-panel-solid); }
-.mx-hero-track, .mx-hero-slide { position: absolute; inset: 0; }
+/* Keep the track above the generic hero-card child positioning rule. */
+.mx-hero-slider > .mx-hero-track, .mx-hero-slide { position: absolute; inset: 0; }
 .mx-hero-slide { display: flex; flex-direction: column; justify-content: flex-end; padding: 34px; opacity: 0; visibility: hidden; background-position: center; background-size: cover; transition: opacity .55s ease, visibility .55s ease; }
 .mx-hero-slide::before { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, rgba(17,20,29,.92), rgba(17,20,29,.54) 48%, rgba(17,20,29,.72)), linear-gradient(0deg, rgba(17,20,29,.88), rgba(17,20,29,.18)); }
 .mx-hero-slide > * { position: relative; z-index: 1; }
 .mx-hero-slide.active { opacity: 1; visibility: visible; }
 .mx-hero-slide .mx-btn { width: max-content; font-style: normal; }
 .mx-hero-badge { width: max-content; margin-bottom: 10px; padding: 4px 10px; border-radius: 999px; background: rgba(255, 107, 53, .20); color: var(--mx-primary-2); font-size: 12px; font-weight: 800; }
-.mx-hero-dots { position: absolute; left: 34px; bottom: 18px; z-index: 3; display: flex; gap: 7px; }
+.mx-hero-slider > .mx-hero-dots { position: absolute; left: 34px; bottom: 18px; z-index: 3; display: flex; gap: 7px; }
 .mx-hero-dots button { width: 8px; height: 8px; padding: 0; border: 0; border-radius: 999px; background: rgba(255,255,255,.28); cursor: pointer; }
 .mx-hero-dots button.active { width: 24px; background: var(--mx-primary); }
 .mx-hero-fallback { position: relative; z-index: 1; align-self: flex-end; }

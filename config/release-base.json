@@ -1,6 +1,14 @@
 {
-    "tag": "v8.5.261023.2",
-    "version": "8.5.261023.2",
+    "tag": "v8.5.261024",
+    "version": "8.5.261024",
     "asset": "feifeicms-update.zip",
-    "sha256": "6eb4f1ac516dfa5e31532579702fa762c315afcd5563387057dc047583b0c411"
+    "sha256": "87ade40066e9aea8cff2e7a109c0265eda9e683616fbd06ae54155d02fc04f91",
+    "compatible_bases": [
+        {
+            "tag": "v8.5.261023.2",
+            "version": "8.5.261023.2",
+            "asset": "feifeicms-update.zip",
+            "sha256": "6eb4f1ac516dfa5e31532579702fa762c315afcd5563387057dc047583b0c411"
+        }
+    ]
 }

@@ -11,20 +11,48 @@ $mode = (string) ($argv[3] ?? 'update');
 if (!in_array($mode, ['update', 'patch', 'install'], true)) throw new RuntimeException('无效构建类型');
 $updating = $mode !== 'install';
 $base = null;
+$bases = [];
 if ($updating) {
-    $baseline = (string) ($argv[4] ?? '');
     $baseSpec = json_decode((string) file_get_contents($root . '/config/release-base.json'), true, 512, JSON_THROW_ON_ERROR);
-    if (!is_file($baseline) || !hash_equals((string) $baseSpec['sha256'], hash_file('sha256', $baseline))) {
-        throw new RuntimeException('更新包必须提供与 release-base.json 校验值一致的上版发布包');
+    $specs = array_merge([$baseSpec], $baseSpec['compatible_bases'] ?? []);
+    $archives = array_slice($argv, 4);
+    if (count($archives) < 1 || count($archives) > count($specs) || ($mode === 'update' && count($archives) !== count($specs))) throw new RuntimeException('必须提供已声明的基线包；增量基线还需其前序完整基线，在线兼容包需全部基线');
+    $rawBases = [];
+    $selected = '';
+    foreach ($archives as $baseline) {
+        $spec = null;
+        $hash = is_file($baseline) ? hash_file('sha256', $baseline) : '';
+        foreach ($specs as $candidate) if (hash_equals((string) $candidate['sha256'], $hash)) { $spec = $candidate; break; }
+        if ($spec === null || isset($rawBases[$spec['version']])) throw new RuntimeException('更新包必须提供与 release-base.json 校验值一致且不重复的已发布基线包');
+        $baseZip = new ZipArchive();
+        if ($baseZip->open($baseline) !== true) throw new RuntimeException('无法读取基线发布包');
+        try {
+            $manifest = json_decode((string) $baseZip->getFromName('manifest.json'), true, 512, JSON_THROW_ON_ERROR);
+            if (($manifest['format'] ?? null) !== 1 || ($manifest['version'] ?? '') !== $spec['version'] || !is_array($manifest['files'] ?? null)) throw new RuntimeException('更新基线清单无效');
+            $rawBases[$spec['version']] = $manifest;
+            if ($selected === '') $selected = $spec['version'];
+        } finally { $baseZip->close(); }
     }
-    $baseZip = new ZipArchive();
-    if ($baseZip->open($baseline) !== true) throw new RuntimeException('无法读取基线发布包');
-    try {
-        $base = json_decode((string) $baseZip->getFromName('manifest.json'), true, 512, JSON_THROW_ON_ERROR);
-        if (($base['format'] ?? null) !== 1 || ($base['version'] ?? '') !== $baseSpec['version'] || !is_array($base['files'] ?? null)) {
-            throw new RuntimeException('更新基线清单无效');
+    // A previously published update may itself be a delta, not a full file list.
+    // Reconstruct its complete program state from pinned predecessor archives.
+    $resolveBase = static function (string $version, array $trail = []) use (&$resolveBase, $rawBases): array {
+        if (!isset($rawBases[$version]) || isset($trail[$version])) throw new RuntimeException('增量基线缺少前序完整基线或形成循环：' . $version);
+        $manifest = $rawBases[$version];
+        if (isset($manifest['package_type'])) {
+            $trail[$version] = true;
+            $parent = $resolveBase((string) ($manifest['base_version'] ?? ''), $trail);
+            $manifest['files'] = array_replace($parent['files'], $manifest['files']);
         }
-    } finally { $baseZip->close(); }
+        return $manifest;
+    };
+    if ($mode === 'update') {
+        foreach ($specs as $spec) $bases[$spec['version']] = $resolveBase($spec['version']);
+        $base = $bases[$baseSpec['version']];
+    } else {
+        $base = $resolveBase($selected);
+        $bases[$selected] = $base;
+    }
+    ksort($bases, SORT_STRING);
 }
 $installed = json_decode((string) @file_get_contents($root . '/vendor/composer/installed.json'), true);
 if (!is_array($installed) || ($installed['dev'] ?? null) !== false || ($installed['dev-package-names'] ?? []) !== []) {
@@ -115,7 +143,11 @@ foreach ($updating ? [] : array_merge(['vendor/overtrue/pinyin/src/Pinyin.php', 
 }
 if ($updating) {
     $allFiles = $files;
-    $files = array_filter($files, static fn (string $hash, string $path): bool => ($base['files'][$path] ?? null) !== $hash, ARRAY_FILTER_USE_BOTH);
+    // Online packages include the union of real changes from every accepted base.
+    $files = array_filter($files, static function (string $hash, string $path) use ($bases): bool {
+        foreach ($bases as $baseline) if (($baseline['files'][$path] ?? null) !== $hash) return true;
+        return false;
+    }, ARRAY_FILTER_USE_BOTH);
     if (!isset($files['config/version.php'])) throw new RuntimeException('增量包必须包含新版本标识');
     if ($mode === 'update') {
         // The released unpacker requires these files and at least ten entries.
@@ -134,8 +166,8 @@ if ($updating) {
         . '    $installedFile = root_path() . \'config/version.php\';' . "\n"
         . '    if (is_file($installedFile) && realpath($installedFile) !== realpath(__FILE__)) {' . "\n"
         . '        $installedVersion = (require $installedFile)[\'version\'] ?? \'\';' . "\n"
-        . '        if ($installedVersion !== ' . var_export($base['version'], true) . ') {' . "\n"
-        . '            throw new \\RuntimeException(' . var_export('本更新包仅适用于 ' . $base['version'] . '；请先按发布说明升级到该版本。', true) . ');' . "\n"
+        . '        if (!in_array($installedVersion, ' . var_export(array_keys($bases), true) . ', true)) {' . "\n"
+        . '            throw new \\RuntimeException(' . var_export('本更新包仅适用于 ' . implode('、', array_keys($bases)) . '；请先按发布说明升级到支持的版本。', true) . ');' . "\n"
         . "        }\n    }\n}\n";
     $identity = (string) file_get_contents($sources['config/version.php']);
     $contents['config/version.php'] = str_replace('return [', $guard . "\nreturn [", $identity);
@@ -163,6 +195,7 @@ $manifest = ['format' => 1, 'version' => $release['version'], 'files' => $files]
 if ($updating) {
     $manifest['package_type'] = $mode === 'patch' ? 'delta' : 'online-compatible';
     $manifest['base_version'] = $base['version'];
+    $manifest['base_versions'] = array_keys($bases);
 }
 $zip->addFromString('manifest.json', json_encode($manifest, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 if (!$zip->close()) throw new RuntimeException('无法完成更新包');

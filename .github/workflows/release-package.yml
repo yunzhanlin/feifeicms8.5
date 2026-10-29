@@ -19,21 +19,32 @@ jobs:
         with:
           php-version: '8.5'
           extensions: curl, fileinfo, mbstring, openssl, pdo_mysql, zip
-          tools: composer:v2
+          tools: composer:2.10.3
       - run: composer install --no-dev --no-interaction --prefer-dist --classmap-authoritative
       - name: 下载并校验已发布基线
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          BASE_TAG=$(php -r 'echo json_decode(file_get_contents("config/release-base.json"), true)["tag"];')
           mkdir -p release-base
-          gh release download "$BASE_TAG" --repo "$GITHUB_REPOSITORY" --pattern feifeicms-update.zip --dir release-base
-      - run: php scripts/prepare-release-dependencies.php release-base/feifeicms-update.zip
-      - run: php scripts/build-update-package.php "${{ github.event.release.tag_name || github.ref_name }}" feifeicms-update.zip update release-base/feifeicms-update.zip
-      - name: 构建严格差量包
+          php -r '$s=json_decode(file_get_contents("config/release-base.json"),true);foreach(array_merge([$s],$s["compatible_bases"]??[])as$b)echo $b["version"]."\t".$b["tag"]."\n";' |
+          while IFS=$'\t' read -r version tag; do
+            gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern feifeicms-update.zip --output "release-base/$version.zip"
+          done
+      - name: 准备生产依赖并构建在线兼容包
         run: |
-          BASE_VERSION=$(php -r 'echo json_decode(file_get_contents("config/release-base.json"), true)["version"];')
-          php scripts/build-update-package.php "${{ github.event.release.tag_name || github.ref_name }}" "feifeicms-patch-from-$BASE_VERSION.zip" patch release-base/feifeicms-update.zip
+          BASE_VERSION=$(php -r 'echo json_decode(file_get_contents("config/release-base.json"),true)["version"];')
+          php scripts/prepare-release-dependencies.php "release-base/$BASE_VERSION.zip"
+          php scripts/build-update-package.php "${{ github.event.release.tag_name || github.ref_name }}" feifeicms-update.zip update release-base/*.zip
+      - name: 为每个基线构建严格差量包
+        run: |
+          for archive in release-base/*.zip; do
+            version=$(basename "$archive" .zip)
+            predecessors=()
+            for candidate in release-base/*.zip; do
+              if [ "$candidate" != "$archive" ]; then predecessors+=("$candidate"); fi
+            done
+            php scripts/build-update-package.php "${{ github.event.release.tag_name || github.ref_name }}" "feifeicms-patch-from-$version.zip" patch "$archive" "${predecessors[@]}"
+          done
       - run: php scripts/build-update-package.php "${{ github.event.release.tag_name || github.ref_name }}" feifeicms8.5.zip install
       - run: |
           cp plugins/legacy43/ff43-upgrade.php feifeicms43-upgrade-v1.0.1.php

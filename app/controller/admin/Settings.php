@@ -97,6 +97,17 @@ final class Settings extends BaseController
         $definition = $this->runtimeDefinition($section);
         $compiledRewrite = null;
         $forceRouterOff = false;
+        if ($section === 'cache') {
+            try {
+                $this->app->make(\app\service\RuntimeCacheSettings::class)->validate([
+                    'driver' => trim((string) $this->request->post('driver', config('cache.default', 'file'))),
+                    'prefix' => trim((string) $this->request->post('prefix', 'feifeicms:')),
+                    'ttl' => (string) max(0, (int) $this->request->post('ttl', 3600)),
+                ]);
+            } catch (\Throwable $exception) {
+                return redirect('/admin/settings/cache?error=' . rawurlencode('缓存配置未保存：连接或读写校验失败，请检查 Redis 地址、端口、密码与缓存前缀。'));
+            }
+        }
         if ($section === 'rewrite') {
             $forceRouterOff = trim((string) $this->request->post('rewrite_route', '')) === '';
             try {
@@ -152,6 +163,11 @@ final class Settings extends BaseController
         }
         $this->audit->record('settings.update', 'settings', $section, $before, $after);
         $this->siteSettings->forget();
+        if ($section === 'cache') {
+            $this->app->make(\app\service\RuntimeCacheSettings::class)->apply();
+            // Expire settings in both stores, including a previously used target.
+            $this->siteSettings->forget();
+        }
         return redirect('/admin/settings/' . $section . '?saved=1');
     }
 

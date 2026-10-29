@@ -21,6 +21,10 @@ $remove = static function (string $path): void {
 };
 try {
     $manifest = json_decode((string) $zip->getFromName('manifest.json'), true, 512, JSON_THROW_ON_ERROR);
+    if (!isset($manifest['files']['composer.lock'])) {
+        echo "[OK] 基线是增量包，不覆盖 Composer 生成的生产依赖\n";
+        return;
+    }
     if (($manifest['files']['composer.lock'] ?? '') !== hash_file('sha256', $root . '/composer.lock')) {
         echo "[OK] 依赖锁文件已变化，保留 Composer 新生成的生产依赖\n";
         return;
