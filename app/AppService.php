@@ -22,5 +22,15 @@ class AppService extends Service
         $this->app->make(\app\service\RuntimeCacheSettings::class)->apply();
         // Also runs after a first upgrade performed by the previous updater.
         \app\service\RetiredStaticFiles::retire($this->app->getRootPath());
+        require_once __DIR__ . '/service/UsageReporting.php';
+        require_once __DIR__ . '/command/UsageReport.php';
+        $this->commands([\app\command\UsageReport::class]);
+        $this->app->event->listen(\think\event\HttpEnd::class, function (\think\Response $response): void {
+            if ($response->getCode() >= 400) return;
+            $path = strtolower(trim($this->app->request->pathinfo(), '/'));
+            if (preg_match('~^(?:health|install(?:\.php)?)(?:/|$)~', $path)) return;
+            try { $this->app->make(\app\service\UsageReporting::class)->report('web'); }
+            catch (\Throwable) { /* Optional aggregate statistics never affect the site. */ }
+        });
     }
 }
