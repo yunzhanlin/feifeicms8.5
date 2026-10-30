@@ -15,6 +15,7 @@ $work = sys_get_temp_dir() . '/feifei-usage-verify-' . bin2hex(random_bytes(6));
 mkdir($work, 0700);
 $process = null;
 $cmsProcess = null;
+$slowProcess = null;
 $run = static function (array $command, array $env, string $cwd) use ($check): string {
     $p = proc_open($command, [0 => ['file','/dev/null','r'], 1 => ['pipe','w'], 2 => ['pipe','w']], $pipes, $cwd, $env);
     $out = stream_get_contents($pipes[1]); $err = stream_get_contents($pipes[2]); fclose($pipes[1]); fclose($pipes[2]);
@@ -149,9 +150,21 @@ try {
         $check($exit===1 && str_contains($out,'failed') && microtime(true)-$started<2.5, 'Receiver failure is bounded and reported without exceptions');
         $failure=json_decode($db->query("SELECT setting_value FROM ffx_site_settings WHERE setting_key='internal.usage_reporting.v1'")->fetchColumn(),true);
         $check($failure['id']===$state['id'] && $failure['next_attempt']>time() && $failure['failures']===1, 'Failure preserves identity and applies retry backoff');
+
+        $expire();
+        file_put_contents($work.'/slow.php', '<?php usleep(1700000); header("Content-Type: application/json"); echo \'{"ok":true,"schema":1}\';');
+        $socket=stream_socket_server('tcp://127.0.0.1:0');$slowAddress=stream_socket_get_name($socket,false);fclose($socket);
+        $slowProcess=proc_open([PHP_BINARY,'-S',$slowAddress,$work.'/slow.php'],[0=>['file','/dev/null','r'],1=>['file',$work.'/slow.log','a'],2=>['file',$work.'/slow.log','a']],$pipes,$work);
+        for($i=0;$i<100;$i++){$probe=@stream_socket_client('tcp://'.$slowAddress,$errno,$error,.1);if($probe){fclose($probe);break;}usleep(20000);}
+        $clientEnv['PHP_USAGE_ENDPOINT']='http://'.$slowAddress.'/v1/heartbeat';
+        $started=microtime(true);$out=$send($clientEnv);
+        $check(str_contains($out,'sent') && microtime(true)-$started>=1.6 && microtime(true)-$started<5, 'Delayed collector response beyond 1.5 seconds succeeds');
+        $recovered=json_decode($db->query("SELECT setting_value FROM ffx_site_settings WHERE setting_key='internal.usage_reporting.v1'")->fetchColumn(),true);
+        $check($recovered['id']===$state['id'] && $recovered['failures']===0, 'Slow response recovery preserves identity and clears failure state');
     }
     echo json_encode(['ok'=>true,'checks'=>count($checks),'passed'=>$checks], JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) . "\n";
 } finally {
+    if (is_resource($slowProcess)) { proc_terminate($slowProcess); proc_close($slowProcess); }
     if (is_resource($cmsProcess)) { proc_terminate($cmsProcess); proc_close($cmsProcess); }
     if (is_resource($process)) { proc_terminate($process); proc_close($process); }
     $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($work, FilesystemIterator::SKIP_DOTS), RecursiveIteratorIterator::CHILD_FIRST);

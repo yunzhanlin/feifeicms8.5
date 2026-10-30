@@ -48,7 +48,6 @@ jobs:
             php scripts/build-update-package.php "${{ github.event.release.tag_name || github.ref_name }}" "feifeicms-patch-from-$version.zip" patch "$archive" "${predecessors[@]}"
           done
       - run: php scripts/build-update-package.php "${{ github.event.release.tag_name || github.ref_name }}" feifeicms8.5.zip install
-      - run: php scripts/build-usage-server-package.php feifeicms-usage-server.zip
       - run: |
           cp plugins/legacy43/ff43-upgrade.php feifeicms43-upgrade-v1.0.1.php
           sha256sum feifeicms43-upgrade-v1.0.1.php > feifeicms43-upgrade-v1.0.1.php.sha256
@@ -63,7 +62,5 @@ jobs:
             feifeicms-patch-from-*.zip.sha256
             feifeicms8.5.zip
             feifeicms8.5.zip.sha256
-            feifeicms-usage-server.zip
-            feifeicms-usage-server.zip.sha256
             feifeicms43-upgrade-v1.0.1.php
             feifeicms43-upgrade-v1.0.1.php.sha256

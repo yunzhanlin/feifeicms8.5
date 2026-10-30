@@ -41,7 +41,7 @@ final class UsageReporting
             $payload = self::payload($state['id'], (string) config('feifei.version_id'), $source,
                 filter_var(env('USAGE_ENVIRONMENT', true), FILTER_VALIDATE_BOOLEAN));
             try {
-                $response = (new Client(['connect_timeout' => 0.8, 'timeout' => 1.5, 'allow_redirects' => false]))->post($endpoint, [
+                $response = (new Client(['connect_timeout' => 1.5, 'timeout' => 4.0, 'allow_redirects' => false]))->post($endpoint, [
                     'headers' => ['User-Agent' => 'FeiFeiCMS-Usage/1', 'Accept' => 'application/json'],
                     'json' => $payload,
                     'http_errors' => false,
