@@ -66,7 +66,7 @@ if ($mode === 'install') {
     // Native web installation only: optional deployment and migration add-ons
     // remain in the repository, not in a new site's program directory.
     $single = array_merge($single, ['public/install.php', 'database/schema-v2.sql',
-        'deploy/baota/thinkphp.conf', 'deploy/apache/feifeicms.conf', 'docs/模板标签.md', 'docs/程序使用统计.md', 'LICENSE.txt', 'NOTICE']);
+        'deploy/baota/thinkphp.conf', 'deploy/apache/feifeicms.conf', 'LICENSE.txt', 'NOTICE']);
 }
 $files = [];
 $sources = [];
@@ -77,6 +77,7 @@ foreach ($roots as $directory) {
     foreach ($iterator as $file) {
         if (!$file->isFile() || $file->isLink()) continue;
         $relative = str_replace('\\', '/', substr($file->getPathname(), strlen($root) + 1));
+        if (preg_match('~(?:^|/)docs?(?:/|$)~i', $relative)) continue;
         // Site-owned templates, static assets and configuration never enter updates.
         if ($updating && (str_starts_with($relative, 'view/') || str_starts_with($relative, 'public/')
             || (str_starts_with($relative, 'config/') && $relative !== 'config/version.php'))) continue;
@@ -112,6 +113,7 @@ foreach ($roots as $directory) {
     }
 }
 foreach ($single as $relative) {
+    if (preg_match('~(?:^|/)docs?(?:/|$)~i', $relative)) continue;
     if ($updating && !in_array($relative, ['think', 'composer.json', 'composer.lock', 'public/index.php', 'public/router.php'], true)) continue;
     if (is_file($root . '/' . $relative) && !is_link($root . '/' . $relative)) {
         $files[$relative] = hash_file('sha256', $root . '/' . $relative);
@@ -121,10 +123,11 @@ foreach ($single as $relative) {
 if ($mode === 'install') {
     $guide = $root . '/docs/安装说明.md';
     if (!is_file($guide) || is_link($guide)) throw new RuntimeException('完整安装包缺少安装说明');
-    $contents['README.md'] = str_replace(['(../deploy/', '(模板标签.md)', '(程序使用统计.md)'],
-        ['(deploy/', '(docs/模板标签.md)', '(docs/程序使用统计.md)'], (string) file_get_contents($guide));
+    $onlineDocs = 'https://github.com/yunzhanlin/feifeicms8.5/blob/main/docs/';
+    $contents['README.md'] = str_replace(['(../deploy/', '(模板标签.md)'],
+        ['(deploy/', '(' . $onlineDocs . '模板标签.md)'], (string) file_get_contents($guide));
     $files['README.md'] = hash('sha256', $contents['README.md']);
-    foreach (['public/install.php', 'database/schema-v2.sql', 'deploy/baota/thinkphp.conf', 'docs/模板标签.md'] as $required) {
+    foreach (['public/install.php', 'database/schema-v2.sql', 'deploy/baota/thinkphp.conf'] as $required) {
         if (!isset($files[$required])) throw new RuntimeException('完整安装包缺少文件：' . $required);
     }
 }
