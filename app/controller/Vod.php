@@ -20,6 +20,8 @@ use think\facade\Session;
 use think\response\Redirect;
 use think\response\View;
 
+require_once dirname(__DIR__) . '/service/CommentPresentation.php';
+
 final class Vod extends BaseController
 {
     public function __construct(
@@ -41,7 +43,7 @@ final class Vod extends BaseController
         $sources = $this->frontend->sources($this->sources($media));
         $related = Db::table('ffx_media')->where('status', 'published')->whereNull('deleted_at')->where('category_id', (int) $media->category_id)
             ->where('id', '<>', $id)->order('view_count', 'desc')->order('id', 'desc')->limit($this->settings->int('admin.content.related_limit', 12, 0, 50))->select()->toArray();
-        $comments = Db::table('ffx_comments')->where('target_type', 'media')->where('target_id', $id)->where('status', 'approved')->order('created_at', 'desc')->limit(20)->select()->toArray();
+        $comments = Db::table('ffx_comments')->where('target_type', 'media')->where('target_id', $id)->where('status', 'approved')->whereNull('deleted_at')->whereNull('parent_id')->order('created_at', 'desc')->limit(20)->select()->toArray();
         $scenarios = Db::table('ffx_scenarios')->where('media_id', $id)->where('status', 'published')->whereNull('deleted_at')->order('sort_order')->order('episode_no')->limit(6)->select()->toArray();
         $access = $this->mediaAccess->status($mediaData, \app\service\UserSession::id());
         $assets = array_values(array_filter(
@@ -179,14 +181,10 @@ final class Vod extends BaseController
         $html = '';
         $replyGroups = \app\service\CommentReplies::recent(array_column($comments, 'id'), 20, 'media');
         foreach ($comments as $comment) {
-            $name = htmlspecialchars((string) ($comment['author_name'] ?? '访客'), ENT_QUOTES, 'UTF-8');
-            $body = nl2br(htmlspecialchars((string) ($comment['content'] ?? ''), ENT_QUOTES, 'UTF-8'));
-            $time = htmlspecialchars((string) ($comment['created_at'] ?? ''), ENT_QUOTES, 'UTF-8');
-            $html .= '<article class="mx-comment-item"><strong>' . $name . '</strong><p>' . $body . '</p><small>' . $time . '</small></article>';
+            $html .= \app\service\CommentPresentation::html($comment);
             $replies = $replyGroups[(int) $comment['id']] ?? [];
             foreach ($replies as $reply) {
-                $html .= '<article class="mx-comment-item mx-comment-reply"><strong>' . htmlspecialchars((string) ($reply['author_name'] ?: '管理员'), ENT_QUOTES, 'UTF-8') . '</strong><p>'
-                    . nl2br(htmlspecialchars((string) $reply['content'], ENT_QUOTES, 'UTF-8')) . '</p><small>' . htmlspecialchars((string) $reply['created_at'], ENT_QUOTES, 'UTF-8') . '</small></article>';
+                $html .= \app\service\CommentPresentation::html($reply,true);
             }
         }
         return $html;

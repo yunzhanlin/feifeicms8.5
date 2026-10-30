@@ -13,6 +13,8 @@ use think\facade\Db;
 use think\facade\Session;
 use think\Response;
 
+require_once dirname(__DIR__) . '/service/CommentPresentation.php';
+
 final class Interaction extends BaseController
 {
     public function __construct(\think\App $app, private readonly CsrfToken $csrf, private readonly FrontendData $frontend, private readonly ResilientCache $cache, private readonly SiteSettings $settings, private readonly MediaAccess $mediaAccess) { parent::__construct($app); }
@@ -102,12 +104,11 @@ final class Interaction extends BaseController
     {
         $media = Db::table('ffx_media')->where('id', $id)->where('status', 'published')->whereNull('deleted_at')->find();
         if ($media === null) return response('影片不存在', 404);
-        $pager = Db::table('ffx_comments')->where('target_type', 'media')->where('target_id', $id)->where('status', 'approved')->whereNull('parent_id')->order('created_at', 'desc')
+        $pager = Db::table('ffx_comments')->where('target_type', 'media')->where('target_id', $id)->where('status', 'approved')->whereNull('deleted_at')->whereNull('parent_id')->order('created_at', 'desc')
             ->paginate(['list_rows' => $this->settings->int('admin.comments.page_size', 30, 1, 100), 'query' => $this->request->get()]);
         $html = '';
         foreach ($pager->items() as $comment) {
-            $html .= '<article class="mx-comment-item"><strong>' . htmlspecialchars((string) ($comment['author_name'] ?: '访客'), ENT_QUOTES, 'UTF-8') . '</strong><p>'
-                . nl2br(htmlspecialchars((string) $comment['content'], ENT_QUOTES, 'UTF-8')) . '</p><small>' . htmlspecialchars((string) $comment['created_at'], ENT_QUOTES, 'UTF-8') . '</small></article>';
+            $html .= \app\service\CommentPresentation::html($comment);
         }
         $vod = $this->frontend->vod($media);
         return view(ff_theme_view('vod/comments'), $this->frontend->shared((string) $media['title'] . ' 评论') + [

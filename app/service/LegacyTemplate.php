@@ -12,6 +12,8 @@ use think\facade\Db;
  * preserves that public template contract but translates it to the normalized
  * ffx_* schema.  Only named filters and whitelisted sort keys are accepted.
  */
+require_once __DIR__ . '/CommentPresentation.php';
+
 final class LegacyTemplate
 {
     public function __construct(private readonly FrontendData $frontend) {}
@@ -183,7 +185,9 @@ final class LegacyTemplate
             'forum_id' => (int) $row['id'], 'forum_cid' => (int) ($row['target_id'] ?? 0),
             'forum_pid' => (int) ($row['parent_id'] ?? 0), 'forum_title' => (string) ($row['title'] ?? ''),
             'forum_content' => (string) $row['content'], 'forum_name' => (string) ($row['author_name'] ?? '访客'),
-            'forum_addtime' => strtotime((string) $row['created_at']) ?: 0,
+            'forum_addtime' => CommentPresentation::timestamp((string) $row['created_at']),
+            'forum_face' => CommentPresentation::avatarUrl((string) ($row['author_avatar_url'] ?? '')),
+            'forum_avatar' => CommentPresentation::avatarUrl((string) ($row['author_avatar_url'] ?? '')),
         ], $query->order('created_at', 'desc')->order('id', 'desc')->limit($this->limit($p, 30))->select()->toArray());
     }
 

@@ -341,6 +341,7 @@ CREATE TABLE IF NOT EXISTS ffx_comments (
   title VARCHAR(255) NOT NULL DEFAULT '',
   content TEXT NOT NULL,
   author_name VARCHAR(100) NOT NULL DEFAULT '',
+  author_avatar_url VARCHAR(1000) NOT NULL DEFAULT '',
   ip_address VARCHAR(45) NULL,
   status VARCHAR(20) NOT NULL DEFAULT 'pending',
   is_pinned TINYINT(1) NOT NULL DEFAULT 0,
