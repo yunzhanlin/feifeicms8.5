@@ -28,7 +28,17 @@ final class LegacyUrlGenerator
     {
         $name = strtolower(trim($name, '/'));
         $suffix = $withSuffix ? $this->suffix() : '';
+        $id = max(0, (int) ($params['id'] ?? 0));
+        if ($name === 'person' && in_array($this->record('ffx_people', $id)['kind'] ?? '', ['role', 'character'], true)) {
+            $name = 'role';
+        }
+        if (in_array($name, ['role', 'role/read'], true)) {
+            $fallback = '/role/' . $id;
+        }
         if (!$this->settings->bool('admin.rewrite.url_rewrite', true)) {
+            if (in_array($name, ['person', 'star', 'star/read', 'role', 'role/read'], true)) {
+                return '/index.php?s=' . $fallback . $suffix;
+            }
             $actions = $this->actions($name, $params, false);
             return $actions === [] ? $fallback : '/index.php?s=/' . $this->thinkPath(end($actions) ?: '') . $suffix;
         }
@@ -91,9 +101,6 @@ final class LegacyUrlGenerator
         } elseif ($enrich && in_array($name, ['special', 'special/read'], true)) {
             $topic = $this->record('ffx_topics', $id);
             $slug = $slug ?: $this->clean((string) ($topic['slug'] ?? ''));
-        } elseif ($enrich && in_array($name, ['person', 'star', 'star/read', 'role', 'role/read'], true)) {
-            $person = $this->record('ffx_people', $id);
-            $slug = $slug ?: $this->clean((string) ($person['slug'] ?? ''));
         }
 
         return match ($name) {

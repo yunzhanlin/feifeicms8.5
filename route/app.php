@@ -35,8 +35,8 @@ Route::get('news/read/id/:id', 'News/detail')->pattern(['id' => '\\d+']);
 Route::get('news/read/id/:id.html', 'News/detail')->pattern(['id' => '\\d+']);
 Route::get('special/:id', 'Special/detail')->pattern(['id' => '\\d+']);
 Route::get('special/read/id/:id', 'Special/detail')->pattern(['id' => '\\d+']);
-Route::get('star/:id', 'Person/detail')->pattern(['id' => '\\d+']);
-Route::get('role/:id', 'Person/detail')->pattern(['id' => '\\d+']);
+Route::get('star/:id', 'Person/detail')->append(['section' => 'star'])->pattern(['id' => '\\d+']);
+Route::get('role/:id', 'Person/detail')->append(['section' => 'role'])->pattern(['id' => '\\d+']);
 Route::get('vod/read/id/:id', 'Vod/detail')->pattern(['id' => '\\d+'])->middleware(SessionInit::class);
 Route::get('vod/read/id/:id.html', 'Vod/detail')->pattern(['id' => '\\d+'])->middleware(SessionInit::class);
 Route::get('vod/play/id/:id/sid/:sid/pid/:pid', 'Vod/play')
@@ -49,8 +49,8 @@ foreach (['htm', 'shtml', 'shtm'] as $legacySuffix) {
     Route::get('news/:id.' . $legacySuffix, 'News/detail')->pattern(['id' => '\\d+']);
     Route::get('news/read/id/:id.' . $legacySuffix, 'News/detail')->pattern(['id' => '\\d+']);
     Route::get('special/:id.' . $legacySuffix, 'Special/detail')->pattern(['id' => '\\d+']);
-    Route::get('star/:id.' . $legacySuffix, 'Person/detail')->pattern(['id' => '\\d+']);
-    Route::get('role/:id.' . $legacySuffix, 'Person/detail')->pattern(['id' => '\\d+']);
+    Route::get('star/:id.' . $legacySuffix, 'Person/detail')->append(['section' => 'star'])->pattern(['id' => '\\d+']);
+    Route::get('role/:id.' . $legacySuffix, 'Person/detail')->append(['section' => 'role'])->pattern(['id' => '\\d+']);
     Route::get('vod/:id.' . $legacySuffix, 'Vod/detail')->pattern(['id' => '\\d+'])->middleware(SessionInit::class);
     Route::get('vod/read/id/:id.' . $legacySuffix, 'Vod/detail')->pattern(['id' => '\\d+'])->middleware(SessionInit::class);
     Route::get('play/:id/:sid/:pid.' . $legacySuffix, 'Vod/play')

@@ -6,6 +6,7 @@ namespace app\controller;
 use app\BaseController;
 use app\model\Media;
 use app\service\MediaUrlGuard;
+use app\service\LegacyUrlGenerator;
 use app\service\FrontendData;
 use app\service\CsrfToken;
 use app\service\SiteSettings;
@@ -157,6 +158,7 @@ final class Vod extends BaseController
 
         $actors = $roles = [];
         foreach ($rows as $index => $row) {
+            LegacyUrlGenerator::prime('ffx_people', $row);
             $name = mb_strtolower(trim($row['name']));
             $counterpart = mb_strtolower(trim($row['character_name']));
             if ($name === '' || $counterpart === '') continue;

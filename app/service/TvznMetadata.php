@@ -31,6 +31,37 @@ final class TvznMetadata
         return array_slice(array_values($results), 0, 15);
     }
 
+    /** @return array<string, string> */
+    public function profile(string $id): array
+    {
+        if (!preg_match('/^[1-9]\d{0,9}$/D', $id)) throw new RuntimeException('TVZN 人物 ID 无效');
+        $path = '/person/' . $id . '.html';
+        $page = $this->page($path);
+        if (self::text($page->evaluate('string(//*[@id="person-name"])')) === '') {
+            throw new RuntimeException('TVZN 未返回有效的演员档案');
+        }
+        $facts = [];
+        foreach ($page->query('//*[' . self::hasClass('person-facts') . ']//dt') as $term) {
+            $facts[self::text($term->textContent)] = self::text($page->evaluate('string(following-sibling::*[1][self::dd])', $term));
+        }
+
+        $intro = $page->query('//*[@aria-labelledby="person-biography-title"]//*[' . self::hasClass('person-rich') . ']')->item(0);
+        $photo = $page->evaluate('string((//img[' . self::hasClass('person-hero__portrait') . ']/@src)[1])');
+        if (str_starts_with($photo, 'http://img.tvzn.com/')) $photo = 'https://' . substr($photo, 7);
+        return [
+            'aliases' => $facts['别名'] ?? '',
+            'gender' => $facts['性别'] ?? '',
+            'birthday' => $facts['生日'] ?? '',
+            'profession' => $facts['职业'] ?? '',
+            'nationality' => $facts['国籍'] ?? '',
+            'native_place' => $facts['籍贯'] ?? '',
+            'school' => $facts['毕业院校'] ?? '',
+            'avatar_url' => $this->photo($photo),
+            'biography' => $intro === null ? '' : self::text($intro->textContent),
+            'source_url' => self::ORIGIN . $path,
+        ];
+    }
+
     public function preview(string $id, bool $plots, bool $cast): array
     {
         $deadline = microtime(true) + 40;
@@ -134,9 +165,7 @@ final class TvznMetadata
         $id = self::matched($person->getAttribute('href'), '~^/person/([1-9]\d{0,9})\.html$~D');
         if ($name === '' || $id === '') return;
         if (preg_match('/^[-*－—\s]+$/uD', $intro)) $intro = '';
-        if (str_starts_with($photo, '//')) $photo = 'https:' . $photo;
-        if (str_starts_with($photo, '/') && !str_starts_with($photo, '//')) $photo = self::ORIGIN . $photo;
-        if (!preg_match('~^https://(?:[a-z0-9-]+\.)*(?:tvzn\.com|myqcloud\.com)/[^\s]+$~iD', $photo)) $photo = '';
+        $photo = $this->photo($photo);
         $key = $id . '/' . $role;
         $existing = $actors[$key] ?? [];
         $actors[$key] = [
@@ -146,6 +175,14 @@ final class TvznMetadata
             'character_bio' => mb_substr($intro !== '' ? $intro : ($existing['character_bio'] ?? ''), 0, 3500),
             'photo' => $photo !== '' ? $photo : ($existing['photo'] ?? ''),
         ];
+    }
+
+    private function photo(string $photo): string
+    {
+        if (str_starts_with($photo, '//')) $photo = 'https:' . $photo;
+        if (str_starts_with($photo, '/') && !str_starts_with($photo, '//')) $photo = self::ORIGIN . $photo;
+        if (!preg_match('~^https://(?:[a-z0-9-]+\.)*(?:tvzn\.com|myqcloud\.com)/[^\s]+$~iD', $photo)) $photo = '';
+        return $photo;
     }
 
     private function paragraphs(DOMXPath $page, DOMElement $body): string
