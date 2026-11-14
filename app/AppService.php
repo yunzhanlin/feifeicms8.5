@@ -10,11 +10,6 @@ use think\Service;
  */
 class AppService extends Service
 {
-    public function register()
-    {
-        // 服务注册
-    }
-
     public function boot()
     {
         // Keep working with an older authoritative Composer map during upgrades.

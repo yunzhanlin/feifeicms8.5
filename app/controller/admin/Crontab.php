@@ -39,7 +39,8 @@ final class Crontab extends BaseController
     {
         $this->guardCsrf();
         $name = mb_substr(trim((string) $this->request->post('name', '')), 0, 255);
-        $sourceId = max(1, (int) $this->request->post('source_id', 0));
+        $sourceId = (int) $this->request->post('source_id', 0);
+        if ($sourceId < 1) throw new HttpException(422, '请选择有效的资源库');
         if ($name === '') throw new HttpException(422, '任务名不能为空');
         try {
             $schedule = $this->schedule->normalize(

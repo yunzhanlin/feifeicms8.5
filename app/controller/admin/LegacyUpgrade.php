@@ -29,9 +29,10 @@ final class LegacyUpgrade extends BaseController
     {
         $database = (array) config('database.connections.mysql');
         $manifest = require root_path() . 'app/plugin/Legacy43/manifest.php';
-        return view('/admin/tools/legacy_upgrade', [
+        $modules = $this->migrator->modules();
+        $response = view('/admin/tools/legacy_upgrade', [
             'manifest' => $manifest,
-            'modules' => $this->migrator->modules(),
+            'modules' => $modules,
             'defaults' => [
                 'host' => (string) ($database['hostname'] ?? '127.0.0.1'),
                 'port' => (string) ($database['hostport'] ?? '3306'),
@@ -40,6 +41,24 @@ final class LegacyUpgrade extends BaseController
             ],
             'csrf' => $this->csrf->get(),
         ]);
+
+        // The existing view's volist exposes a one-based counter in both attributes.
+        $moduleKeys = array_keys($modules);
+        $html = preg_replace_callback('~<tr data-module="(\d+)">.*?</tr>~s', static function (array $match) use ($moduleKeys): string {
+            $module = $moduleKeys[(int) $match[1] - 1] ?? '';
+            if ($module === '') return $match[0];
+            return preg_replace_callback(
+                '~(data-module="|name="modules\[\]" value=")\d+(")~',
+                static fn (array $attribute): string => $attribute[1] . $module . $attribute[2],
+                $match[0]
+            );
+        }, $response->getContent());
+        $response->content($html);
+        if (preg_match('~<script>(\s*\(\(\) => \{\s*const form = document\.getElementById\(\'legacy-upgrade-form\'\);.*?)</script>~s', $html, $script)) {
+            $body = str_replace(["\r\n", "\r"], "\n", $script[1]);
+            $this->request->withMiddleware(['legacy_upgrade_script_hash' => base64_encode(hash('sha256', $body, true))]);
+        }
+        return $response;
     }
 
     public function preflight(): Response

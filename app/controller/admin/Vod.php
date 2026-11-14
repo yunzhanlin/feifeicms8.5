@@ -16,7 +16,6 @@ use app\service\FrontendCache;
 use app\service\MediaMerge;
 use app\service\PlaybackPlayerRegistry;
 use app\service\PlaybackEditor;
-use app\service\Slugger;
 use app\service\SiteSettings;
 use think\exception\HttpException;
 use think\facade\Db;
@@ -29,7 +28,6 @@ final class Vod extends BaseController
         \think\App $app,
         private readonly CsrfToken $csrf,
         private readonly AuditLogger $audit,
-        private readonly Slugger $slugger,
         private readonly CollectionSourceIdentity $sourceIdentity,
         private readonly DoubanMetadata $douban,
         private readonly SiteSettings $settings,
@@ -620,29 +618,43 @@ final class Vod extends BaseController
 
         Db::table('ffx_media_tags')->where('media_id', $mediaId)->delete();
         $tagNames = preg_split('/[,\x{FF0C}\n]+/u', (string) $this->request->post('tags', ''), -1, PREG_SPLIT_NO_EMPTY) ?: [];
-        foreach (array_slice(array_values(array_unique(array_filter(array_map('trim', $tagNames)))), 0, 30) as $tagName) {
-            $tagName = mb_substr($tagName, 0, 100);
+        $tagIds = [];
+        $tagNames = array_values(array_filter(array_map('trim', $tagNames)));
+        foreach (array_unique(array_map(static fn (string $name): string => mb_substr($name, 0, 100), $tagNames)) as $tagName) {
+            if (count($tagIds) >= 30) break;
             $tagSlug = 'tag-' . substr(hash('sha256', mb_strtolower($tagName)), 0, 32);
             $tag = Db::table('ffx_tags')->where('scope', 'media')->where('slug', $tagSlug)->find();
             $tagId = $tag === null
                 ? Db::table('ffx_tags')->insertGetId(['scope' => 'media', 'name' => $tagName, 'slug' => $tagSlug, 'created_at' => gmdate('Y-m-d H:i:s')])
                 : (int) $tag['id'];
-            Db::table('ffx_media_tags')->insert(['media_id' => $mediaId, 'tag_id' => $tagId]);
+            $tagIds[(int) $tagId] = ['media_id' => $mediaId, 'tag_id' => $tagId];
         }
 
+        if ($tagIds !== []) Db::table('ffx_media_tags')->insertAll(array_values($tagIds));
+
         Db::table('ffx_media_people')->where('media_id', $mediaId)->delete();
+        $credits = [];
         $lines = preg_split('/\r?\n/', (string) $this->request->post('credits', ''), -1, PREG_SPLIT_NO_EMPTY) ?: [];
         foreach ($lines as $sort => $line) {
             $parts = array_map('trim', explode('|', $line, 3));
             $personId = (int) ($parts[0] ?? 0);
             $creditType = mb_substr($parts[1] ?? 'actor', 0, 30);
             $character = mb_substr($parts[2] ?? '', 0, 255);
-            if ($personId > 0 && Db::table('ffx_people')->where('id', $personId)->whereNull('deleted_at')->count() > 0) {
-                Db::table('ffx_media_people')->insert([
-                    'media_id' => $mediaId, 'person_id' => $personId, 'credit_type' => $creditType !== '' ? $creditType : 'actor',
-                    'character_name' => $character, 'sort_order' => $sort,
-                ]);
-            }
+            if ($personId < 1) continue;
+            $credits[$personId][] = [
+                'media_id' => $mediaId, 'person_id' => $personId, 'credit_type' => $creditType !== '' ? $creditType : 'actor',
+                'character_name' => $character, 'sort_order' => $sort,
+            ];
+        }
+        if ($credits === []) return;
+
+        $people = Db::table('ffx_people')->whereIn('id', array_keys($credits))->whereNull('deleted_at')->column('id');
+        $rows = [];
+        foreach ($people as $personId) array_push($rows, ...$credits[(int) $personId]);
+        usort($rows, static fn (array $left, array $right): int => $left['sort_order'] <=> $right['sort_order']);
+        foreach (array_chunk($rows, 200) as $chunk) {
+            // The database collation also treats case and accent variants as duplicate.
+            Db::table('ffx_media_people')->duplicate(['media_id' => Db::raw('media_id')])->insertAll($chunk);
         }
     }
 

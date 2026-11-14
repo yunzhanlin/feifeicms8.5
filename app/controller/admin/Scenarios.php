@@ -69,10 +69,7 @@ final class Scenarios extends BaseController
         $this->guardCsrf();
         $media = $this->requireMedia($mediaId);
         $current = Db::table('ffx_scenarios')->where('media_id', $mediaId)->whereNull('deleted_at')->order('id')->select()->toArray();
-        $currentById = [];
-        foreach ($current as $row) {
-            $currentById[(int) $row['id']] = $row;
-        }
+        $currentById = array_column($current, null, 'id');
 
         $rows = $this->scenarioRowsPayload();
         if ($rows === []) {
@@ -82,9 +79,6 @@ final class Scenarios extends BaseController
         $seenEpisodes = [];
         $normalized = [];
         foreach ($rows as $row) {
-            if (!is_array($row)) {
-                continue;
-            }
             $id = max(0, (int) ($row['id'] ?? 0));
             $delete = !empty($row['delete']);
             if ($id > 0) {
@@ -127,7 +121,20 @@ final class Scenarios extends BaseController
 
         $now = gmdate('Y-m-d H:i:s');
         $created = $updated = $deleted = 0;
-        Db::transaction(function () use ($normalized, $mediaId, $now, &$created, &$updated, &$deleted): void {
+        Db::transaction(function () use ($normalized, $mediaId, $now, $current, $seenEpisodes, &$created, &$updated, &$deleted): void {
+            $this->requireMedia($mediaId, true);
+            $rows = Db::table('ffx_scenarios')->where('media_id', $mediaId)->order('id')->lock(true)->select()->toArray();
+            $active = array_values(array_filter($rows, static fn (array $row): bool => $row['deleted_at'] === null));
+            if ($active !== $current) throw new HttpException(409, '分集剧情已发生变化，请刷新后重试');
+            $occupied = $seenEpisodes;
+            foreach ($rows as $row) {
+                $episode = (int) $row['episode_no'];
+                if ($row['deleted_at'] !== null && isset($seenEpisodes[$episode])) {
+                    throw new HttpException(422, '第' . $episode . '集已存在归档剧情');
+                }
+                $occupied[$episode] = true;
+            }
+
             foreach ($normalized as $row) {
                 $id = (int) $row['id'];
                 if ($id > 0 && $row['delete']) {
@@ -137,12 +144,13 @@ final class Scenarios extends BaseController
             }
             // Move existing episode numbers out of the normal range first. This
             // permits swaps such as episode 1 <-> 2 without tripping the unique key.
+            $temporary = 4294967295;
             foreach ($normalized as $row) {
                 $id = (int) $row['id'];
-                if ($id > 0 && !$row['delete']) {
-                    Db::table('ffx_scenarios')->where('id', $id)->where('media_id', $mediaId)
-                        ->update(['episode_no' => 1000000 + $id]);
-                }
+                if ($id < 1 || $row['delete']) continue;
+                while (isset($occupied[$temporary])) --$temporary;
+                Db::table('ffx_scenarios')->where('id', $id)->where('media_id', $mediaId)
+                    ->update(['episode_no' => $temporary--]);
             }
             foreach ($normalized as $row) {
                 $id = (int) $row['id'];
@@ -221,9 +229,8 @@ final class Scenarios extends BaseController
     {
         $this->guardCsrf();
         $before = $this->requireScenario($id);
-        $data = ['status' => 'archived', 'deleted_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s')];
         Db::table('ffx_scenarios')->where('id', $id)->delete();
-        $this->audit->record('scenario.delete', 'scenario', $id, $before, $data);
+        $this->audit->record('scenario.delete', 'scenario', $id, $before);
         return redirect('/admin/scenarios/media/' . (int) $before['media_id']);
     }
 
@@ -258,12 +265,13 @@ final class Scenarios extends BaseController
         if ((int) $data['media_id'] < 1 || Db::table('ffx_media')->where('id', (int) $data['media_id'])->whereNull('deleted_at')->count() !== 1) {
             return '请选择有效影片';
         }
+        if ($data['episode_no'] > 4294967295) return '分集集数超出范围';
         return trim((string) $data['content']) === '' ? '分集剧情内容不能为空' : null;
     }
 
     private function episodeExists(int $mediaId, int $episodeNo, int $exceptId = 0): bool
     {
-        $query = Db::table('ffx_scenarios')->where('media_id', $mediaId)->where('episode_no', $episodeNo)->whereNull('deleted_at');
+        $query = Db::table('ffx_scenarios')->where('media_id', $mediaId)->where('episode_no', $episodeNo);
         if ($exceptId > 0) {
             $query->where('id', '<>', $exceptId);
         }
@@ -312,9 +320,9 @@ final class Scenarios extends BaseController
     }
 
     /** @return array<string, mixed> */
-    private function requireMedia(int $mediaId): array
+    private function requireMedia(int $mediaId, bool $lock = false): array
     {
-        $media = Db::table('ffx_media')->where('id', $mediaId)->whereNull('deleted_at')
+        $media = Db::table('ffx_media')->where('id', $mediaId)->whereNull('deleted_at')->lock($lock)
             ->field('id,title,episode_total,status')->find();
         if ($media === null) {
             throw new HttpException(404, '影片不存在');

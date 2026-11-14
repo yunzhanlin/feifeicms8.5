@@ -9,7 +9,6 @@ use app\service\CsrfToken;
 use app\service\SiteSettings;
 use app\service\LegacyTemplate;
 use think\facade\Db;
-use think\facade\Session;
 use think\response\View;
 use think\Response;
 

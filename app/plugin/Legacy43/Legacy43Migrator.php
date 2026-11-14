@@ -63,14 +63,15 @@ final class Legacy43Migrator
         if (!isset(self::MODULES[$module])) throw new \InvalidArgumentException('未知迁移模块。');
         $definition = self::MODULES[$module];
         $offsetCursor = $module === 'tags';
+        $cursor = max(0, $cursor);
         $rows = $offsetCursor
-            ? $source->offsetBatch($definition['table'], max(0, $cursor), $limit)
-            : $source->batch($definition['table'], $definition['id'], max(0, $cursor), $limit);
-        $stats = ['module' => $module, 'label' => $definition['label'], 'cursor' => max(0, $cursor), 'processed' => 0, 'created' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => 0, 'done' => count($rows) < max(1, min(500, $limit)), 'messages' => []];
-        foreach ($rows as $rowIndex => $row) {
+            ? $source->offsetBatch($definition['table'], $cursor, $limit)
+            : $source->batch($definition['table'], $definition['id'], $cursor, $limit);
+        $stats = ['module' => $module, 'label' => $definition['label'], 'cursor' => $offsetCursor ? $cursor + count($rows) : $cursor, 'processed' => 0, 'created' => 0, 'updated' => 0, 'skipped' => 0, 'errors' => 0, 'done' => count($rows) < max(1, min(500, $limit)), 'messages' => []];
+        foreach ($rows as $row) {
             $legacyId = (int) ($row[$definition['id']] ?? 0);
             if ($legacyId < 1) continue;
-            $stats['cursor'] = $offsetCursor ? $cursor + $rowIndex + 1 : max($stats['cursor'], $legacyId);
+            if (!$offsetCursor) $stats['cursor'] = max($stats['cursor'], $legacyId);
             $stats['processed']++;
             if ($dryRun) { $stats['skipped']++; continue; }
             try {
@@ -574,14 +575,6 @@ final class Legacy43Migrator
     private function hasCreatedAt(string $table): bool
     {
         return !in_array($table, ['ffx_navigation', 'ffx_slides', 'ffx_links'], true);
-    }
-
-    /** @param array<string,mixed> $legacy */
-    private function saveRawMap(string $entity, int $legacyId, int $newId, array $legacy): string
-    {
-        $existing = $this->mappedId($entity, $legacyId);
-        $this->writeMap($entity, $legacyId, $newId, $this->checksum($legacy));
-        return $existing > 0 ? 'updated' : 'created';
     }
 
     /** @param array<string,mixed> $legacy */
