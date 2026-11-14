@@ -26,7 +26,7 @@ final class AdminAuthorization
         $parts = preg_split('/[.\\\\\/]/', strtolower($controller));
         return match (end($parts)) {
             'dashboard', 'login' => 'dashboard.view',
-            'vod', 'vodtools', 'playback', 'scenarios', 'tags' => 'media.manage',
+            'vod', 'vodtools', 'playback', 'scenarios', 'dramametadata', 'tags' => 'media.manage',
             'categories' => 'category.manage',
             'content' => 'content.manage',
             'users', 'comments', 'danmaku' => 'user.manage',

@@ -1,5 +1,5 @@
 {include file="admin/layout/header" /}
-<div class="title"><div class="tabs"><a class="active" href="/admin/scenarios/media/{$media.id}">按视频管理剧情</a><a href="/admin/vod/{$media.id}/edit">编辑视频资料</a></div><div class="right"><a href="/admin/scenarios">返回剧情管理</a></div></div>
+<div class="title"><div class="tabs"><a class="active" href="/admin/scenarios/media/{$media.id}">按视频管理剧情</a><a href="/admin/vod/{$media.id}/edit">编辑视频资料</a><a href="/admin/vod-tools/drama-metadata?media_id={$media.id}">采集剧情、演员与角色</a></div><div class="right"><a href="/admin/scenarios">返回剧情管理</a></div></div>
 {if $message != ''}<div class="notice success scenario-manage-notice">{$message|htmlspecialchars|raw}</div>{/if}
 <div class="scenario-media-summary"><strong>[{$media.id}] {$media.title|htmlspecialchars|raw}</strong><span>当前剧情 {$items|count} 集{if $media.episode_total}，视频设定共 {$media.episode_total} 集{/if}</span><span>在同一页修改后，点击底部“保存全部剧情”。</span></div>
 <form method="post" action="/admin/scenarios/media/{$media.id}" class="scenario-batch-form" data-scenario-batch-form>

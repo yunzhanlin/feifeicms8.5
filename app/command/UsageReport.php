@@ -9,7 +9,7 @@ final class UsageReport extends Command
 {
     protected function configure(): void
     {
-        $this->setName('feifei:usage:report')->setDescription('每天最多一次匿名程序版本统计；USAGE_REPORTING=false 可关闭');
+        $this->setName('feifei:usage:report')->setDescription('每天最多一次程序版本统计；可在后台全局配置或环境变量中关闭');
     }
 
     protected function execute(Input $input, Output $output): int

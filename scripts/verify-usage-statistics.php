@@ -47,9 +47,9 @@ try {
     $check($store->summary($now)['php'][0]['label'] === '未提供', 'Optional environment data can be withdrawn');
     $payload['domain'] = 'must-not-be-stored.example';
     try { Statistics::validate($payload); $valid = true; } catch (InvalidArgumentException) { $valid = false; }
-    $check(!$valid, 'Domain and all unknown fields rejected'); unset($payload['domain']);
+    $check(!$valid, 'Legacy schema rejects domain and unknown fields'); unset($payload['domain']);
     $all = json_encode($store->db->query('SELECT * FROM installations')->fetchAll());
-    $check(!str_contains($all, '192.0.2.1') && !str_contains($all, 'example'), 'No raw address/domain fields retained');
+    $check(!str_contains($all, '192.0.2.1') && !str_contains($all, 'example'), 'Legacy heartbeats leave domain and address unset');
     for ($i = 0; $i < 31; $i++) {
         $p = $payload; $p['installation_id'] = sprintf('%08x-1111-4111-8111-111111111111', $i + 100);
         $accepted = $store->receive($p, '192.0.2.200', $now);
@@ -78,9 +78,18 @@ try {
     $check($request('/v1/heartbeat')[0] === 405, 'Heartbeat rejects GET');
     $check($request('/v1/heartbeat', '{}', 'text/plain')[0] === 415, 'Heartbeat content type enforced');
     $check($request('/v1/heartbeat', '{')[0] === 422, 'Malformed JSON rejected');
-    $check($request('/v1/heartbeat', json_encode($payload + ['domain'=>'example.test']))[0] === 422, 'Domain rejected over HTTP');
+    $check($request('/v1/heartbeat', json_encode($payload + ['domain'=>'example.test']))[0] === 422, 'Legacy schema rejects domain over HTTP');
     $check($request('/v1/heartbeat', str_repeat('x', 2049))[0] === 413, 'Oversized body rejected');
-    $check($request('/v1/heartbeat', json_encode($payload))[0] === 200, 'Real HTTP heartbeat acknowledged');
+    $check($request('/v1/heartbeat', json_encode($payload))[0] === 200, 'Legacy HTTP heartbeat acknowledged');
+    $v2 = array_replace($payload, ['schema' => 2, 'domain' => 'Install.Example']);
+    $check($request('/v1/heartbeat', json_encode($v2 + ['ip' => '192.0.2.8']))[0] === 422, 'Client cannot supply an IP');
+    $check($request('/v1/heartbeat', json_encode(array_replace($v2, ['domain' => 'http://example.com/'])))[0] === 422, 'Domain must be a hostname');
+    [$status, $body] = $request('/v1/heartbeat', json_encode($v2));
+    $check($status === 200 && json_decode($body, true)['schema'] === 2, 'Version 2 heartbeat acknowledged');
+    $found = $store->installations(1, 'install.example');
+    $check($found['total'] === 1 && $found['items'][0]['ip'] === '127.0.0.1', 'Domain and connection IP stored');
+    $check($request('/v1/heartbeat', json_encode($payload))[0] === 200 && $store->installations(1, 'install.example')['total'] === 1,
+        'Legacy update preserves domain and address');
     [$status,$page] = $request('/');
     preg_match('/name="_token" value="([^"]+)"/', $page, $match); $token = $match[1] ?? '';
     $check($status === 200 && $token !== '', 'Login form and CSRF token');
@@ -89,7 +98,7 @@ try {
     preg_match('/密码：([^\n]+)/u', $credentials, $match); $password = $match[1];
     $check($request('/login', http_build_query(['_token'=>$token,'username'=>'admin','password'=>$password]), 'application/x-www-form-urlencoded')[0] === 303, 'Real administrator login');
     [$status,$page] = $request('/');
-    $check($status === 200 && str_contains($page, '近 30 天活跃') && !str_contains($page, $id), 'Dashboard shows aggregate data only');
+    $check($status === 200 && str_contains($page, '近 30 天活跃') && str_contains($page, $id) && str_contains($page, 'install.example'), 'Authenticated dashboard shows installation domain, IP and ID');
     $check($request('/api/summary')[0] === 200, 'Authenticated summary available');
     $check($request('/logout', http_build_query(['_token'=>$token]), 'application/x-www-form-urlencoded')[0] === 303, 'Logout succeeds');
     $check($request('/api/summary')[0] === 401, 'Logout revokes access');
@@ -127,6 +136,9 @@ try {
         };
         $expire();
         $clientEnv['PHP_USAGE_ENDPOINT'] = $base . '/v1/heartbeat';
+        $db->exec("INSERT INTO ffx_site_settings (setting_key, setting_value, is_public) VALUES ('admin.base.usage_reporting', '0', 0)");
+        $check(str_contains($send($clientEnv), 'disabled'), 'Admin switch stops command reporting');
+        $db->exec("DELETE FROM ffx_site_settings WHERE setting_key='admin.base.usage_reporting'");
         $socket=stream_socket_server('tcp://127.0.0.1:0');$cmsAddress=stream_socket_get_name($socket,false);fclose($socket);
         $cmsProcess=proc_open([PHP_BINARY,'-S',$cmsAddress,'-t',$cms.'/public',$cms.'/public/router.php'],
             [0=>['file','/dev/null','r'],1=>['file',$work.'/cms.log','a'],2=>['file',$work.'/cms.log','a']],$pipes,$cms,$clientEnv);
@@ -138,7 +150,7 @@ try {
         curl_setopt($cmsCurl,CURLOPT_URL,'http://'.$cmsAddress.'/admin.php');$html=curl_exec($cmsCurl);
         $check(curl_getinfo($cmsCurl,CURLINFO_RESPONSE_CODE)===200 && is_string($html), 'CMS login page renders with heartbeat hook');
         $query=$store->db->prepare('SELECT source FROM installations WHERE id=?');$query->execute([$state['id']]);
-        $check($query->fetchColumn()==='web', 'Real CMS HTTP completion sends anonymous heartbeat');
+        $check($query->fetchColumn()==='web', 'Real CMS HTTP completion sends installation heartbeat');
         proc_terminate($cmsProcess);proc_close($cmsProcess);$cmsProcess=null;
 
         $expire();
@@ -152,7 +164,7 @@ try {
         $check($failure['id']===$state['id'] && $failure['next_attempt']>time() && $failure['failures']===1, 'Failure preserves identity and applies retry backoff');
 
         $expire();
-        file_put_contents($work.'/slow.php', '<?php usleep(1700000); header("Content-Type: application/json"); echo \'{"ok":true,"schema":1}\';');
+        file_put_contents($work.'/slow.php', '<?php usleep(1700000); header("Content-Type: application/json"); echo \'{"ok":true,"schema":2}\';');
         $socket=stream_socket_server('tcp://127.0.0.1:0');$slowAddress=stream_socket_get_name($socket,false);fclose($socket);
         $slowProcess=proc_open([PHP_BINARY,'-S',$slowAddress,$work.'/slow.php'],[0=>['file','/dev/null','r'],1=>['file',$work.'/slow.log','a'],2=>['file',$work.'/slow.log','a']],$pipes,$work);
         for($i=0;$i<100;$i++){$probe=@stream_socket_client('tcp://'.$slowAddress,$errno,$error,.1);if($probe){fclose($probe);break;}usleep(20000);}

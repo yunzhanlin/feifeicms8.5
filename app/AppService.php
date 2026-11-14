@@ -25,6 +25,10 @@ class AppService extends Service
         require_once __DIR__ . '/service/UsageReporting.php';
         require_once __DIR__ . '/command/UsageReport.php';
         $this->commands([\app\command\UsageReport::class]);
+        require_once __DIR__ . '/service/TvznMetadata.php';
+        require_once __DIR__ . '/service/TmdbMetadata.php';
+        require_once __DIR__ . '/service/DramaMetadataImporter.php';
+        require_once __DIR__ . '/controller/admin/DramaMetadata.php';
         $this->app->event->listen(\think\event\HttpEnd::class, function (\think\Response $response): void {
             if ($response->getCode() >= 400) return;
             $path = strtolower(trim($this->app->request->pathinfo(), '/'));

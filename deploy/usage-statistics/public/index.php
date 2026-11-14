@@ -36,7 +36,7 @@ try {
         try { $payload = Statistics::validate(json_decode($body, true, 16, JSON_THROW_ON_ERROR)); }
         catch (\InvalidArgumentException | \JsonException) { jsonReply(422, ['ok' => false]); }
         if (!$store->receive($payload, $address)) { header('Retry-After: 3600'); jsonReply(429, ['ok' => false]); }
-        jsonReply(200, ['ok' => true, 'schema' => 1]);
+        jsonReply(200, ['ok' => true, 'schema' => $payload['schema']]);
     }
     if (!in_array($path, ['/', '/login', '/logout', '/api/summary'], true)) jsonReply(404, ['ok' => false]);
     if (!in_array($method, ['GET','POST'], true) || ($path !== '/' && $path !== '/api/summary' && $method !== 'POST') || (($path === '/' || $path === '/api/summary') && $method !== 'GET')) jsonReply(405, ['ok' => false]);
@@ -63,6 +63,8 @@ try {
         jsonReply(200, ['ok' => true, 'data' => $store->summary()]);
     }
     $summary = $authenticated ? $store->summary() : null;
+    $search = is_string($_GET['q'] ?? null) ? substr(trim($_GET['q']), 0, 253) : '';
+    $installations = $authenticated ? $store->installations((int) ($_GET['page'] ?? 1), $search) : null;
 } catch (\Throwable) { jsonReply(503, ['ok' => false, 'error' => 'Service unavailable']); }
 header('Content-Type: text/html; charset=utf-8');
 ?>
@@ -77,10 +79,22 @@ header('Content-Type: text/html; charset=utf-8');
 <form method="post" action="/login"><input type="hidden" name="_token" value="<?= escape($_SESSION['csrf']) ?>">
 <label>账号<input name="username" autocomplete="username" required></label><label>密码<input name="password" type="password" autocomplete="current-password" required></label><button>登录统计面板</button></form></section>
 <?php else: ?>
-<header><div><h1>FeiFeiCMS 程序使用统计</h1><p>匿名安装实例与版本分布</p></div><form method="post" action="/logout"><input type="hidden" name="_token" value="<?= escape($_SESSION['csrf']) ?>"><button>退出</button></form></header>
+<header><div><h1>FeiFeiCMS 程序使用统计</h1><p>安装实例与版本分布</p></div><form method="post" action="/logout"><input type="hidden" name="_token" value="<?= escape($_SESSION['csrf']) ?>"><button>退出</button></form></header>
 <div class="cards"><?php foreach (['total'=>'累计使用实例','active_7d'=>'近 7 天活跃','active_30d'=>'近 30 天活跃','new_7d'=>'近 7 天新增'] as $key=>$label): ?><div class="card"><span class="muted"><?= escape($label) ?></span><strong class="number"><?= number_format($summary['counts'][$key]) ?></strong></div><?php endforeach; ?></div>
 <section><h2>最近 30 天每日活跃实例 <span class="muted">UTC</span></h2><div class="chart" role="img" aria-label="最近 30 天每日活跃安装数柱状图">
 <?php $max = max(1, ...array_column($summary['days'], 'count')); foreach ($summary['days'] as $day): ?><div class="bar" style="height:<?= max(1, (int) round($day['count'] / $max * 100)) ?>%" title="<?= escape($day['day'] . '：' . $day['count']) ?>"><span><?= $day['count'] ?></span></div><?php endforeach; ?></div><div class="dates"><span><?= escape($summary['days'][0]['day']) ?></span><span><?= escape($summary['days'][29]['day']) ?></span></div></section>
 <div class="columns"><?php foreach (['versions'=>'程序版本','php'=>'PHP 版本'] as $key=>$label): ?><section><h2><?= escape($label) ?> <span class="muted">近 30 天活跃</span></h2><table><thead><tr><th>版本</th><th>实例数</th></tr></thead><tbody><?php foreach ($summary[$key] as $row): ?><tr><td><?= escape($row['label']) ?></td><td><?= (int) $row['count'] ?></td></tr><?php endforeach; ?><?php if ($summary[$key] === []): ?><tr><td colspan="2">暂无数据</td></tr><?php endif; ?></tbody></table></section><?php endforeach; ?></div>
-<footer>按随机安装 ID 去重，不代表独立人数。同一人的多个安装分别计数；关闭上报、未升级或离线的实例无法纳入。不采集域名、站名、账号、内容或访客信息。页面数据生成于 <?= escape($summary['generated_at']) ?>。</footer>
+<section id="installations" style="overflow-x:auto;margin-top:20px">
+<h2>安装实例</h2>
+<form method="get" action="/#installations"><label for="q">按域名、IP 或安装 ID 搜索</label><input id="q" name="q" maxlength="253" value="<?= escape($search) ?>"><button>搜索</button></form>
+<table><thead><tr><th>安装域名</th><th>服务器出口 IP</th><th>安装 ID</th><th>版本</th><th>首次上报 UTC</th><th>最近上报 UTC</th></tr></thead><tbody>
+<?php foreach ($installations['items'] as $row): ?><tr><td><?= escape($row['domain'] ?? '—') ?></td><td><?= escape($row['ip'] ?? '—') ?></td><td><?= escape($row['id']) ?></td><td><?= escape($row['version']) ?></td><td><?= gmdate('Y-m-d H:i', $row['first_seen']) ?></td><td><?= gmdate('Y-m-d H:i', $row['last_seen']) ?></td></tr><?php endforeach; ?>
+<?php if ($installations['items'] === []): ?><tr><td colspan="6">暂无匹配记录</td></tr><?php endif; ?>
+</tbody></table>
+<p>共 <?= (int) $installations['total'] ?> 条 · 第 <?= (int) $installations['page'] ?> 页
+<?php foreach (['上一页' => $installations['page'] - 1, '下一页' => $installations['page'] + 1] as $label => $page): ?>
+<?php if ($page > 0 && $page <= ceil($installations['total'] / 50)): ?> <a href="/?<?= escape(http_build_query(['q' => $search, 'page' => $page])) ?>#installations"><?= escape($label) ?></a><?php endif; ?>
+<?php endforeach; ?></p>
+</section>
+<footer>以随机安装 ID 去重。历史版本的记录可能缺少域名和 IP。页面数据生成于 <?= escape($summary['generated_at']) ?>。</footer>
 <?php endif; ?></html>

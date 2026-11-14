@@ -178,7 +178,8 @@ if ($updating) {
     foreach (array_keys($files) as $path) {
         if (str_starts_with($path, 'view/') || (str_starts_with($path, 'public/') && !in_array($path, ['public/index.php', 'public/router.php'], true))
             || (str_starts_with($path, 'config/') && $path !== 'config/version.php')
-            || preg_match('~\.(?:tpl|html?|css|js|map|json|ya?ml|ini|env|png|jpe?g|gif|svg|webp|woff2?|ttf|eot|ico)$~i', $path) && !str_starts_with($path, 'vendor/') && $path !== 'composer.json') {
+            || preg_match('~\.(?:tpl|html?|css|js|map|json|ya?ml|ini|env|png|jpe?g|gif|svg|webp|woff2?|ttf|eot|ico)$~i', $path)
+                && !str_starts_with($path, 'vendor/') && $path !== 'composer.json' && $path !== 'app/admin_views/drama_metadata.tpl') {
             throw new RuntimeException('更新包含模板、样式或网站配置：' . $path);
         }
     }
