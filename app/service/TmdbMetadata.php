@@ -16,15 +16,34 @@ final class TmdbMetadata
     public function search(string $title, string $type): array
     {
         $result = $this->get('/search/' . $type, ['query' => $title, 'include_adult' => 'false']);
+        return array_slice($this->matches($result['results'] ?? [], $type), 0, 15);
+    }
+
+    public function searchAll(string $title): array
+    {
+        $result = $this->get('/search/multi', ['query' => $title, 'include_adult' => 'false']);
+        return $this->matches($result['results'] ?? []);
+    }
+
+    public function findImdb(string $id): array
+    {
+        $result = $this->get('/find/' . $id, ['external_source' => 'imdb_id']);
+        return array_merge($this->matches($result['tv_results'] ?? [], 'tv'), $this->matches($result['movie_results'] ?? [], 'movie'));
+    }
+
+    private function matches(array $rows, ?string $type = null): array
+    {
         $matches = [];
-        foreach (array_slice($result['results'] ?? [], 0, 15) as $row) {
-            if (empty($row['id'])) continue;
+        foreach ($rows as $row) {
+            $kind = $type ?? ($row['media_type'] ?? '');
+            if (!in_array($kind, ['tv', 'movie'], true) || empty($row['id'])) continue;
             $title = (string) ($row['name'] ?? $row['title'] ?? '');
             $name = (string) ($row['original_name'] ?? $row['original_title'] ?? '');
             $date = (string) ($row['first_air_date'] ?? $row['release_date'] ?? '');
             $matches[] = ['id' => (string) $row['id'], 'title' => $title,
                 'detail' => trim($date . ' ' . ($name !== $title ? $name : '')),
-                'url' => self::SITE . '/' . $type . '/' . (int) $row['id']];
+                'url' => self::SITE . '/' . $kind . '/' . (int) $row['id'],
+                'original_title' => $name, 'year' => (int) substr($date, 0, 4), 'type' => $kind];
         }
         return $matches;
     }
@@ -41,6 +60,10 @@ final class TmdbMetadata
         if ($type === 'tv') {
             foreach ($series['seasons'] ?? [] as $row) {
                 $seasons[] = ['number' => (int) $row['season_number'], 'name' => (string) $row['name'], 'count' => (int) $row['episode_count']];
+            }
+            if ($season === -1) {
+                $regular = array_values(array_filter($seasons, static fn (array $row): bool => $row['number'] > 0));
+                if (count($regular) === 1) $season = $regular[0]['number'];
             }
             if (!in_array($season, array_column($seasons, 'number'), true)) {
                 return ['title' => $title, 'url' => $url, 'episodes' => [], 'cast' => [], 'seasons' => $seasons, 'season_found' => false];

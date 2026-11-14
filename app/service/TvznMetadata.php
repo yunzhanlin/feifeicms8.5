@@ -38,6 +38,8 @@ final class TvznMetadata
         $title = self::text($overview->evaluate('string((//h1)[1])'));
         if ($title === '') throw new RuntimeException('TVZN 没有返回有效的剧目页');
 
+        $facts = $overview->evaluate('string((//*[' . self::hasClass('overview-hero__facts') . '])[1])');
+        $year = (int) self::matched($facts, '/\b((?:19|20)\d{2})\s*年/u');
         $episodes = $actors = [];
         if ($plots) {
             foreach ($this->pages($id, 'juqingjieshao', $deadline) as $page) {
@@ -68,7 +70,7 @@ final class TvznMetadata
         }
 
         ksort($episodes, SORT_NUMERIC);
-        return ['title' => $title, 'url' => self::ORIGIN . '/' . $id . '/', 'episodes' => array_values($episodes), 'cast' => array_values($actors), 'seasons' => []];
+        return ['title' => $title, 'url' => self::ORIGIN . '/' . $id . '/', 'episodes' => array_values($episodes), 'cast' => array_values($actors), 'seasons' => [], 'year' => $year];
     }
 
     private function pages(string $id, string $kind, float $deadline): iterable
