@@ -4,19 +4,20 @@ declare(strict_types=1);
 namespace app\service;
 
 use GuzzleHttp\Client;
+use PDO;
 use think\facade\Db;
 
-/** Anonymous installation/version counts. Never reads domains, accounts or content. */
 final class UsageReporting
 {
     public const ENDPOINT = 'https://tj.shankan.cc/v1/heartbeat';
     public const STATE_KEY = 'internal.usage_reporting.v1';
+    public const ENABLED_KEY = 'admin.base.usage_reporting';
     private const INTERVAL = 86400;
 
     public function __construct(private readonly \think\App $app) {}
 
     /** @return array{status:string} */
-    public function report(string $source = 'cron'): array
+    public function report(string $source = 'cron', ?PDO $pdo = null, string $installedUrl = ''): array
     {
         if (!self::enabled()) return ['status' => 'disabled'];
         if (!is_file($this->app->getRuntimePath() . 'install.lock')) return ['status' => 'not_installed'];
@@ -29,34 +30,37 @@ final class UsageReporting
         if ($lock === false) return ['status' => 'unavailable'];
         if (!flock($lock, LOCK_EX | LOCK_NB)) { fclose($lock); return ['status' => 'busy']; }
         try {
-            $state = $this->claim($now);
+            if ($pdo === null) {
+                Db::query('SELECT 1');
+                $pdo = Db::connect()->getPdo();
+            }
+            $query = $pdo->prepare('SELECT setting_key,setting_value FROM ffx_site_settings WHERE setting_key IN (?,?)');
+            $query->execute([self::ENABLED_KEY, 'admin.base.site_domain']);
+            $settings = $query->fetchAll(PDO::FETCH_KEY_PAIR);
+            if (isset($settings[self::ENABLED_KEY]) && !in_array(json_decode($settings[self::ENABLED_KEY], true), ['1', 1, true], true)) {
+                return ['status' => 'disabled'];
+            }
+            $state = $this->claim($pdo, $now);
             if ($state['next_attempt'] > $now) {
                 @file_put_contents($stamp, (string) $state['next_attempt'], LOCK_EX);
                 return ['status' => 'not_due'];
             }
-            // A dead process leaves a one-hour lease, rather than flooding retries.
             $state['last_attempt'] = $now;
             $state['next_attempt'] = $now + 3600;
-            $this->save($state);
+            $this->save($pdo, $state);
+            $configuredHost = json_decode((string) ($settings['admin.base.site_domain'] ?? '""'), true);
+            $domain = self::domain(is_string($configuredHost) ? $configuredHost : '') ?? self::domain($installedUrl)
+                ?? self::domain((string) env('APP_URL', ''));
             $payload = self::payload($state['id'], (string) config('feifei.version_id'), $source,
-                filter_var(env('USAGE_ENVIRONMENT', true), FILTER_VALIDATE_BOOLEAN));
-            try {
-                $response = (new Client(['connect_timeout' => 1.5, 'timeout' => 4.0, 'allow_redirects' => false]))->post($endpoint, [
-                    'headers' => ['User-Agent' => 'FeiFeiCMS-Usage/1', 'Accept' => 'application/json'],
-                    'json' => $payload,
-                    'http_errors' => false,
-                ]);
-                $body = (string) $response->getBody();
-                $reply = strlen($body) <= 1024 ? json_decode($body, true) : null;
-                $ok = $response->getStatusCode() === 200 && is_array($reply) && ($reply['ok'] ?? false) === true
-                    && ($reply['schema'] ?? null) === 1;
-            } catch (\Throwable) { $ok = false; }
+                filter_var(env('USAGE_ENVIRONMENT', true), FILTER_VALIDATE_BOOLEAN), $domain);
+            $schema = $this->send($endpoint, $payload);
+            $ok = $schema !== 0;
             $state['failures'] = $ok ? 0 : min(5, (int) ($state['failures'] ?? 0) + 1);
             if ($ok) $state['last_success'] = $now;
             $state['next_attempt'] = $now + ($ok ? self::INTERVAL : min(self::INTERVAL, 3600 * (2 ** ($state['failures'] - 1))));
-            $this->save($state);
+            $this->save($pdo, $state);
             @file_put_contents($stamp, (string) $state['next_attempt'], LOCK_EX);
-            return ['status' => $ok ? 'sent' : 'failed'];
+            return ['status' => $ok ? ($schema === 2 ? 'sent' : 'sent_legacy') : 'failed'];
         } catch (\Throwable) {
             // Statistics must never break page rendering, installation or updates.
             return ['status' => 'unavailable'];
@@ -68,12 +72,25 @@ final class UsageReporting
         return filter_var(env('USAGE_REPORTING', true), FILTER_VALIDATE_BOOLEAN);
     }
 
-    /** Explicit allowlist: no request URL, host, IP, credentials, database or content. */
-    public static function payload(string $id, string $version, string $source, bool $environment): array
+    public static function payload(string $id, string $version, string $source, bool $environment, ?string $domain = null): array
     {
-        $payload = ['schema' => 1, 'installation_id' => $id, 'version' => $version, 'source' => $source === 'web' ? 'web' : 'cron'];
+        $payload = ['schema' => 2, 'installation_id' => $id, 'version' => $version, 'source' => $source === 'web' ? 'web' : 'cron'];
         if ($environment) $payload['php'] = PHP_MAJOR_VERSION . '.' . PHP_MINOR_VERSION;
+        if ($domain !== null) $payload['domain'] = $domain;
         return $payload;
+    }
+
+    public static function domain(string $value): ?string
+    {
+        $value = trim($value);
+        if ($value === '') return null;
+        $host = rtrim(strtolower((string) parse_url(str_contains($value, '://') ? $value : 'https://' . $value, PHP_URL_HOST)), '.');
+        if ($host !== '' && preg_match('/[^\x00-\x7f]/', $host) && function_exists('idn_to_ascii')) {
+            $host = idn_to_ascii($host, IDNA_DEFAULT, INTL_IDNA_VARIANT_UTS46) ?: '';
+        }
+        return str_contains($host, '.') && !filter_var($host, FILTER_VALIDATE_IP)
+            && !str_ends_with($host, '.localhost') && !str_ends_with($host, '.local')
+            && filter_var($host, FILTER_VALIDATE_DOMAIN, FILTER_FLAG_HOSTNAME) ? $host : null;
     }
 
     public static function validEndpoint(string $url): bool
@@ -85,30 +102,55 @@ final class UsageReporting
             && in_array($parts['host'], ['127.0.0.1', '[::1]', 'localhost'], true));
     }
 
-    private function claim(int $now): array
+    private function send(string $endpoint, array $payload): int
     {
-        return Db::transaction(function () use ($now): array {
+        try {
+            $client = new Client(['connect_timeout' => 1.5, 'timeout' => 4.0, 'allow_redirects' => false, 'http_errors' => false]);
+            $options = ['headers' => ['User-Agent' => 'FeiFeiCMS-Usage/2', 'Accept' => 'application/json']];
+            $response = $client->post($endpoint, $options + ['json' => $payload]);
+            if ($response->getStatusCode() === 422) {
+                unset($payload['domain']);
+                $payload['schema'] = 1;
+                $response = $client->post($endpoint, $options + ['json' => $payload, 'timeout' => 2.0]);
+            }
+            $body = (string) $response->getBody();
+            $reply = strlen($body) <= 1024 ? json_decode($body, true) : null;
+            if ($response->getStatusCode() === 200 && is_array($reply) && ($reply['ok'] ?? false) === true
+                && ($reply['schema'] ?? null) === $payload['schema']) return $payload['schema'];
+        } catch (\Throwable) { /* Retry on the next scheduled attempt. */ }
+        return 0;
+    }
+
+    private function claim(PDO $pdo, int $now): array
+    {
+        $pdo->beginTransaction();
+        try {
             $initial = ['id' => self::newId(), 'next_attempt' => 0, 'last_attempt' => 0, 'last_success' => 0, 'failures' => 0];
-            Db::execute('INSERT IGNORE INTO ffx_site_settings (setting_key,setting_value,is_public,updated_at) VALUES (?,?,0,?)',
-                [self::STATE_KEY, json_encode($initial, JSON_THROW_ON_ERROR), gmdate('Y-m-d H:i:s', $now)]);
-            $row = Db::table('ffx_site_settings')->where('setting_key', self::STATE_KEY)->lock(true)->find();
-            $state = json_decode((string) ($row['setting_value'] ?? ''), true);
+            $insert = $pdo->prepare('INSERT IGNORE INTO ffx_site_settings (setting_key,setting_value,is_public,updated_at) VALUES (?,?,0,?)');
+            $insert->execute([self::STATE_KEY, json_encode($initial, JSON_THROW_ON_ERROR), gmdate('Y-m-d H:i:s', $now)]);
+            $query = $pdo->prepare('SELECT setting_value FROM ffx_site_settings WHERE setting_key=? FOR UPDATE');
+            $query->execute([self::STATE_KEY]);
+            $state = json_decode((string) $query->fetchColumn(), true);
+            $query->closeCursor();
             if (!is_array($state) || !preg_match('/^[a-f0-9]{8}-[a-f0-9]{4}-4[a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/D', (string) ($state['id'] ?? ''))) $state = $initial;
             $state['next_attempt'] = (int) ($state['next_attempt'] ?? 0);
             if ($state['next_attempt'] <= $now) {
                 $lease = $state;
                 $lease['next_attempt'] = $now + 3600;
-                $this->save($lease);
+                $this->save($pdo, $lease);
             }
+            $pdo->commit();
             return $state;
-        });
+        } catch (\Throwable $error) {
+            $pdo->rollBack();
+            throw $error;
+        }
     }
 
-    private function save(array $state): void
+    private function save(PDO $pdo, array $state): void
     {
-        Db::table('ffx_site_settings')->where('setting_key', self::STATE_KEY)->update([
-            'setting_value' => json_encode($state, JSON_THROW_ON_ERROR), 'is_public' => 0, 'updated_at' => gmdate('Y-m-d H:i:s'),
-        ]);
+        $statement = $pdo->prepare('UPDATE ffx_site_settings SET setting_value=?,is_public=0,updated_at=? WHERE setting_key=?');
+        $statement->execute([json_encode($state, JSON_THROW_ON_ERROR), gmdate('Y-m-d H:i:s'), self::STATE_KEY]);
     }
 
     private static function newId(): string

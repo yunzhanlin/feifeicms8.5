@@ -59,7 +59,8 @@
         </div>
         <p class="install-note">安装器只接受空的目标库；检测到任何 ffx_ 数据表都会停止，不会覆盖。</p>
         <div class="install-actions"><button type="submit" {if !$ready}disabled{/if}>开始安装</button></div>
-    </form>
+        <p>程序默认发送安装统计。安装后可在后台「全局配置」关闭后续上报。</p>
+</form>
 </main>
 </body>
 </html>

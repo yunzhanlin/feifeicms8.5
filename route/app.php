@@ -115,7 +115,11 @@ Route::group('admin', function (): void {
     Route::get('vod-tools/douban-duplicates', 'admin.VodTools/duplicates');
     Route::get('vod-tools/douban-comments', 'admin.VodTools/comments');
     Route::post('vod-tools/douban-comments/next', 'admin.VodTools/commentsNext');
-    Route::get('vod-tools/scenario-collect', 'admin.VodTools/scenarios');
+    Route::get('vod-tools/scenario-collect', 'admin.DramaMetadata/index');
+    Route::get('vod-tools/scenario-collect/resource', 'admin.VodTools/scenarios');
+    Route::get('vod-tools/drama-metadata', 'admin.DramaMetadata/index');
+    Route::post('vod-tools/drama-metadata/lookup', 'admin.DramaMetadata/lookup');
+    Route::post('vod-tools/drama-metadata/apply', 'admin.DramaMetadata/apply');
     Route::post('vod-tools/scenario-collect/run', 'admin.VodTools/scenariosRun');
     Route::get('vod/:id/playback', 'admin.Playback/index')->pattern(['id' => '\\d+']);
     Route::post('vod/:id/sources', 'admin.Playback/storeSource')->pattern(['id' => '\\d+']);

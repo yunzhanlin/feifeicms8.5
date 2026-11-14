@@ -11,6 +11,13 @@ final class PublicJsonClient
 
     public function get(string $url, array $query = [], array $headers = [], int $timeout = 10, int $maxBytes = 5242880): array
     {
+        $decoded = json_decode($this->body($url, $query, $headers, $timeout, $maxBytes), true, 64, JSON_THROW_ON_ERROR);
+        if (!is_array($decoded)) throw new \RuntimeException('远程服务未返回 JSON 数据');
+        return $decoded;
+    }
+
+    public function body(string $url, array $query = [], array $headers = [], int $timeout = 10, int $maxBytes = 5242880): string
+    {
         $resolved = $this->safeUrl->resolve($url);
         $guard = new CollectionResponseSizeGuard($maxBytes);
         $timeout = max(1, min(30, $timeout));
@@ -36,9 +43,7 @@ final class PublicJsonClient
                 $guard->assertBody($body);
             }
             $guard->assertBody($body);
-            $decoded = json_decode($body, true, 64, JSON_THROW_ON_ERROR);
-            if (!is_array($decoded)) throw new \RuntimeException('远程服务未返回 JSON 数据');
-            return $decoded;
+            return $body;
         } finally {
             $stream->close();
         }

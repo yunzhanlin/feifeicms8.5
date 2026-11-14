@@ -47,6 +47,7 @@ final class Settings extends BaseController
                 if ($section === 'cache' && $key === 'search_host' && trim($value) === '') {
                     $value = (string) $field['default'];
                 }
+                if ($section === 'base' && $key === 'usage_reporting' && !\app\service\UsageReporting::enabled()) $value = '0';
                 if ($section === 'rewrite' && $key === 'url_html_suffix' && $value !== '' && !str_starts_with($value, '.')) $value = '.' . $value;
                 $values[$key] = !empty($field['secret']) && $value !== '' ? '••••••••' : $value;
             }
@@ -121,6 +122,7 @@ final class Settings extends BaseController
         foreach ($definition['groups'] as $fields) {
             foreach ($fields as $key => $field) {
                 if ($field['type'] === 'readonly') continue;
+                if ($section === 'base' && $key === 'usage_reporting' && $this->request->post($key) === null) continue;
                 $settingKey = 'admin.' . $section . '.' . $key;
                 $stored = Db::table('ffx_site_settings')->where('setting_key', $settingKey)->value('setting_value');
                 $before[$key] = !empty($field['secret']) ? '[redacted]' : $stored;
@@ -196,7 +198,21 @@ final class Settings extends BaseController
     private function runtimeDefinition(string $section): array
     {
         $definition = $this->definition($section);
+        if ($section === 'collection') {
+            $definition['groups']['TMDB'] = [
+                'tmdb_api_key' => [
+                    'label' => 'TMDB API 密钥或读取访问令牌', 'type' => 'password', 'default' => '',
+                    'secret' => true, 'help' => '用于采集分集剧情、演员和角色。此密钥只发给 TMDB。',
+                ],
+            ];
+        }
         if ($section !== 'base') return $definition;
+        $definition['groups']['安装统计'] = [
+            'usage_reporting' => [
+                'label' => '发送安装统计', 'type' => 'boolean', 'default' => '1',
+                'help' => '默认开启。上报安装 ID、程序版本和站点域名，接收端记录服务器出口 IP。关闭并保存后停止后续上报。环境变量 USAGE_REPORTING=false 也可禁用。',
+            ],
+        ];
         $options = $this->themes->options();
         if ($options === []) $options = ['mxone' => 'MXOne'];
         foreach (['default_theme', 'default_theme_m'] as $key) {

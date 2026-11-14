@@ -632,7 +632,7 @@ final class Vod extends BaseController
 
         Db::table('ffx_media_people')->where('media_id', $mediaId)->delete();
         $lines = preg_split('/\r?\n/', (string) $this->request->post('credits', ''), -1, PREG_SPLIT_NO_EMPTY) ?: [];
-        foreach (array_slice($lines, 0, 100) as $sort => $line) {
+        foreach ($lines as $sort => $line) {
             $parts = array_map('trim', explode('|', $line, 3));
             $personId = (int) ($parts[0] ?? 0);
             $creditType = mb_substr($parts[1] ?? 'actor', 0, 30);

@@ -118,6 +118,7 @@ final class WebInstaller
             }
 
             $tables = (int) $pdo->query("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema = DATABASE() AND table_name LIKE 'ffx\\_%'")->fetchColumn();
+            (new UsageReporting(app()))->report('web', $pdo, $values['app_url']);
             return ['database_version' => $version, 'tables' => $tables, 'admin' => $values['admin_username'],
                 'installer_removed' => $this->removeInstallerEntry()];
         } finally {
