@@ -28,6 +28,8 @@ class AppService extends Service
         require_once __DIR__ . '/service/TvznMetadata.php';
         require_once __DIR__ . '/service/TmdbMetadata.php';
         require_once __DIR__ . '/service/DramaMetadataImporter.php';
+        require_once __DIR__ . '/service/DramaMetadataMatch.php';
+        require_once __DIR__ . '/service/DramaMetadataScope.php';
         require_once __DIR__ . '/controller/admin/DramaMetadata.php';
         $this->app->event->listen(\think\event\HttpEnd::class, function (\think\Response $response): void {
             if ($response->getCode() >= 400) return;

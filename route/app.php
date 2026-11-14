@@ -120,6 +120,8 @@ Route::group('admin', function (): void {
     Route::get('vod-tools/drama-metadata', 'admin.DramaMetadata/index');
     Route::post('vod-tools/drama-metadata/lookup', 'admin.DramaMetadata/lookup');
     Route::post('vod-tools/drama-metadata/apply', 'admin.DramaMetadata/apply');
+    Route::get('vod-tools/drama-metadata/batch-script', 'admin.DramaMetadata/batchScript');
+    Route::post('vod-tools/drama-metadata/batch-next', 'admin.DramaMetadata/batchNext');
     Route::post('vod-tools/scenario-collect/run', 'admin.VodTools/scenariosRun');
     Route::get('vod/:id/playback', 'admin.Playback/index')->pattern(['id' => '\\d+']);
     Route::post('vod/:id/sources', 'admin.Playback/storeSource')->pattern(['id' => '\\d+']);

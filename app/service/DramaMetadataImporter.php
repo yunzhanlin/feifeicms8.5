@@ -12,7 +12,9 @@ final class DramaMetadataImporter
     {
         return CollectionImportLock::run(['drama-metadata-people'], fn () => Db::transaction(function () use ($mediaId, $data): array {
             $media = Db::table('ffx_media')->where('id', $mediaId)->whereNull('deleted_at')->lock(true)->find();
-            if ($media === null) throw new RuntimeException('本地影片已删除，请返回重新选择');
+            if ($media === null || (isset($data['expected_title']) && $media['title'] !== $data['expected_title'])) {
+                throw new RuntimeException('本地影片已变更，请返回重新选择');
+            }
 
             $counts = ['plots' => 0, 'plots_skipped' => 0, 'actors' => 0, 'roles' => 0, 'credits' => 0];
             $now = gmdate('Y-m-d H:i:s');
