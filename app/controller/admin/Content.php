@@ -4,6 +4,8 @@ declare(strict_types=1);
 namespace app\controller\admin;
 
 use app\BaseController;
+use app\service\ActorProfileCompletion;
+use app\service\AdminSession;
 use app\service\AuditLogger;
 use app\service\CsrfToken;
 use app\service\FrontendCache;
@@ -56,8 +58,38 @@ final class Content extends BaseController
             'type' => $type, 'label' => $def['label'], 'titleField' => $def['title'], 'keyword' => $keyword,
             'items' => $query->paginate(['list_rows' => $this->settings->int('admin.content.admin_page_size', 30, 10, 200), 'query' => array_filter(['wd' => $keyword, 'status' => $status, 'kind' => $kind, 'missing' => $missing])]),
             'status' => $status, 'kind' => $kind, 'missing' => $missing,
+            'profileProgressOwner' => $type === 'people' ? AdminSession::id() : 0,
             'csrf' => $this->csrf->get(),
         ]);
+    }
+
+    public function completeProfilesNext(): Response
+    {
+        $this->guardCsrf();
+        $cursor = max(0, (int) $this->request->post('cursor', 0));
+        $upperId = max(0, (int) $this->request->post('upper_id', 0));
+        if ($upperId === 0) {
+            $upperId = (int) Db::table('ffx_people')->where('kind', 'person')->max('id');
+        }
+        $profiles = $this->app->make(ActorProfileCompletion::class);
+        $personId = $profiles->candidates($cursor, 1, $upperId)[0] ?? null;
+        if ($personId === null) {
+            return json(['ok' => true, 'message' => '批量补全结束，请查看处理记录。', 'data' => [
+                'cursor' => 0, 'batch' => ['upper_id' => 0], 'done' => true,
+            ]]);
+        }
+
+        $progress = ['cursor' => $personId, 'batch' => ['upper_id' => $upperId]];
+        try {
+            $fields = $profiles->complete($personId);
+        } catch (\Exception) {
+            return json(['ok' => true, 'message' => '明星 #' . $personId . ' 的资料补全失败，可重置进度后重试。', 'data' => $progress + ['failed' => true]]);
+        }
+        if ($fields !== []) {
+            $this->audit->record('person.profile.complete', 'person', $personId, null, ['fields' => $fields]);
+            $this->frontendCache->invalidateHome();
+        }
+        return json(['ok' => true, 'message' => '明星 #' . $personId . ($fields === [] ? ' 暂无可补资料。' : ' 已补全 ' . count($fields) . ' 项资料。'), 'data' => $progress]);
     }
 
     public function create(string $type): Response

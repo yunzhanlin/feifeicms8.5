@@ -140,6 +140,7 @@ Route::group('admin', function (): void {
     Route::post('scenarios/:id', 'admin.Scenarios/update')->pattern(['id' => '\\d+']);
     Route::post('scenarios/:id/delete', 'admin.Scenarios/delete')->pattern(['id' => '\\d+']);
 
+    Route::post('content/people/profiles/next', 'admin.Content/completeProfilesNext');
     Route::get('content/:type', 'admin.Content/index')->pattern(['type' => 'articles|topics|people']);
     Route::get('content/:type/create', 'admin.Content/create')->pattern(['type' => 'articles|topics|people']);
     Route::post('content/:type', 'admin.Content/store')->pattern(['type' => 'articles|topics|people']);

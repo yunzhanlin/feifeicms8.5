@@ -20,6 +20,8 @@ $compatibleLock = '4d31f207c7ba60f746e70ccbf631b4b536a6e2967ec399342d989337669d1
 $reuseDependencies = $updating && hash_file('sha256', $root . '/composer.lock') === $compatibleLock;
 $compatibleSchema = 17;
 $roots = ['app', 'database/migrations', 'extend', 'route', 'vendor'];
+// These backend files ship with the person-management controller.
+$adminProgramFiles = ['view/admin/content/index.tpl', 'public/theme-assets/admin/js/admin.js'];
 $single = ['think', 'composer.json', 'composer.lock', 'config/version.php', 'public/index.php', 'public/router.php'];
 if (!$updating) {
     // An install also needs its default settings, templates and public assets.
@@ -74,7 +76,7 @@ foreach ($roots as $directory) {
         $sources[$relative] = $file->getPathname();
     }
 }
-foreach ($single as $relative) {
+foreach (array_merge($single, $adminProgramFiles) as $relative) {
     if (preg_match('~(?:^|/)docs?(?:/|$)~i', $relative)) continue;
     if (is_file($root . '/' . $relative) && !is_link($root . '/' . $relative)) {
         $files[$relative] = hash_file('sha256', $root . '/' . $relative);
@@ -95,7 +97,7 @@ if (!$updating) {
 ksort($files, SORT_STRING);
 foreach (['think', 'config/version.php', 'public/index.php', 'public/router.php', 'app/service/ProgramUpdater.php',
     'app/service/ReleaseCatalog.php', 'app/admin_views/drama_metadata.tpl', 'app/admin_views/drama_metadata.js',
-    'vendor/autoload.php', 'vendor/composer/autoload_classmap.php', 'vendor/composer/autoload_static.php'] as $required) {
+    'vendor/autoload.php', 'vendor/composer/autoload_classmap.php', 'vendor/composer/autoload_static.php', ...$adminProgramFiles] as $required) {
     if (!isset($files[$required])) throw new RuntimeException('构建缺少程序或 Composer 依赖：' . $required);
 }
 foreach ($updating ? [] : ['public/theme-assets/admin/css/admin.css', 'public/theme-assets/admin/js/admin.js', 'public/theme-assets/install/css/install.css',
@@ -110,8 +112,9 @@ foreach ($reuseDependencies ? [] : array_merge(['vendor/overtrue/pinyin/src/Piny
     if (!isset($files[$required])) throw new RuntimeException('构建缺少拼音运行文件：' . $required);
 }
 if ($updating) {
-    // Keep site-owned templates and assets, while shipping the built-in collection page with its PHP controllers.
+    // Ship only the explicitly selected backend files alongside the program.
     foreach (array_keys($files) as $path) {
+        if (in_array($path, $adminProgramFiles, true)) continue;
         if (str_starts_with($path, 'view/') || (str_starts_with($path, 'public/') && !in_array($path, ['public/index.php', 'public/router.php'], true))
             || (str_starts_with($path, 'config/') && $path !== 'config/version.php')
             || preg_match('~\.(?:tpl|html?|css|js|map|json|ya?ml|ini|env|png|jpe?g|gif|svg|webp|woff2?|ttf|eot|ico)$~i', $path)
