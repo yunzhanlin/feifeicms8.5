@@ -14,6 +14,11 @@ $installed = json_decode((string) @file_get_contents($root . '/vendor/composer/i
 if (!is_array($installed) || ($installed['dev'] ?? null) !== false || ($installed['dev-package-names'] ?? []) !== []) {
     throw new RuntimeException('发布包必须先执行 composer install --no-dev --classmap-authoritative，不能打包开发依赖');
 }
+// The oldest supported site (8.5.261023.2) ships this dependency lock and
+// installs schema 17. A new lock requires the matching runtime dependencies.
+$compatibleLock = '4d31f207c7ba60f746e70ccbf631b4b536a6e2967ec399342d989337669d1015';
+$reuseDependencies = $updating && hash_file('sha256', $root . '/composer.lock') === $compatibleLock;
+$compatibleSchema = 17;
 $roots = ['app', 'database/migrations', 'extend', 'route', 'vendor'];
 $single = ['think', 'composer.json', 'composer.lock', 'config/version.php', 'public/index.php', 'public/router.php'];
 if (!$updating) {
@@ -53,7 +58,12 @@ foreach ($roots as $directory) {
         }
         // Local-only theme assets must not leak into an otherwise shared asset root.
         if (preg_match('~(?:^|/)(?:qinxin|qingxin)(?:[./_-]|$)~i', $relative)) continue;
+        if ($updating && preg_match('~^database/migrations/(\d{3})_.*\.sql$~', $relative, $migration)
+            && (int) $migration[1] <= $compatibleSchema) continue;
         if (str_starts_with($relative, 'vendor/')) {
+            // Authoritative class maps must be refreshed even when libraries are reused.
+            if ($reuseDependencies && !str_starts_with($relative, 'vendor/composer/')
+                && !in_array($relative, ['vendor/autoload.php', 'vendor/services.php'], true)) continue;
             if (preg_match('~/(?:tests?|docs?|examples?|benchmarks?|\.github)(?:/|$)~i', $relative)) continue;
             if (preg_match('~/(?:phpunit|phpstan|phpcs|psalm|rector)(?:[.-]|$)|/(?:\.travis\.yml|\.gitignore|\.gitattributes|\.editorconfig)$~i', $relative)) continue;
             // Preserve dependency licenses/notices, not upstream developer prose.
@@ -85,7 +95,7 @@ if (!$updating) {
 ksort($files, SORT_STRING);
 foreach (['think', 'config/version.php', 'public/index.php', 'public/router.php', 'app/service/ProgramUpdater.php',
     'app/service/ReleaseCatalog.php', 'app/admin_views/drama_metadata.tpl', 'app/admin_views/drama_metadata.js',
-    'vendor/autoload.php'] as $required) {
+    'vendor/autoload.php', 'vendor/composer/autoload_classmap.php', 'vendor/composer/autoload_static.php'] as $required) {
     if (!isset($files[$required])) throw new RuntimeException('构建缺少程序或 Composer 依赖：' . $required);
 }
 foreach ($updating ? [] : ['public/theme-assets/admin/css/admin.css', 'public/theme-assets/admin/js/admin.js', 'public/theme-assets/install/css/install.css',
@@ -95,7 +105,7 @@ foreach ($updating ? [] : ['public/theme-assets/admin/css/admin.css', 'public/th
     'public/theme-assets/shared/player/vendor/artplayer-plugin-danmuku.js'] as $required) {
     if (!isset($files[$required])) throw new RuntimeException('构建缺少主题运行文件：' . $required);
 }
-foreach (array_merge(['vendor/overtrue/pinyin/src/Pinyin.php', 'vendor/overtrue/pinyin/data/chars.php',
+foreach ($reuseDependencies ? [] : array_merge(['vendor/overtrue/pinyin/src/Pinyin.php', 'vendor/overtrue/pinyin/data/chars.php',
     'vendor/overtrue/pinyin/data/surnames.php'], array_map(static fn (int $part): string => 'vendor/overtrue/pinyin/data/words-' . $part . '.php', range(0, 9))) as $required) {
     if (!isset($files[$required])) throw new RuntimeException('构建缺少拼音运行文件：' . $required);
 }
