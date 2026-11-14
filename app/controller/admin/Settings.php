@@ -207,7 +207,7 @@ final class Settings extends BaseController
         $definition['groups']['安装统计'] = [
             'usage_reporting' => [
                 'label' => '发送安装统计', 'type' => 'boolean', 'default' => '1',
-                'help' => '默认开启。上报安装 ID、程序版本和站点域名，接收端记录服务器出口 IP。关闭并保存后停止后续上报。环境变量 USAGE_REPORTING=false 也可禁用。',
+                'help' => '默认开启统计',
             ],
         ];
         $options = $this->themes->options();
