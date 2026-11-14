@@ -802,7 +802,7 @@
         });
         pause?.addEventListener('click', () => { ++generation; setRunning(false); if (state) state.textContent = busy ? '已暂停，等待当前请求完成' : '已暂停，可继续执行'; });
         reset?.addEventListener('click', () => { if (busy) return; ++generation; setRunning(false); localStorage.removeItem(storageKey()); if (state) state.textContent = '进度已重置'; });
-        const showSaved = () => { const saved = load(); if (state) state.textContent = saved.cursor ? `当前范围上次处理到视频 #${saved.cursor}` : '当前范围尚未开始'; };
+        const showSaved = () => { const saved = load(); if (state) state.textContent = saved.cursor ? `当前范围上次处理到${form.dataset.progressItem || '视频'} #${saved.cursor}` : '当前范围尚未开始'; };
         options.forEach((input) => input.addEventListener('change', showSaved));
         showSaved();
     });

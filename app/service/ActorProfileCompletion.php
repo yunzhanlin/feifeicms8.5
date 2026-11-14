@@ -12,13 +12,15 @@ final class ActorProfileCompletion
     public function __construct(private readonly TvznMetadata $tvzn, private readonly TmdbMetadata $tmdb) {}
 
     /** @return list<int> */
-    public function candidates(int $after, int $limit): array
+    public function candidates(int $after, int $limit, ?int $upperId = null): array
     {
-        return array_map('intval', Db::table('ffx_people')->alias('p')
+        $query = Db::table('ffx_people')->alias('p')
             ->where('p.id', '>', $after)->where('p.kind', 'person')->whereNull('p.deleted_at')
             ->whereRaw("EXISTS (SELECT 1 FROM ffx_external_refs r WHERE r.entity_type='person' AND r.entity_id=p.id AND r.provider IN ('tvzn','tmdb'))")
             ->whereRaw("(COALESCE(TRIM(p.biography), '') = '' OR p.birthday IS NULL OR TRIM(p.profession) = '' OR TRIM(p.gender) = '' OR TRIM(p.avatar_url) = '')")
-            ->order('p.id')->limit($limit)->column('p.id'));
+            ->order('p.id')->limit($limit);
+        if ($upperId !== null) $query->where('p.id', '<=', $upperId);
+        return array_map('intval', $query->column('p.id'));
     }
 
     /** @return list<string> Filled field names. */
