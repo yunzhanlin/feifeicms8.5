@@ -119,6 +119,29 @@ final class TmdbMetadata
         return ['title' => $title, 'url' => $url, 'episodes' => $episodes, 'cast' => $actors, 'seasons' => $seasons, 'season_found' => true];
     }
 
+    /** @return array<string, string> */
+    public function profile(string $id): array
+    {
+        if (!preg_match('/^[1-9]\d{0,9}$/D', $id)) throw new RuntimeException('TMDB 人物 ID 无效');
+        $path = '/person/' . $id;
+        $data = $this->get($path);
+        if ((string) ($data['id'] ?? '') !== $id) throw new RuntimeException('TMDB 未返回匹配的演员档案');
+        $bio = trim((string) ($data['biography'] ?? ''));
+        if ($bio === '') $bio = trim((string) ($this->get($path, ['language' => 'en-US'])['biography'] ?? ''));
+        $department = (string) ($data['known_for_department'] ?? '');
+        $photo = (string) ($data['profile_path'] ?? '');
+        return [
+            'aliases' => implode('、', array_unique($data['also_known_as'] ?? [])),
+            'gender' => [1 => '女', 2 => '男', 3 => '非二元性别'][(int) ($data['gender'] ?? 0)] ?? '',
+            'birthday' => (string) ($data['birthday'] ?? ''),
+            'profession' => ['Acting' => '演员', 'Directing' => '导演', 'Writing' => '编剧'][$department] ?? $department,
+            'birthplace' => (string) ($data['place_of_birth'] ?? ''),
+            'avatar_url' => preg_match('~^/[a-zA-Z0-9_.-]+$~D', $photo) ? 'https://image.tmdb.org/t/p/w342' . $photo : '',
+            'biography' => $bio,
+            'source_url' => self::SITE . $path,
+        ];
+    }
+
     private function get(string $path, array $query = []): array
     {
         $key = trim((string) env('TMDB_API_KEY', ''));

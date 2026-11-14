@@ -72,7 +72,7 @@ final class Rewrite extends BaseController
         if ($module === 'special' && $operation === 'read') return $this->app->make(Special::class)->detail((int) ($params['id'] ?? 0));
         if (in_array($module, ['star', 'role'], true) && $operation === 'read') {
             $id = isset($params['id']) && ctype_digit($params['id']) ? (int) $params['id'] : $this->idBySlug('ffx_people', (string) ($params['id'] ?? ''));
-            return $this->app->make(Person::class)->detail($id);
+            return $this->app->make(Person::class)->detail($id, $module);
         }
         if ($module === 'scenario' && $operation === 'read') {
             $scenarioId = max(0, (int) ($params['id'] ?? 0));

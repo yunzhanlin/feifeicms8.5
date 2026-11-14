@@ -99,7 +99,8 @@ final class LegacyTemplate
     {
         $p = $this->parse($tag);
         $query = Db::table('ffx_people')->whereNull('deleted_at')->where('status', 'published');
-        if ($kind !== '') $query->where('kind', $kind);
+        if ($kind === 'role') $query->whereIn('kind', ['role', 'character']);
+        elseif ($kind !== '') $query->where('kind', $kind);
         if (!empty($p['id'])) $query->whereIn('id', $this->ids((string) $p['id']));
         $wd = trim((string) ($p['wd'] ?? $p['name'] ?? ''));
         if ($wd !== '') $query->whereLike('name', '%' . $this->like($wd) . '%');

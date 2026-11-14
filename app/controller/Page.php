@@ -62,7 +62,7 @@ final class Page extends BaseController
         $sid = max(0, (int) $this->request->get('sid', 0));
         $query = Db::table('ffx_people')->where('status', 'published')->whereNull('deleted_at');
         if ($sid === 8) $query->where('kind', 'person');
-        if ($sid === 9) $query->where('kind', 'role');
+        if ($sid === 9) $query->whereIn('kind', ['role', 'character']);
         $pager = $query->order('updated_at', 'desc')->order('id', 'desc')
             ->paginate(['list_rows' => $this->pageSize(), 'query' => $this->request->get()]);
         return view(ff_theme_view('person/index'), $this->frontend->shared('明星角色 - ' . $this->siteName()) + [

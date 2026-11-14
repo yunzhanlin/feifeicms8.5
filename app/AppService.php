@@ -22,6 +22,9 @@ class AppService extends Service
         $this->commands([\app\command\UsageReport::class]);
         require_once __DIR__ . '/service/TvznMetadata.php';
         require_once __DIR__ . '/service/TmdbMetadata.php';
+        require_once __DIR__ . '/service/ActorProfileCompletion.php';
+        require_once __DIR__ . '/command/ActorProfileComplete.php';
+        $this->commands([\app\command\ActorProfileComplete::class]);
         require_once __DIR__ . '/service/DramaMetadataImporter.php';
         require_once __DIR__ . '/service/DramaMetadataMatch.php';
         require_once __DIR__ . '/service/DramaMetadataScope.php';

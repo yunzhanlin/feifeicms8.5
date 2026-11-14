@@ -292,7 +292,7 @@ final class FrontendData
             'person_id' => (int) ($person['id'] ?? 0),
             'person_name' => (string) ($person['name'] ?? ''),
             'person_pic' => (string) ($person['avatar_url'] ?? ''),
-            'person_sid' => ($person['kind'] ?? '') === 'role' ? 9 : 8,
+            'person_sid' => in_array($person['kind'] ?? '', ['role', 'character'], true) ? 9 : 8,
             'person_alias' => (string) ($person['aliases'] ?? $metadata['alias'] ?? ''),
             'person_profession' => (string) ($person['profession'] ?? $metadata['profession'] ?? ''),
             'person_gender' => (string) ($person['gender'] ?? $metadata['gender'] ?? ''),
@@ -302,7 +302,7 @@ final class FrontendData
             'person_school' => (string) ($metadata['school'] ?? ''),
             'person_hits' => (int) ($person['view_count'] ?? 0),
             'subtitle' => (string) ($person['profession'] ?? $metadata['profession'] ?? ''),
-            'summary_text' => $this->summary((string) ($person['summary'] ?? $person['biography'] ?? ''), $this->settings->int('admin.content.summary_length', 180, 20, 1000)),
+            'summary_text' => $this->summary((string) (($person['summary'] ?? '') ?: ($person['biography'] ?? '')), $this->settings->int('admin.content.summary_length', 180, 20, 1000)),
             'safe_content' => $this->settings->bool('admin.content.allow_html', true) ? (string) ($person['biography'] ?? '') : nl2br(htmlspecialchars(strip_tags((string) ($person['biography'] ?? '')), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8')),
         ];
     }
