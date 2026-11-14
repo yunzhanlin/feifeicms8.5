@@ -61,8 +61,7 @@ final class Vod extends BaseController
             'vod' => $legacyVod,
             'sources' => $sources,
             'tags' => Db::table('ffx_media_tags')->alias('mt')->join(['ffx_tags' => 't'], 't.id = mt.tag_id')->where('mt.media_id', $id)->order('t.name')->field('t.*')->select()->toArray(),
-            'credits' => array_map($this->frontend->imageFields(...), Db::table('ffx_media_people')->alias('mp')->join(['ffx_people' => 'p'], 'p.id = mp.person_id')->where('mp.media_id', $id)->where('p.status', 'published')->whereNull('p.deleted_at')
-                ->order('mp.sort_order')->field('p.id,p.name,p.avatar_url,mp.credit_type,mp.character_name')->select()->toArray()),
+            'credits' => $this->credits($id),
             'rating' => ['score' => number_format((float) ($media->rating ?? 0), 1), 'count' => (int) ($media->rating_count ?? 0), 'user_score' => $userScore],
             'sameActors' => $actors, 'sameActorLabel' => $actors[0] ?? '', 'sameActorActive' => $actors[0] ?? '', 'sameActorItems' => $this->frontend->vodList($sameActorItems),
             'scenarios' => $scenarios, 'scenarioCount' => Db::table('ffx_scenarios')->where('media_id', $id)->where('status', 'published')->whereNull('deleted_at')->count(),
@@ -146,6 +145,47 @@ final class Vod extends BaseController
         return view(ff_theme_view('vod/scenario'), $this->frontend->shared($media->title . ' ' . ($scenario['title'] ?: '第' . $scenario['episode_no'] . '集剧情')) + [
             'vod' => $this->frontend->vod($media->toArray()), 'scenario' => $scenario, 'previous' => $previous, 'next' => $next, 'pageActive' => '',
         ]);
+    }
+
+    /** @return list<array<string, mixed>> */
+    private function credits(int $mediaId): array
+    {
+        $rows = Db::table('ffx_media_people')->alias('mp')->join(['ffx_people' => 'p'], 'p.id = mp.person_id')
+            ->where('mp.media_id', $mediaId)->where('p.status', 'published')->whereNull('p.deleted_at')
+            ->order('mp.sort_order')->order('p.id')
+            ->field('p.id,p.kind,p.name,p.avatar_url,mp.credit_type,mp.character_name')->select()->toArray();
+
+        $actors = $roles = [];
+        foreach ($rows as $index => $row) {
+            $name = mb_strtolower(trim($row['name']));
+            $counterpart = mb_strtolower(trim($row['character_name']));
+            if ($name === '' || $counterpart === '') continue;
+            if ($row['credit_type'] === 'actor' && $row['kind'] === 'person') {
+                $actors[$name][$counterpart][] = $index;
+            } elseif (in_array($row['credit_type'], ['character', 'role'], true)
+                && in_array($row['kind'], ['character', 'role'], true)) {
+                $roles[$counterpart][$name][] = $index;
+            }
+        }
+
+        foreach ($actors as $actor => $characters) {
+            foreach ($characters as $character => $actorRows) {
+                $roleRows = $roles[$actor][$character] ?? [];
+                foreach ($actorRows as $index) {
+                    $rows[$index]['credit_type'] = '饰 ' . trim($rows[$index]['character_name']);
+                    $rows[$index]['character_name'] = '';
+                }
+                // Merge a reciprocal pair only when both people are unambiguous.
+                if (count($actorRows) !== 1 || count($roleRows) !== 1) continue;
+                $actorIndex = $actorRows[0];
+                $roleIndex = $roleRows[0];
+                $rows[$actorIndex]['id'] = $rows[$roleIndex]['id'];
+                $rows[$actorIndex]['avatar_url'] = $rows[$actorIndex]['avatar_url'] ?: $rows[$roleIndex]['avatar_url'];
+                unset($rows[$roleIndex]);
+            }
+        }
+
+        return array_map($this->frontend->imageFields(...), array_values($rows));
     }
 
     private function findPublished(int $id): Media
