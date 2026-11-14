@@ -4,9 +4,7 @@ declare(strict_types=1);
 namespace app\controller;
 
 use app\BaseController;
-use app\model\Episode;
 use app\model\Media;
-use app\model\PlaySource;
 use app\service\MediaUrlGuard;
 use app\service\FrontendData;
 use app\service\CsrfToken;
@@ -16,7 +14,6 @@ use app\service\PlaybackPosition;
 use app\service\PlaybackPlayerRegistry;
 use think\exception\HttpException;
 use think\facade\Db;
-use think\facade\Session;
 use think\response\Redirect;
 use think\response\View;
 
@@ -64,7 +61,8 @@ final class Vod extends BaseController
             'vod' => $legacyVod,
             'sources' => $sources,
             'tags' => Db::table('ffx_media_tags')->alias('mt')->join(['ffx_tags' => 't'], 't.id = mt.tag_id')->where('mt.media_id', $id)->order('t.name')->field('t.*')->select()->toArray(),
-            'credits' => array_map($this->frontend->imageFields(...), Db::table('ffx_media_people')->alias('mp')->join(['ffx_people' => 'p'], 'p.id = mp.person_id')->where('mp.media_id', $id)->order('mp.sort_order')->field('p.id,p.name,p.avatar_url,mp.credit_type,mp.character_name')->select()->toArray()),
+            'credits' => array_map($this->frontend->imageFields(...), Db::table('ffx_media_people')->alias('mp')->join(['ffx_people' => 'p'], 'p.id = mp.person_id')->where('mp.media_id', $id)->where('p.status', 'published')->whereNull('p.deleted_at')
+                ->order('mp.sort_order')->field('p.id,p.name,p.avatar_url,mp.credit_type,mp.character_name')->select()->toArray()),
             'rating' => ['score' => number_format((float) ($media->rating ?? 0), 1), 'count' => (int) ($media->rating_count ?? 0), 'user_score' => $userScore],
             'sameActors' => $actors, 'sameActorLabel' => $actors[0] ?? '', 'sameActorActive' => $actors[0] ?? '', 'sameActorItems' => $this->frontend->vodList($sameActorItems),
             'scenarios' => $scenarios, 'scenarioCount' => Db::table('ffx_scenarios')->where('media_id', $id)->where('status', 'published')->whereNull('deleted_at')->count(),

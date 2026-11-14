@@ -256,19 +256,6 @@ final class CollectionRunner
         return ['processed' => $processed, 'imported' => $imported, 'skipped' => $skipped, 'sources' => count($targets)];
     }
 
-    /** @return array<int, array<string, mixed>> */
-    private function extractRows(array $response): array
-    {
-        $rows = $response['list'] ?? $response['data'] ?? [];
-        if (isset($rows['list']) && is_array($rows['list'])) {
-            $rows = $rows['list'];
-        }
-        if (!is_array($rows)) {
-            throw new \RuntimeException('采集响应缺少 list/data 数组');
-        }
-        return array_values(array_filter($rows, 'is_array'));
-    }
-
     /** @param array<string, mixed> $row
      *  @param array<string, mixed> $mapping
      */

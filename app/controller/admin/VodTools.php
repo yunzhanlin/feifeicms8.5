@@ -249,12 +249,6 @@ final class VodTools extends BaseController
         }
     }
 
-    private function doubanCandidates(): \think\db\Query
-    {
-        $batch = new DoubanBatchScope();
-        return $batch->candidates($batch->normalize([]));
-    }
-
     /** @param array<string,mixed> $media @param array<string,mixed> $incoming @return array<int,string> */
     private function applyDoubanData(array $media, array $incoming, bool $onlyMissing): array
     {

@@ -89,10 +89,7 @@ final class Categories extends BaseController
         if (Db::table('ffx_categories')->where('parent_id', $id)->whereNull('deleted_at')->count() > 0) {
             return response('请先处理子分类', 422);
         }
-        $used = Db::table('ffx_media')->where('category_id', $id)->whereNull('deleted_at')->count()
-            + Db::table('ffx_articles')->where('category_id', $id)->whereNull('deleted_at')->count()
-            + Db::table('ffx_topics')->where('category_id', $id)->whereNull('deleted_at')->count();
-        if ($used > 0) {
+        if ($this->hasContent($id)) {
             return response('该分类仍有关联内容，请先转移内容', 422);
         }
         $data = ['status' => 'archived', 'deleted_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s')];
@@ -107,8 +104,8 @@ final class Categories extends BaseController
         $this->guardCsrf();
         $ids = array_slice(array_values(array_unique(array_filter(array_map('intval', (array) $this->request->post('ids', []))))), 0, 200);
         $action = (string) $this->request->post('action', 'update');
-        if ($ids === []) {
-            return response('请选择分类', 422);
+        if ($ids === [] || !in_array($action, ['update', 'delete'], true)) {
+            return response('请选择分类和有效的批量操作', 422);
         }
         Db::transaction(function () use ($ids, $action): void {
             if ($action === 'update') {
@@ -118,18 +115,14 @@ final class Categories extends BaseController
                 foreach ($ids as $id) {
                     $before = $this->requireCategory($id);
                     $name = mb_substr(trim((string) ($names[$id] ?? $before['name'])), 0, 100);
-                    $data = ['name' => $name !== '' ? $name : $before['name'], 'sort_order' => (int) ($sortOrders[$id] ?? $before['sort_order']), 'status' => ($statuses[$id] ?? '') === 'published' ? 'published' : 'draft', 'updated_at' => gmdate('Y-m-d H:i:s')];
+                    $data = ['name' => $name !== '' ? $name : $before['name'], 'sort_order' => (int) ($sortOrders[$id] ?? $before['sort_order']), 'status' => in_array($statuses[$id] ?? null, ['draft', 'published'], true) ? $statuses[$id] : $before['status'], 'updated_at' => gmdate('Y-m-d H:i:s')];
                     Db::table('ffx_categories')->where('id', $id)->update($data);
                     $this->audit->record('category.batch_update', 'category', $id, $before, $data);
                 }
             } elseif ($action === 'delete') {
                 foreach ($ids as $id) {
                     $before = $this->requireCategory($id);
-                    $used = Db::table('ffx_categories')->where('parent_id', $id)->whereNull('deleted_at')->count()
-                        + Db::table('ffx_media')->where('category_id', $id)->whereNull('deleted_at')->count()
-                        + Db::table('ffx_articles')->where('category_id', $id)->whereNull('deleted_at')->count()
-                        + Db::table('ffx_topics')->where('category_id', $id)->whereNull('deleted_at')->count();
-                    if ($used > 0) continue;
+                    if (Db::table('ffx_categories')->where('parent_id', $id)->whereNull('deleted_at')->count() > 0 || $this->hasContent($id)) continue;
                     $data = ['status' => 'archived', 'deleted_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s')];
                     Db::table('ffx_categories')->where('id', $id)->update($data);
                     $this->audit->record('category.batch_archive', 'category', $id, $before, $data);
@@ -138,6 +131,15 @@ final class Categories extends BaseController
         });
         $this->frontendCache->invalidateCategories();
         return redirect('/admin/categories');
+    }
+
+    private function hasContent(int $id): bool
+    {
+        return Db::table('ffx_media')->where('category_id', $id)->whereNull('deleted_at')->count() > 0
+            || Db::table('ffx_media_categories')->alias('mc')->join(['ffx_media' => 'm'], 'm.id=mc.media_id')
+                ->where('mc.category_id', $id)->whereNull('m.deleted_at')->count() > 0
+            || Db::table('ffx_articles')->where('category_id', $id)->whereNull('deleted_at')->count() > 0
+            || Db::table('ffx_topics')->where('category_id', $id)->whereNull('deleted_at')->count() > 0;
     }
 
     private function form(?array $item): Response

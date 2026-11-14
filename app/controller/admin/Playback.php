@@ -102,31 +102,38 @@ final class Playback extends BaseController
     public function storeEpisode(int $id, int $sourceId): Response
     {
         $this->guardCsrf();
-        $this->requireSource($id, $sourceId);
-        $row = $this->episodePayload($id, $sourceId);
-        if ($row['label'] === '' || $row['media_url'] === '') {
-            return response('剧集名称和播放地址不能为空', 422);
-        }
-        $row['created_at'] = gmdate('Y-m-d H:i:s');
-        $row['updated_at'] = $row['created_at'];
-        $episodeId = Db::table('ffx_episodes')->insertGetId($row);
-        $this->audit->record('episode.create', 'episode', $episodeId, null, $row);
-        return redirect('/admin/vod/' . $id . '/playback');
+        return $this->saveEpisode($id, $sourceId);
     }
 
     public function updateEpisode(int $id, int $sourceId, int $episodeId): Response
     {
         $this->guardCsrf();
-        $this->requireSource($id, $sourceId);
-        $before = $this->requireEpisode($id, $sourceId, $episodeId);
+        return $this->saveEpisode($id, $sourceId, $episodeId);
+    }
+
+    private function saveEpisode(int $id, int $sourceId, ?int $episodeId = null): Response
+    {
         $row = $this->episodePayload($id, $sourceId);
-        if ($row['label'] === '' || $row['media_url'] === '') {
-            return response('剧集名称和播放地址不能为空', 422);
-        }
-        $row['updated_at'] = gmdate('Y-m-d H:i:s');
-        Db::table('ffx_episodes')->where('id', $episodeId)->update($row);
-        $this->audit->record('episode.update', 'episode', $episodeId, $before, $row);
-        return redirect('/admin/vod/' . $id . '/playback');
+        if ($row['label'] === '' || $row['media_url'] === '') return response('剧集名称和播放地址不能为空', 422);
+        if ($row['episode_no'] > 4294967295) return response('剧集编号超出范围', 422);
+
+        return Db::transaction(function () use ($id, $sourceId, $episodeId, $row): Response {
+            $this->requireSource($id, $sourceId, true);
+            $before = $episodeId === null ? null : $this->requireEpisode($id, $sourceId, $episodeId);
+            $occupied = Db::table('ffx_episodes')->where('source_id', $sourceId)->where('episode_no', $row['episode_no'])->value('id');
+            if ($occupied !== null && (int) $occupied !== $episodeId) return response('该线路已存在相同集号', 422);
+
+            $row['updated_at'] = gmdate('Y-m-d H:i:s');
+            if ($episodeId === null) {
+                $row['created_at'] = $row['updated_at'];
+                $episodeId = Db::table('ffx_episodes')->insertGetId($row);
+            } else {
+                if ($row['status'] === 'enabled' && !empty($before['published_at'])) $row['published_at'] = $before['published_at'];
+                Db::table('ffx_episodes')->where('id', $episodeId)->update($row);
+            }
+            $this->audit->record($before === null ? 'episode.create' : 'episode.update', 'episode', (int) $episodeId, $before, $row);
+            return redirect('/admin/vod/' . $id . '/playback');
+        });
     }
 
     public function deleteEpisode(int $id, int $sourceId, int $episodeId): Response
@@ -154,9 +161,9 @@ final class Playback extends BaseController
         return $row;
     }
 
-    private function requireSource(int $mediaId, int $sourceId): array
+    private function requireSource(int $mediaId, int $sourceId, bool $lock = false): array
     {
-        $row = Db::table('ffx_play_sources')->where('id', $sourceId)->where('media_id', $mediaId)->find();
+        $row = Db::table('ffx_play_sources')->where('id', $sourceId)->where('media_id', $mediaId)->lock($lock)->find();
         if ($row === null) {
             throw new HttpException(404, '线路不存在');
         }

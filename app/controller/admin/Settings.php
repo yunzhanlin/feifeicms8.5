@@ -117,53 +117,50 @@ final class Settings extends BaseController
                 return redirect('/admin/settings/rewrite?error=' . rawurlencode($exception->getMessage()));
             }
         }
-        $before = [];
-        $after = [];
-        foreach ($definition['groups'] as $fields) {
-            foreach ($fields as $key => $field) {
-                if ($field['type'] === 'readonly') continue;
-                if ($section === 'base' && $key === 'usage_reporting' && $this->request->post($key) === null) continue;
-                $settingKey = 'admin.' . $section . '.' . $key;
-                $stored = Db::table('ffx_site_settings')->where('setting_key', $settingKey)->value('setting_value');
-                $before[$key] = !empty($field['secret']) ? '[redacted]' : $stored;
-                $value = trim((string) $this->request->post($key, $field['default']));
-                if ($section === 'rewrite' && $key === 'url_router_on' && $forceRouterOff) $value = '0';
-                if (!empty($field['secret']) && ($value === '' || $value === '••••••••')) continue;
-                if ($field['type'] === 'boolean') {
-                    $value = $value === '1' ? '1' : '0';
-                } elseif ($field['type'] === 'number') {
-                    $value = (string) max(0, (int) $value);
-                } elseif (in_array($field['type'], ['select', 'radio'], true) && !array_key_exists($value, (array) ($field['options'] ?? []))) {
-                    $value = (string) $field['default'];
-                } else {
-                    $value = mb_substr($value, 0, $field['type'] === 'textarea' ? 20000 : 2000);
-                }
-                $after[$key] = !empty($field['secret']) ? '[updated]' : $value;
-                $payload = [
-                    'setting_value' => json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                    'is_public' => !empty($field['public']) ? 1 : 0,
-                    'updated_at' => gmdate('Y-m-d H:i:s'),
-                ];
-                if ($stored === null) Db::table('ffx_site_settings')->insert(['setting_key' => $settingKey] + $payload);
-                else Db::table('ffx_site_settings')->where('setting_key', $settingKey)->update($payload);
-            }
-        }
-        if ($section === 'rewrite' && is_array($compiledRewrite)) {
-            foreach (['url_rewrite_rules' => $compiledRewrite['rewrite_rules'], 'url_route_rules' => $compiledRewrite['route_rules']] as $key => $value) {
-                $settingKey = 'admin.rewrite.' . $key;
-                $payload = [
-                    'setting_value' => json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                    'is_public' => 0,
-                    'updated_at' => gmdate('Y-m-d H:i:s'),
-                ];
-                if (Db::table('ffx_site_settings')->where('setting_key', $settingKey)->value('setting_key') === null) {
-                    Db::table('ffx_site_settings')->insert(['setting_key' => $settingKey] + $payload);
-                } else {
-                    Db::table('ffx_site_settings')->where('setting_key', $settingKey)->update($payload);
+        Db::transaction(function () use ($section, $definition, $compiledRewrite, $forceRouterOff): void {
+            $before = [];
+            $after = [];
+            foreach ($definition['groups'] as $fields) {
+                foreach ($fields as $key => $field) {
+                    if ($field['type'] === 'readonly') continue;
+                    if ($section === 'base' && $key === 'usage_reporting' && $this->request->post($key) === null) continue;
+                    $settingKey = 'admin.' . $section . '.' . $key;
+                    $stored = Db::table('ffx_site_settings')->where('setting_key', $settingKey)->value('setting_value');
+                    $before[$key] = !empty($field['secret']) ? '[redacted]' : $stored;
+                    $value = trim((string) $this->request->post($key, $field['default']));
+                    if ($section === 'rewrite' && $key === 'url_router_on' && $forceRouterOff) $value = '0';
+                    if (!empty($field['secret']) && ($value === '' || $value === '••••••••')) continue;
+                    if ($field['type'] === 'boolean') {
+                        $value = $value === '1' ? '1' : '0';
+                    } elseif ($field['type'] === 'number') {
+                        $value = (string) max(0, (int) $value);
+                    } elseif (in_array($field['type'], ['select', 'radio'], true) && !array_key_exists($value, (array) ($field['options'] ?? []))) {
+                        $value = (string) $field['default'];
+                    } else {
+                        $value = mb_substr($value, 0, $field['type'] === 'textarea' ? 20000 : 2000);
+                    }
+                    $after[$key] = !empty($field['secret']) ? '[updated]' : $value;
+                    $payload = [
+                        'setting_value' => json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+                        'is_public' => !empty($field['public']) ? 1 : 0,
+                        'updated_at' => gmdate('Y-m-d H:i:s'),
+                    ];
+                    Db::table('ffx_site_settings')->duplicate($payload)->insert(['setting_key' => $settingKey] + $payload);
                 }
             }
-        }
-        $this->audit->record('settings.update', 'settings', $section, $before, $after);
+            if ($section === 'rewrite' && is_array($compiledRewrite)) {
+                foreach (['url_rewrite_rules' => $compiledRewrite['rewrite_rules'], 'url_route_rules' => $compiledRewrite['route_rules']] as $key => $value) {
+                    $settingKey = 'admin.rewrite.' . $key;
+                    $payload = [
+                        'setting_value' => json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+                        'is_public' => 0,
+                        'updated_at' => gmdate('Y-m-d H:i:s'),
+                    ];
+                    Db::table('ffx_site_settings')->duplicate($payload)->insert(['setting_key' => $settingKey] + $payload);
+                }
+            }
+            $this->audit->record('settings.update', 'settings', $section, $before, $after);
+        });
         $this->siteSettings->forget();
         if ($section === 'cache') {
             $this->app->make(\app\service\RuntimeCacheSettings::class)->apply();

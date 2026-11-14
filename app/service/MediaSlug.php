@@ -47,7 +47,7 @@ final class MediaSlug
 
     public function repair(int $mediaId, bool $onlyGenerated = true): bool
     {
-        $row = Db::table('ffx_media')->where('id', $mediaId)->whereNull('deleted_at')->field('id,title,slug')->find();
+        $row = Db::table('ffx_media')->where('id', $mediaId)->whereNull('deleted_at')->field('title,slug')->find();
         if ($row === null || ($onlyGenerated && !$this->isGenerated((string) $row['slug']))) return false;
         return CollectionImportLock::run(['slug:' . $this->base((string) $row['title'])], function () use ($mediaId, $onlyGenerated): bool {
             return Db::transaction(function () use ($mediaId, $onlyGenerated): bool {

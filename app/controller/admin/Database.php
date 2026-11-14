@@ -148,19 +148,17 @@ final class Database extends BaseController
         }
         $filename = 'feifeicms-v4-' . gmdate('Ymd-His') . '-' . bin2hex(random_bytes(3)) . '.sql';
         $path = $this->backupDir() . '/' . $filename;
-        $handle = fopen($path, 'wb');
+        $temporary = $path . '.tmp';
+        $handle = fopen($temporary, 'xb');
         if ($handle === false) throw new HttpException(500, '无法创建备份文件');
-        $complete = false;
         try {
-            $pdo = Db::connect()->getPdo();
-            if (!$pdo instanceof \PDO) throw new HttpException(500, '无法连接数据库进行备份');
-            (new MySqlBackup())->dump($pdo, $handle, $tables);
-            $complete = true;
+            if (!chmod($temporary, 0600)) throw new HttpException(500, '无法保护备份文件');
+            (new MySqlBackup())->dump($this->pdo(), $handle, $tables);
+            if (!rename($temporary, $path)) throw new HttpException(500, '无法保存已完成的备份');
         } finally {
             fclose($handle);
-            if (!$complete) @unlink($path);
+            if (is_file($temporary)) unlink($temporary);
         }
-        chmod($path, 0600);
         $this->audit->record('database.backup', 'database', $filename, null, ['tables' => $tables, 'bytes' => filesize($path)]);
         return redirect('/admin/database#backups');
     }

@@ -9,7 +9,6 @@ use app\service\MediaUrlGuard;
 use app\service\ResilientCache;
 use app\service\SiteSettings;
 use think\facade\Db;
-use think\facade\Session;
 use think\Response;
 
 final class Danmaku extends BaseController

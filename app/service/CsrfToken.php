@@ -19,7 +19,7 @@ final class CsrfToken
         return $token;
     }
 
-    public function verify(?string $token): bool
+    public function verify(mixed $token): bool
     {
         $stored = (string) Session::get(self::KEY, '');
         return $stored !== '' && is_string($token) && hash_equals($stored, $token);
