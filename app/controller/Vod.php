@@ -181,7 +181,6 @@ final class Vod extends BaseController
                 if (count($actorRows) !== 1 || count($roleRows) !== 1) continue;
                 $actorIndex = $actorRows[0];
                 $roleIndex = $roleRows[0];
-                $rows[$actorIndex]['id'] = $rows[$roleIndex]['id'];
                 $rows[$actorIndex]['avatar_url'] = $rows[$actorIndex]['avatar_url'] ?: $rows[$roleIndex]['avatar_url'];
                 unset($rows[$roleIndex]);
             }
