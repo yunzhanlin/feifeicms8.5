@@ -29,7 +29,17 @@
     <td class="vod-row-actions"><button type="button" data-vod-scenario="{$item.id}">{if $item.scenario_count}剧情刷新{else /}剧情获取{/if}</button>{if $item.douban_id != ''}<button type="button" data-vod-comment="{$item.id}">评论获取</button>{/if}<a href="/admin/vod/{$item.id}/edit">编辑</a>{if $item.status == 'published'}<button type="button" data-vod-quick="draft" data-vod-id="{$item.id}">隐藏</button>{else /}<button type="button" class="text-danger" data-vod-quick="publish" data-vod-id="{$item.id}">显示</button>{/if}{if $item.legacy_locked}<button type="button" class="text-danger" data-vod-quick="unlock" data-vod-id="{$item.id}">解锁</button>{else /}<button type="button" data-vod-quick="lock" data-vod-id="{$item.id}">锁定</button>{/if}<button type="button" data-vod-quick="archive" data-vod-id="{$item.id}" data-confirm="确定删除该视频吗？">删除</button></td>
 </tr>{/volist}</tbody>
 <tfoot>
-<tr><td colspan="7" class="legacy-vod-page-cell"><span>共{$pageTotal}个视频 当前:{$pageCurrent}/{$pageLast}页</span><span class="legacy-vod-pages">{$items|raw}</span><input type="number" min="1" max="{$pageLast}" value="{$pageCurrent}" data-vod-page-input aria-label="跳转页码"><button type="button" data-vod-page-jump data-page-max="{$pageLast}">跳 转</button></td></tr>
 <tr><td colspan="7" class="legacy-vod-batch-cell"><button type="button" data-check-all>全选</button><button type="button" data-invert-checks>反选</button><button type="button" data-vod-submit="draft">取消审核</button><button type="button" data-vod-submit="publish">批量审核</button><button type="button" data-vod-scenario-batch>批量获取剧情</button><button type="button" data-vod-submit="archive" data-confirm="删除后前台不再显示，确定继续？">批量删除</button><button type="button" data-vod-panel-toggle="move">批量移动</button><span hidden data-vod-panel="move"><select name="target_category_id"><option value="0">选择目标分类</option>{volist name="categories" id="category"}<option value="{$category.id}">{$category.name|htmlspecialchars|raw}</option>{/volist}</select><button type="button" data-vod-submit="move">确定转移</button></span><button type="button" data-vod-open="edit">批量打开新窗口</button><button type="button" data-vod-open="query">批量查询</button><button type="button" data-vod-panel-toggle="series">设置系列</button><span hidden data-vod-panel="series"><input type="text" name="series" maxlength="255" class="w120" aria-label="系列名称"><button type="button" data-vod-submit="series">确 定</button></span><button type="button" data-check-all>全选</button><button type="button" data-vod-submit="merge" data-confirm="合并后仅保留一部已审核主影片，其余影片归档，确定继续？">合并影片</button><span class="legacy-vod-batch-status" data-vod-batch-status aria-live="polite"></span></td></tr>
-</tfoot></table></div></form>
+</tfoot></table></div>
+<nav class="legacy-vod-page-cell" aria-label="视频列表分页">
+    <span class="legacy-vod-page-info">共 {$pageTotal} 个视频{if $pageTotal > 0} · 第 {$pageCurrent} / {$pageLast} 页{/if}</span>
+    {if $pageLast > 1}
+    {$items|raw}
+    <div class="legacy-vod-page-jump">
+        <input type="number" min="1" max="{$pageLast}" value="{$pageCurrent}" data-vod-page-input aria-label="跳转页码">
+        <button type="button" data-vod-page-jump data-page-max="{$pageLast}">跳转</button>
+    </div>
+    {/if}
+</nav>
+</form>
 {include file="admin/layout/footer" /}

@@ -13,17 +13,24 @@ final class CollectionRunner
     }
 
     /** @return array<string, int|string> */
-    public function run(int $jobId): array
+    public function run(int $jobId, ?int $expectedPage = null): array
     {
         $this->guardEnabled();
         $job = Db::table('ffx_collection_jobs')->where('id', $jobId)->find();
         if ($job === null) {
             throw new \RuntimeException('采集任务不存在');
         }
+        $payload = json_decode((string) ($job['cursor_value'] ?: '{}'), true);
+        $payload = is_array($payload) ? $payload : [];
+        $page = max(1, (int) ($payload['page'] ?? 1));
+        if ($expectedPage !== null && $page !== $expectedPage) {
+            throw new \RuntimeException('采集进度已变化，请刷新后继续');
+        }
         $source = Db::transaction(function () use ($jobId, $job): ?array {
             $source = Db::table('ffx_collection_sources')->where('id', (int) $job['source_id'])->lock(true)->find();
-            $claimed = Db::table('ffx_collection_jobs')->where('id', $jobId)->where('state', 'queued')->update([
-                'state' => 'running', 'started_at' => gmdate('Y-m-d H:i:s'), 'finished_at' => null, 'error_message' => null,
+            $claimed = Db::table('ffx_collection_jobs')->where('id', $jobId)->where('state', 'queued')
+                ->where('cursor_value', (string) $job['cursor_value'])->update([
+                'state' => 'running', 'started_at' => $job['started_at'] ?: gmdate('Y-m-d H:i:s'), 'finished_at' => null,
             ]);
             if ($claimed !== 1) throw new \RuntimeException('采集任务已被其他工作进程领取或当前不可执行');
             return $source;
@@ -36,15 +43,16 @@ final class CollectionRunner
             throw new \RuntimeException('采集源不存在或未启用');
         }
 
-        $processed = $created = $updated = $errors = 0;
+        $processed = (int) $job['processed_count'];
+        $created = (int) $job['created_count'];
+        $updated = (int) $job['updated_count'];
+        $errors = (int) $job['error_count'];
+        $changedMedia = false;
         $errorMessages = [];
         try {
-            $payload = json_decode((string) ($job['cursor_value'] ?: '{}'), true);
-            $payload = is_array($payload) ? $payload : [];
-            $page = max(1, (int) ($payload['page'] ?? 1));
             $limit = min(100, max(1, (int) ($payload['limit'] ?? $this->settings->int('admin.collection.batch_size', 50, 1, 100))));
             $pageEnd = max($page, (int) ($payload['page_end'] ?? $page));
-            $maxPages = max(1, min(20, (int) ($payload['max_pages_per_run'] ?? 1)));
+            $maxPages = $expectedPage !== null ? 1 : max(1, min(20, (int) ($payload['max_pages_per_run'] ?? 1)));
             $protocol = $this->protocolForSource($source);
             $newDataPolicy = $this->sourceNewDataPolicy($source);
             $filters = ['page' => $page, 'limit' => $limit];
@@ -64,8 +72,7 @@ final class CollectionRunner
             $mapping = $this->categoryMap->normalize(is_array($mapping) ? $mapping : [], $validCategoryIds);
             // An unsaved suggestion is not a binding. Never fall back to the first category.
             $defaultCategory = 0;
-            $lastRemotePage = $page;
-            $remotePageCount = $pageEnd;
+            $hasMore = false;
             for ($offset = 0; $offset < $maxPages && $page + $offset <= $pageEnd; $offset++) {
                 $currentPage = $page + $offset;
                 $filters['page'] = $currentPage;
@@ -74,17 +81,16 @@ final class CollectionRunner
                 $response = $this->http->fetch((string) $source['endpoint'], $params);
                 $envelope = $this->normalizer->envelope($response, $protocol);
                 $remotePageCount = max(1, (int) $envelope['pagecount']);
-                $lastRemotePage = $currentPage;
                 $rows = $envelope['rows'];
-                if ($rows === []) {
-                    $remotePageCount = $currentPage;
-                    break;
+                if ($rows === [] && $currentPage < min($pageEnd, $remotePageCount) && !isset($payload['ids'])) {
+                    throw new \RuntimeException('上游第 ' . $currentPage . ' 页返回空列表，请重试此页');
                 }
                 foreach ($rows as $row) {
                     $processed++;
                     try {
                         $wasCreated = $this->importMedia((int) $source['id'], $row, $mapping, $defaultCategory, $newDataPolicy, $allowedPlayers);
                         $wasCreated ? $created++ : $updated++;
+                        $changedMedia = true;
                     } catch (CollectionSkipException $exception) {
                         if (count($errorMessages) < 5) $errorMessages[] = '跳过：#' . $processed . ' ' . mb_substr($exception->getMessage(), 0, 260);
                         continue;
@@ -95,7 +101,7 @@ final class CollectionRunner
                         }
                     }
                 }
-                if ($protocol === 'feifei_json') {
+                if ($rows !== [] && $protocol === 'feifei_json') {
                     try {
                         $scenarioParams = $this->normalizer->requestParams($protocol, 'scenario', $filters);
                         if (!empty($source['credential_ref'])) $scenarioParams['key'] = mb_substr((string) $source['credential_ref'], 0, 255);
@@ -105,37 +111,33 @@ final class CollectionRunner
                         if (count($errorMessages) < 5) $errorMessages[] = '剧情接口：' . mb_substr($scenarioException->getMessage(), 0, 260);
                     }
                 }
-                if ($currentPage >= $remotePageCount || isset($payload['ids'])) break;
+                $pageTotal = min($pageEnd, $remotePageCount);
+                $hasMore = !isset($payload['ids']) && $currentPage < $pageTotal;
+                $moreInBatch = $hasMore && $offset + 1 < $maxPages;
+                $payload['last_page'] = $currentPage;
+                $payload['page_total'] = $pageTotal;
+                $payload['page'] = $hasMore ? $currentPage + 1 : $currentPage;
+                Db::table('ffx_collection_jobs')->where('id', $jobId)->where('state', 'running')->update([
+                    'state' => $moreInBatch ? 'running' : ($hasMore ? 'queued' : ($errors > 0 ? 'completed_with_errors' : 'completed')),
+                    'cursor_value' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+                    'processed_count' => $processed, 'created_count' => $created, 'updated_count' => $updated,
+                    'error_count' => $errors, 'finished_at' => $hasMore ? null : gmdate('Y-m-d H:i:s'),
+                    'error_message' => $errorMessages === [] ? null : implode("\n", $errorMessages),
+                ]);
+                if (!$moreInBatch) break;
                 $pause = $this->settings->int('admin.collection.collect_time', 0, 0, 5);
                 if ($pause > 0) sleep($pause);
             }
-            $totalProcessed = (int) $job['processed_count'] + $processed;
-            $totalCreated = (int) $job['created_count'] + $created;
-            $totalUpdated = (int) $job['updated_count'] + $updated;
-            $totalErrors = (int) $job['error_count'] + $errors;
-            $hasMore = !isset($payload['ids']) && $lastRemotePage < min($pageEnd, $remotePageCount);
-            if ($hasMore) {
-                $payload['page'] = $lastRemotePage + 1;
-            }
-            $result = ['processed' => $totalProcessed, 'created' => $totalCreated, 'updated' => $totalUpdated, 'errors' => $totalErrors, 'next_page' => $hasMore ? $lastRemotePage + 1 : 0];
-            Db::table('ffx_collection_jobs')->where('id', $jobId)->update([
-                'state' => $hasMore ? 'queued' : ($totalErrors > 0 ? 'completed_with_errors' : 'completed'),
-                'cursor_value' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-                'processed_count' => $totalProcessed, 'created_count' => $totalCreated, 'updated_count' => $totalUpdated,
-                'error_count' => $totalErrors, 'finished_at' => $hasMore ? null : gmdate('Y-m-d H:i:s'),
-                'error_message' => $errorMessages === [] ? null : implode("\n", $errorMessages),
-            ]);
-            if ($created + $updated > 0) $this->frontendCache->invalidateHome();
-            return $result;
         } catch (Throwable $exception) {
-            Db::table('ffx_collection_jobs')->where('id', $jobId)->update([
-                'state' => 'failed', 'processed_count' => $processed, 'created_count' => $created,
-                'updated_count' => $updated, 'error_count' => $errors + 1,
+            Db::table('ffx_collection_jobs')->where('id', $jobId)->where('state', 'running')->update([
+                'state' => 'failed',
                 'error_message' => mb_substr($exception->getMessage(), 0, 2000), 'finished_at' => gmdate('Y-m-d H:i:s'),
             ]);
-            if ($created + $updated > 0) $this->frontendCache->invalidateHome();
             throw $exception;
+        } finally {
+            if ($changedMedia) $this->frontendCache->invalidateHome();
         }
+        return ['processed' => $processed, 'created' => $created, 'updated' => $updated, 'errors' => $errors, 'next_page' => $hasMore ? (int) $payload['page'] : 0];
     }
 
     /**
@@ -541,34 +543,35 @@ final class CollectionRunner
      */
     private function runScenarioJob(int $jobId, array $job, array $source, array $payload, array $filters, int $page, int $pageEnd, int $maxPages): array
     {
-        $processed = $imported = $skipped = 0;
-        $lastPage = $page;
-        $remotePageCount = $pageEnd;
+        $processed = (int) $job['processed_count'];
+        $imported = (int) $job['updated_count'];
+        $skipped = (int) ($payload['skipped'] ?? 0);
+        $hasMore = false;
         for ($offset = 0; $offset < $maxPages && $page + $offset <= $pageEnd; $offset++) {
             $currentPage = $page + $offset;
             $result = $this->runScenarios((int) $source['id'], array_replace($filters, ['page' => $currentPage]));
             $processed += (int) $result['processed'];
             $imported += (int) $result['imported'];
             $skipped += (int) $result['skipped'];
-            $lastPage = $currentPage;
-            $remotePageCount = max(1, (int) $result['pagecount']);
-            if ((int) $result['next_page'] === 0 || isset($payload['ids'])) break;
+            $pageTotal = min($pageEnd, (int) $result['pagecount']);
+            $hasMore = (int) $result['next_page'] > 0 && $currentPage < $pageTotal;
+            $moreInBatch = $hasMore && $offset + 1 < $maxPages;
+            $payload['last_page'] = $currentPage;
+            $payload['page_total'] = $pageTotal;
+            $payload['page'] = $hasMore ? $currentPage + 1 : $currentPage;
+            $payload['skipped'] = $skipped;
+            Db::table('ffx_collection_jobs')->where('id', $jobId)->where('state', 'running')->update([
+                'state' => $moreInBatch ? 'running' : ($hasMore ? 'queued' : 'completed'),
+                'cursor_value' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR),
+                'processed_count' => $processed, 'updated_count' => $imported,
+                'finished_at' => $hasMore ? null : gmdate('Y-m-d H:i:s'),
+                'error_message' => $result['skipped'] > 0 ? '本页有 ' . $result['skipped'] . ' 条剧情未匹配到本地视频' : null,
+            ]);
+            if (!$moreInBatch) break;
             $pause = $this->settings->int('admin.collection.collect_time', 0, 0, 5);
             if ($pause > 0) sleep($pause);
         }
-        $totalProcessed = (int) $job['processed_count'] + $processed;
-        $totalImported = (int) $job['updated_count'] + $imported;
-        $hasMore = !isset($payload['ids']) && $lastPage < min($pageEnd, $remotePageCount);
-        if ($hasMore) $payload['page'] = $lastPage + 1;
-        Db::table('ffx_collection_jobs')->where('id', $jobId)->update([
-            'state' => $hasMore ? 'queued' : 'completed',
-            'cursor_value' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'processed_count' => $totalProcessed,
-            'updated_count' => $totalImported,
-            'finished_at' => $hasMore ? null : gmdate('Y-m-d H:i:s'),
-            'error_message' => $skipped > 0 ? '本批有 ' . $skipped . ' 条剧情未匹配到本地视频' : null,
-        ]);
-        return ['processed' => $totalProcessed, 'created' => 0, 'updated' => $totalImported, 'errors' => (int) $job['error_count'], 'next_page' => $hasMore ? $lastPage + 1 : 0];
+        return ['processed' => $processed, 'created' => 0, 'updated' => $imported, 'errors' => (int) $job['error_count'], 'next_page' => $hasMore ? (int) $payload['page'] : 0];
     }
 
     private function syncScenarioPayload(int $mediaId, mixed $payload, int $sourceId, string $externalId): int
