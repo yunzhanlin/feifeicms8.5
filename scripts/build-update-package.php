@@ -20,8 +20,13 @@ $compatibleLock = '4d31f207c7ba60f746e70ccbf631b4b536a6e2967ec399342d989337669d1
 $reuseDependencies = $updating && hash_file('sha256', $root . '/composer.lock') === $compatibleLock;
 $compatibleSchema = 17;
 $roots = ['app', 'database/migrations', 'extend', 'route', 'vendor'];
-// These backend files ship with the person-management controller.
-$adminProgramFiles = ['view/admin/content/index.tpl', 'public/theme-assets/admin/js/admin.js'];
+// Backend views and scripts that must ship with their controllers.
+$adminProgramFiles = [
+    'view/admin/content/index.tpl', 'public/theme-assets/admin/js/admin.js',
+    'view/admin/vod/index.tpl', 'public/theme-assets/admin/css/admin.css',
+    'view/admin/collections/index.tpl', 'view/admin/collections/jobs.tpl', 'view/admin/collections/progress.tpl',
+    'view/admin/collections/resource.tpl', 'public/theme-assets/admin/js/collection-progress.js',
+];
 $single = ['think', 'composer.json', 'composer.lock', 'config/version.php', 'public/index.php', 'public/router.php'];
 if (!$updating) {
     // An install also needs its default settings, templates and public assets.

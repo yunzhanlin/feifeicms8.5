@@ -45,6 +45,20 @@ final class Collections extends BaseController
         ]);
     }
 
+    public function progress(int $jobId): Response
+    {
+        $job = $this->progressJob($jobId);
+        $status = $this->progressData($job);
+        if ($this->request->get('status') === '1') {
+            return json($status)->header(['Cache-Control' => 'no-store']);
+        }
+        return view('/admin/collections/progress', [
+            'job' => $job, 'status' => $status, 'csrf' => $this->csrf->get(),
+            'delay' => $this->settings->int('admin.collection.collect_time', 0, 0, 5) * 1000,
+            'autoRun' => $this->request->get('run') === '1',
+        ]);
+    }
+
     public function create(): Response
     {
         return $this->form(null, $this->resourceType((string) $this->request->get('type', 'video')));
@@ -218,6 +232,9 @@ final class Collections extends BaseController
             ]);
         });
         $this->audit->record('collection_job.queue', 'collection_job', $jobId, null, ['source_id' => $id] + $cursor);
+        if ((int) $this->request->post('progress', 0) === 1) {
+            return redirect('/admin/collections/jobs/' . $jobId . ((int) $this->request->post('execute_now', 1) === 1 ? '?run=1' : ''));
+        }
         if ((int) $this->request->post('execute_now', 1) === 1) {
             try {
                 $result = $this->runner->run((int) $jobId);
@@ -237,12 +254,23 @@ final class Collections extends BaseController
     public function execute(int $jobId): Response
     {
         $this->guardCsrf();
+        $progress = (int) $this->request->post('progress', 0) === 1;
+        $expectedPage = $progress ? max(1, (int) $this->request->post('page', 1)) : null;
+        // Finish recording the current page even if the browser closes it.
+        if ($progress) ignore_user_abort(true);
+        $interrupted = false;
         try {
-            $result = $this->runner->run($jobId);
+            $result = $this->runner->run($jobId, $expectedPage);
             $this->audit->record('collection_job.execute', 'collection_job', $jobId, null, $result);
         } catch (Throwable $exception) {
+            $interrupted = true;
             $this->audit->record('collection_job.fail', 'collection_job', $jobId, null, ['error' => $exception->getMessage()]);
         }
+        if ($progress && $this->request->isAjax()) {
+            return json($this->progressData($this->progressJob($jobId)) + ['interrupted' => $interrupted])
+                ->header(['Cache-Control' => 'no-store']);
+        }
+        if ($progress) return redirect('/admin/collections/jobs/' . $jobId);
         return redirect('/admin/collections');
     }
 
@@ -265,7 +293,41 @@ final class Collections extends BaseController
             return $job;
         });
         $this->audit->record('collection_job.retry', 'collection_job', $jobId, $job, ['state' => 'queued']);
+        if ((int) $this->request->post('progress', 0) === 1) return redirect('/admin/collections/jobs/' . $jobId . '?run=1');
         return redirect('/admin/collections');
+    }
+
+    private function progressJob(int $jobId): array
+    {
+        $job = Db::table('ffx_collection_jobs')->alias('j')->leftJoin(['ffx_collection_sources' => 's'], 's.id = j.source_id')
+            ->field('j.*,s.name as source_name,s.resource_type')->where('j.id', $jobId)->find();
+        if ($job === null) throw new HttpException(404, '采集任务不存在');
+        return $job;
+    }
+
+    private function progressData(array $job): array
+    {
+        $cursor = json_decode((string) $job['cursor_value'], true) ?: [];
+        $page = max(1, (int) ($cursor['page'] ?? 1));
+        $state = (string) $job['state'];
+        $processed = (int) $job['processed_count'];
+        $created = (int) $job['created_count'];
+        $updated = (int) $job['updated_count'];
+        $errors = (int) $job['error_count'];
+        $finished = in_array($state, ['completed', 'completed_with_errors'], true);
+        $paged = isset($cursor['page_end']) && !isset($cursor['ids']);
+        $lastPage = (int) ($cursor['last_page'] ?? ($paged ? $page - 1 : ($finished ? $page : 0)));
+        $donePages = $paged ? $lastPage : (int) ($lastPage > 0);
+        $skipCount = ($job['resource_type'] ?? '') === 'scenario' ? (int) ($cursor['skipped'] ?? 0)
+            : max(0, $processed - $created - $updated - $errors);
+        return [
+            'state' => $state, 'page' => $page, 'lastPage' => $lastPage, 'donePages' => $donePages,
+            'pageTotal' => $paged ? (int) ($cursor['page_total'] ?? 0) : 1,
+            'processed' => $processed, 'created' => $created, 'updated' => $updated, 'skipped' => $skipCount, 'errors' => $errors,
+            'category' => (int) ($cursor['t'] ?? 0), 'hours' => (int) ($cursor['h'] ?? 0),
+            'scope' => isset($cursor['ids']) ? '选中资源' : ($paged ? '分页采集' : '单页采集'),
+            'message' => (string) ($job['error_message'] ?? ''),
+        ];
     }
 
     private function form(?array $item, string $resourceType): Response
