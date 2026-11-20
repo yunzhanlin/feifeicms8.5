@@ -20,7 +20,7 @@ final class DoubanBatchScope
         $period = (string) ($input['period'] ?? 'all');
         if (!in_array($period, ['all', 'day', 'week'], true)) throw new HttpException(422, '更新时间范围无效');
         $scope = (string) ($input['scope'] ?? 'missing');
-        if (!in_array($scope, ['missing', 'all'], true)) throw new HttpException(422, '处理范围无效');
+        if (!in_array($scope, ['missing', 'all', 'preserve_title'], true)) throw new HttpException(422, '处理范围无效');
         $categories = $this->categories();
         $ids = [];
         if ($category > 0) {

@@ -24,6 +24,7 @@ $roots = ['app', 'database/migrations', 'extend', 'route', 'vendor'];
 $adminProgramFiles = [
     'view/admin/content/index.tpl', 'public/theme-assets/admin/js/admin.js',
     'view/admin/vod/index.tpl', 'public/theme-assets/admin/css/admin.css',
+    'view/admin/vod_tools/douban.tpl',
     'view/admin/collections/index.tpl', 'view/admin/collections/jobs.tpl', 'view/admin/collections/progress.tpl',
     'view/admin/collections/resource.tpl', 'public/theme-assets/admin/js/collection-progress.js',
 ];

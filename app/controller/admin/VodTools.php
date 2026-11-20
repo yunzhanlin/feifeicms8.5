@@ -76,7 +76,7 @@ final class VodTools extends BaseController
         if ($media === null) return json(['ok' => true, 'message' => '当前目录和时间范围已全部处理完成', 'data' => ['done' => true, 'cursor' => $cursor, 'batch' => $progress]]);
         try {
             $incoming = $this->douban->fetch((string) $media['douban_id']);
-            $fields = $this->applyDoubanData($media, $incoming, $scope === 'missing');
+            $fields = $this->applyDoubanData($media, $incoming, $scope);
             Db::table('ffx_external_refs')->where('provider', 'douban-metadata-failure')->where('entity_type', 'media')->where('external_id', (string) $media['id'])->delete();
             $this->audit->record('vod.douban_complete', 'media', (int) $media['id'], null, ['scope' => $scope, 'fields' => $fields]);
             return json(['ok' => true, 'message' => '#' . $media['id'] . ' ' . $media['title'] . '：已补全 ' . count($fields) . ' 个字段', 'data' => ['done' => false, 'cursor' => (int) $media['id'], 'media_id' => (int) $media['id'], 'title' => $media['title'], 'douban_id' => $media['douban_id'], 'fields' => $fields, 'batch' => $progress]]);
@@ -250,31 +250,39 @@ final class VodTools extends BaseController
     }
 
     /** @param array<string,mixed> $media @param array<string,mixed> $incoming @return array<int,string> */
-    private function applyDoubanData(array $media, array $incoming, bool $onlyMissing): array
+    private function applyDoubanData(array $media, array $incoming, string $scope): array
     {
-        $columns = ['title', 'original_title', 'subtitle', 'content', 'poster_url', 'area', 'language', 'release_year', 'release_date', 'episode_total', 'imdb_id', 'rating', 'rating_count'];
-        $metadataFields = ['type', 'tags', 'director', 'actor', 'writer', 'length', 'douban_score', 'source_ref'];
-        $update = [];
-        foreach ($columns as $field) {
-            $value = $incoming[$field] ?? null;
-            if ($value === null || $value === '' || $value === 0 || $value === 0.0) continue;
-            if ($onlyMissing && !$this->emptyValue($media[$field] ?? null)) continue;
-            $update[$field] = $value;
-        }
-        $meta = $this->jsonObject($media['metadata'] ?? null);
-        foreach ($metadataFields as $field) {
-            $value = $incoming[$field] ?? null;
-            if ($value === null || $value === '' || $value === 0 || $value === 0.0) continue;
-            if ($onlyMissing && !$this->emptyValue($meta[$field] ?? null)) continue;
-            $meta[$field] = $value;
-            $update['metadata'] = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-        }
-        if ($update !== []) {
+        $fields = Db::transaction(function () use ($media, $incoming, $scope): array {
+            // Fetch the current values after the network request, preserving concurrent edits.
+            $current = Db::table('ffx_media')->where('id', (int) $media['id'])->whereNull('deleted_at')->lock(true)->find();
+            if ($current === null) throw new \RuntimeException('影片已删除，请刷新列表后重试');
+            $columns = ['title', 'original_title', 'subtitle', 'content', 'poster_url', 'area', 'language', 'release_year', 'release_date', 'episode_total', 'episode_label', 'imdb_id', 'rating', 'rating_count'];
+            $metadataFields = ['type', 'tags', 'director', 'actor', 'writer', 'length', 'douban_score'];
+            $onlyMissing = $scope === 'missing';
+            $update = [];
+            foreach ($columns as $field) {
+                if ($field === 'title' && $scope === 'preserve_title') continue;
+                $value = $incoming[$field] ?? null;
+                if ($value === null || $value === '' || $value === 0 || $value === 0.0) continue;
+                if ($onlyMissing && !$this->emptyValue($current[$field] ?? null)) continue;
+                $update[$field] = $value;
+            }
+            $meta = $this->jsonObject($current['metadata'] ?? null);
+            foreach ($metadataFields as $field) {
+                $value = $incoming[$field] ?? null;
+                if ($value === null || $value === '' || $value === 0 || $value === 0.0) continue;
+                if ($onlyMissing && !$this->emptyValue($meta[$field] ?? null)) continue;
+                $meta[$field] = $value;
+                $update['metadata'] = json_encode($meta, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR);
+            }
+            if ($update === []) return [];
+            $fields = array_keys($update);
             $update['updated_at'] = gmdate('Y-m-d H:i:s');
             Db::table('ffx_media')->where('id', (int) $media['id'])->update($update);
-            $this->frontendCache->invalidateHome();
-        }
-        return array_values(array_filter(array_keys($update), static fn (string $field): bool => $field !== 'updated_at'));
+            return $fields;
+        });
+        if ($fields !== []) $this->frontendCache->invalidateHome();
+        return $fields;
     }
 
     private function saveFailure(int $mediaId, string $message): void
