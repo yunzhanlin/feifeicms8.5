@@ -240,15 +240,38 @@ final class Vod extends BaseController
         if (!$this->csrf->verify($this->request->post('_token'))) {
             return response('请求已过期', 419);
         }
-        $media = Media::where('id', $id)->whereNull('deleted_at')->find();
-        if ($media === null) {
+        if ($this->deleteMedia([$id]) === 0) {
             throw new HttpException(404, '影片不存在');
         }
-        $before = $media->toArray();
-        $media->save(['status' => 'archived', 'deleted_at' => gmdate('Y-m-d H:i:s'), 'updated_at' => gmdate('Y-m-d H:i:s')]);
-        $this->audit->record('media.archive', 'media', $id, $before, $media->toArray());
         $this->frontendCache->invalidateHome();
-        return redirect('/admin/vod');
+        return redirect('/admin/vod?notice=' . rawurlencode('视频已彻底删除'));
+    }
+
+    /** @param array<int, int> $ids */
+    private function deleteMedia(array $ids): int
+    {
+        return Db::transaction(function () use ($ids): int {
+            $items = Media::whereIn('id', $ids)->whereNull('deleted_at')->order('id')->lock(true)->select();
+            foreach ($items as $media) {
+                $id = (int) $media->id;
+                $before = $media->toArray();
+                // These polymorphic links have no foreign keys. Remove them
+                // before the media DELETE cascades through playback and plots.
+                $comments = static fn ($query) => $query->table('ffx_comments')->where('target_type', 'media')->where('target_id', $id)->field('id');
+                Db::table('ffx_external_refs')->where('entity_type', 'comment')->whereIn('entity_id', $comments)->delete();
+                Db::table('ffx_legacy_map')->where('entity_type', 'comment')->whereIn('new_id', $comments)->delete();
+                Db::table('ffx_comments')->where('target_type', 'media')->where('target_id', $id)->delete();
+                $ratings = static fn ($query) => $query->table('ffx_ratings')->where('target_type', 'media')->where('target_id', $id)->field('id');
+                Db::table('ffx_legacy_map')->where('entity_type', 'rating')->whereIn('new_id', $ratings)->delete();
+                Db::table('ffx_ratings')->where('target_type', 'media')->where('target_id', $id)->delete();
+                Db::table('ffx_danmaku')->whereLike('video_key', 'vod-' . $id . '-%')->delete();
+                Db::table('ffx_external_refs')->where('entity_type', 'media')->where('entity_id', $id)->delete();
+                Db::table('ffx_legacy_map')->where('entity_type', 'video')->where('new_id', $id)->delete();
+                $media->delete();
+                $this->audit->record('media.delete', 'media', $id, $before, null);
+            }
+            return $items->count();
+        });
     }
 
     public function doubanMetadata(): Response
@@ -302,8 +325,13 @@ final class Vod extends BaseController
         }
         $ids = array_slice(array_values(array_unique(array_filter(array_map('intval', (array) $this->request->post('ids', []))))), 0, 200);
         $action = (string) $this->request->post('action', '');
-        if ($ids === [] || !in_array($action, ['publish', 'draft', 'archive', 'move', 'series', 'merge', 'lock', 'unlock'], true)) {
+        if ($ids === [] || !in_array($action, ['publish', 'draft', 'delete', 'archive', 'move', 'series', 'merge', 'lock', 'unlock'], true)) {
             return response('请选择视频和批量操作', 422);
+        }
+        if (in_array($action, ['delete', 'archive'], true)) {
+            $count = $this->deleteMedia($ids);
+            $this->frontendCache->invalidateHome();
+            return redirect('/admin/vod?notice=' . rawurlencode('已彻底删除 ' . $count . ' 部视频'));
         }
         if ($action === 'merge') {
             try {
@@ -345,13 +373,12 @@ final class Vod extends BaseController
                 $data = match ($action) {
                     'publish' => ['status' => 'published', 'published_at' => $media->published_at ?: $now, 'updated_at' => $now],
                     'draft' => ['status' => 'draft', 'updated_at' => $now],
-                    default => ['status' => 'archived', 'deleted_at' => $now, 'updated_at' => $now],
                 };
                 $media->save($data);
             }
             $this->audit->record('media.batch_' . $action, 'media', $id, $before, $data);
         }
-        $messages = ['publish' => '批量审核完成', 'draft' => '已取消审核', 'archive' => '批量归档完成', 'move' => '批量移动完成', 'series' => '系列设置完成', 'lock' => '批量锁定完成', 'unlock' => '批量解锁完成'];
+        $messages = ['publish' => '批量审核完成', 'draft' => '已取消审核', 'move' => '批量移动完成', 'series' => '系列设置完成', 'lock' => '批量锁定完成', 'unlock' => '批量解锁完成'];
         $this->frontendCache->invalidateHome();
         return redirect('/admin/vod?notice=' . rawurlencode($messages[$action] ?? '批量操作完成'));
     }
@@ -360,7 +387,12 @@ final class Vod extends BaseController
     {
         if (!$this->csrf->verify($this->request->post('_token'))) return json(['ok' => false, 'message' => '请求已过期'], 419);
         $action = (string) $this->request->post('action', '');
-        if (!in_array($action, ['publish', 'draft', 'archive', 'lock', 'unlock'], true)) return json(['ok' => false, 'message' => '操作无效'], 422);
+        if (!in_array($action, ['publish', 'draft', 'delete', 'archive', 'lock', 'unlock'], true)) return json(['ok' => false, 'message' => '操作无效'], 422);
+        if (in_array($action, ['delete', 'archive'], true)) {
+            if ($this->deleteMedia([$id]) === 0) return json(['ok' => false, 'message' => '影片不存在'], 404);
+            $this->frontendCache->invalidateHome();
+            return json(['ok' => true, 'message' => '视频已彻底删除']);
+        }
         $media = Media::where('id', $id)->whereNull('deleted_at')->find();
         if ($media === null) return json(['ok' => false, 'message' => '影片不存在'], 404);
         $before = $media->toArray();
@@ -373,7 +405,6 @@ final class Vod extends BaseController
             $data = match ($action) {
                 'publish' => ['status' => 'published', 'published_at' => $media->published_at ?: $now, 'updated_at' => $now],
                 'draft' => ['status' => 'draft', 'updated_at' => $now],
-                default => ['status' => 'archived', 'deleted_at' => $now, 'updated_at' => $now],
             };
         }
         $media->save($data);
